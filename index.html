@@ -4,13 +4,223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BattleArena - Phaser Battle Royale</title>
+    <title>Battle Arena</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 </head>
 
 <body>
-    <div id="game-container"></div>
+    <canvas id="game"></canvas>
+
+    <!-- In-game HUD -->
+    <div id="hud" class="hidden">
+        <div id="hud-topleft" class="panel">
+            <div class="stat"><span class="stat-value" id="alive">0</span><span class="stat-label">Alive</span></div>
+            <div class="stat"><span class="stat-value" id="kills">0</span><span class="stat-label">Kills</span></div>
+            <div class="stat"><span class="stat-value" id="scope">1x</span><span class="stat-label">Scope <kbd>Z</kbd></span></div>
+        </div>
+
+        <div id="hud-topright">
+            <div class="panel minimap-wrap">
+                <canvas id="minimap" width="200" height="200"></canvas>
+                <div id="zone-info"></div>
+            </div>
+            <div id="killfeed"></div>
+        </div>
+
+        <div id="team-score" class="panel hidden"></div>
+
+        <div id="banner"></div>
+        <div id="prompt"></div>
+
+        <div id="hud-bottom">
+            <div id="vitals">
+                <div class="bar hidden" id="shield-bar"><div class="fill"></div><span></span></div>
+                <div class="bar" id="armor-bar"><div class="fill"></div><span></span></div>
+                <div class="bar" id="hp-bar"><div class="ghost"></div><div class="fill"></div><span></span></div>
+                <div class="bar full" id="stam-bar"><div class="fill"></div></div>
+                <div class="bar hidden" id="hunger-bar"><div class="fill"></div><span></span></div>
+                <div class="bar hidden" id="thirst-bar"><div class="fill"></div><span></span></div>
+                <div class="bar hidden" id="energy-bar"><div class="fill"></div><span></span></div>
+            </div>
+            <div id="hotbar"></div>
+        </div>
+
+        <div id="heal-panel" class="panel">
+            <div id="heal-label"></div>
+            <div class="supply-row">
+                <div class="supply" id="cell-bandage"><img alt=""><span class="count" id="count-bandage"></span><kbd>Q</kbd></div>
+                <div class="supply" id="cell-medkit"><img alt=""><span class="count" id="count-medkit"></span><kbd>E</kbd></div>
+                <div class="supply hidden" id="cell-meat" title="Meat: eat to stop starving"><img alt=""><span class="count" id="count-meat"></span><kbd>C</kbd></div>
+                <div class="supply hidden" id="cell-water" title="Bucket of water: drink to stop being thirsty"><img alt=""><span class="count" id="count-water"></span><kbd>V</kbd></div>
+                <div class="supply hidden" id="cell-bucket" title="Empty bucket: fill it at a pond (press V in the water)"><img alt=""><span class="count" id="count-bucket"></span></div>
+            </div>
+            <div id="heal-bar"><div></div></div>
+        </div>
+
+        <div id="grenade-panel" class="panel">
+            <div class="throw-hint"><kbd>G</kbd> hold &amp; release · <kbd>T</kbd> or click to switch</div>
+            <div class="supply-row">
+                <div class="supply throwable" id="cell-grenade" title="Frag grenade"><img alt=""><span class="count" id="count-grenade"></span></div>
+                <div class="supply throwable" id="cell-smoke" title="Smoke grenade"><img alt=""><span class="count" id="count-smoke"></span></div>
+                <div class="supply throwable" id="cell-strobe" title="Strobe: calls a missile"><img alt=""><span class="count" id="count-strobe"></span></div>
+                <div class="supply throwable" id="cell-mine" title="Land mine"><img alt=""><span class="count" id="count-mine"></span></div>
+                <div class="supply throwable" id="cell-nuke" title="Doomsday Nuke: wipes out everything in a huge circle"><img alt=""><span class="count" id="count-nuke"></span></div>
+                <div class="supply throwable" id="cell-emissile" title="Electricity Missile: calls down a missile that electrocutes everyone near it and blows up vehicles"><img alt=""><span class="count" id="count-emissile"></span></div>
+                <div class="supply throwable" id="cell-shock" title="Electric Grenade: stuns everyone caught in it and knocks out shields"><img alt=""><span class="count" id="count-shock"></span></div>
+                <div class="supply throwable" id="cell-cluster" title="Cluster Bomb: splits into six bomblets"><img alt=""><span class="count" id="count-cluster"></span></div>
+                <div class="supply throwable" id="cell-fire" title="Fire Grenade"><img alt=""><span class="count" id="count-fire"></span></div>
+                <div class="supply throwable" id="cell-freeze" title="Freeze Grenade"><img alt=""><span class="count" id="count-freeze"></span></div>
+                <div class="supply throwable" id="cell-gravity" title="Gravity Grenade"><img alt=""><span class="count" id="count-gravity"></span></div>
+                <div class="supply throwable" id="cell-sticky" title="Sticky Bomb"><img alt=""><span class="count" id="count-sticky"></span></div>
+                <div class="supply throwable" id="cell-decoy" title="Decoy"><img alt=""><span class="count" id="count-decoy"></span></div>
+                <div class="supply throwable" id="cell-flash" title="Flashbang"><img alt=""><span class="count" id="count-flash"></span></div>
+                <div class="supply throwable" id="cell-poison" title="Poison Gas"><img alt=""><span class="count" id="count-poison"></span></div>
+                <div class="supply throwable" id="cell-shockwave" title="Shockwave"><img alt=""><span class="count" id="count-shockwave"></span></div>
+                <div class="supply throwable" id="cell-teleport" title="Teleport Grenade"><img alt=""><span class="count" id="count-teleport"></span></div>
+                <div class="supply throwable" id="cell-heal" title="Healing Grenade"><img alt=""><span class="count" id="count-heal"></span></div>
+                <div class="supply throwable" id="cell-drone" title="Drone Grenade"><img alt=""><span class="count" id="count-drone"></span></div>
+                <div class="supply throwable" id="cell-megafrag" title="Mega Frag"><img alt=""><span class="count" id="count-megafrag"></span></div>
+                <div class="supply throwable hidden" id="cell-cure" title="Cure: pulls in the infected and cures them"><img alt=""><span class="count" id="count-cure"></span></div>
+            </div>
+        </div>
+
+        <div id="ammo-panel" class="panel">
+            <div id="weapon-name"></div>
+            <div id="ammo-count"><span id="mag"></span><span id="reserve"></span></div>
+            <div id="reload-bar"><div></div></div>
+        </div>
+    </div>
+
+    <!-- Title screen -->
+    <div id="menu" class="overlay menu-overlay">
+        <div class="menu-card">
+            <h1 class="title"><span class="title-top">BATTLE</span><span class="title-bottom">ARENA</span></h1>
+            <p class="credit">Made by Grant Zhang</p>
+
+            <div class="mode-select">
+                <button class="mode-arrow" id="mode-prev" aria-label="Previous mode">&#8249;</button>
+                <div class="mode-card">
+                    <canvas id="mode-preview" width="560" height="300"></canvas>
+                    <div class="mode-label">
+                        <div class="mode-name" id="mode-name"></div>
+                        <div class="mode-desc" id="mode-desc"></div>
+                    </div>
+                </div>
+                <button class="mode-arrow" id="mode-next" aria-label="Next mode">&#8250;</button>
+            </div>
+            <div class="mode-dots" id="mode-dots"></div>
+
+            <div class="cpu-select" id="settings-ffa">
+                <div class="cpu-row"><span>Opponents</span><strong id="cpu-value">250</strong></div>
+                <input type="range" id="cpu-slider" min="0" max="1000" value="554">
+                <div class="cpu-scale"><span>1</span><span>100</span><span>799</span></div>
+            </div>
+
+            <div class="cpu-select hidden" id="settings-zombies">
+                <div class="cpu-row"><span>Survivors (with you)</span><strong id="surv-value">100</strong></div>
+                <input type="range" id="surv-slider" min="0" max="1000" value="500">
+                <div class="cpu-scale"><span>2</span><span>100</span><span>770</span></div>
+                <div class="cpu-row"><span>Starting zombies</span><strong id="zomb-value">30</strong></div>
+                <input type="range" id="zomb-slider" min="0" max="1000" value="0">
+                <div class="cpu-scale"><span>30</span><span>100</span><span>800</span></div>
+            </div>
+
+            <div class="cpu-select hidden" id="settings-war">
+                <div class="cpu-row"><span>Teams</span>
+                    <div class="seg" id="team-count">
+                        <button data-n="2" class="on">2</button><button data-n="3">3</button><button data-n="4">4</button>
+                    </div>
+                </div>
+                <div class="cpu-row"><span>Players per team</span><strong id="team-value">25</strong></div>
+                <input type="range" id="team-slider" min="0" max="1000" value="550">
+                <div class="cpu-scale"><span>1</span><span>50</span><span id="team-max">500</span></div>
+            </div>
+
+            <div class="cpu-select" id="settings-ai">
+                <div class="cpu-row"><span>AI level</span><strong id="ai-value">5 · Normal</strong></div>
+                <input type="range" id="ai-slider" min="1" max="10" step="1" value="5">
+                <div class="cpu-scale"><span>1 · Easy</span><span>10 · Insane</span></div>
+            </div>
+
+            <button id="start-btn" class="btn primary">PLAY</button>
+
+            <p class="best">Best kills <strong id="best-kills">0</strong></p>
+
+            <details class="controls-wrap">
+            <summary>Controls</summary>
+            <div class="controls">
+                <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move · <kbd>Shift</kbd> Sprint</div>
+                <div><kbd>Mouse</kbd> Aim &amp; shoot</div>
+                <div><kbd>F</kbd> Pick up · get in / out of cars</div>
+                <div><kbd>R</kbd> Reload</div>
+                <div><kbd>1</kbd>–<kbd>5</kbd> / Scroll Switch</div>
+                <div><kbd>Q</kbd> Bandage · <kbd>E</kbd> Medkit · <kbd>C</kbd> Eat</div>
+                <div>Survival: <kbd>V</kbd> Drink / fill buckets at water · <kbd>B</kbd> Rest</div>
+                <div><kbd>G</kbd> / Right-click Hold to cook, release to throw</div>
+                <div><kbd>T</kbd> Switch throwable</div>
+                <div><kbd>Z</kbd> Switch scope</div>
+                <div><kbd>Esc</kbd> Pause · <kbd>M</kbd> Mute</div>
+            </div>
+            </details>
+        </div>
+    </div>
+
+    <!-- Warfare type, after pressing Play -->
+    <div id="typesel" class="overlay menu-overlay hidden">
+        <div class="menu-card wide">
+            <h2 class="card-title">CHOOSE YOUR WARFARE</h2>
+            <div class="map-grid">
+                <button class="map-card type-card" data-type="normal"><canvas width="300" height="180"></canvas><span class="map-name">NORMAL WARFARE</span><span class="map-desc">Ordinary guns to find in boxes, ordinary cars and trucks.</span></button>
+                <button class="map-card type-card" data-type="heavy"><canvas width="300" height="180"></canvas><span class="map-name">HEAVY WARFARE</span><span class="map-desc">Heavy guns to find, supply crates of heavy weapons everywhere, and lots of tanks and gun jeeps.</span></button>
+                <button class="map-card type-card" data-type="hightech"><canvas width="300" height="180"></canvas><span class="map-name">HIGH TECH WARFARE</span><span class="map-desc">Only quantum guns and tech vehicles, and quantum drops keep falling.</span></button>
+            </div>
+            <button id="typesel-back" class="btn ghost">BACK</button>
+        </div>
+    </div>
+
+    <!-- Battlefield choice, after pressing Play -->
+    <div id="mapsel" class="overlay menu-overlay hidden">
+        <div class="menu-card wide">
+            <h2 class="card-title">CHOOSE YOUR BATTLEFIELD</h2>
+            <div class="map-grid">
+                <button class="map-card" data-map="ordinary"><canvas width="300" height="180"></canvas><span class="map-name">ORDINARY</span><span class="map-desc">Open fields, forests, rocky hills and little towns.</span></button>
+                <button class="map-card" data-map="city"><canvas width="300" height="180"></canvas><span class="map-name">CITY</span><span class="map-desc">Streets, parked cars, hotels, hospitals and houses.</span></button>
+                <button class="map-card" data-map="rusty"><canvas width="300" height="180"></canvas><span class="map-name">RUSTY</span><span class="map-desc">An abandoned facility in a warzone: rusted sheds, wrecked cars, ruins and smoke.</span></button>
+                <button class="map-card" data-map="maze"><canvas width="300" height="180"></canvas><span class="map-name">MAZE</span><span class="map-desc"></span></button>
+                <button class="map-card" data-map="mountain"><canvas width="300" height="180"></canvas><span class="map-name">MOUNTAINS</span><span class="map-desc"></span></button>
+            </div>
+            <button id="mapsel-back" class="btn ghost">BACK</button>
+        </div>
+    </div>
+
+    <!-- Pause -->
+    <div id="pause" class="overlay hidden">
+        <div class="menu-card small">
+            <h2 class="card-title">PAUSED</h2>
+            <button id="resume-btn" class="btn primary">RESUME</button>
+            <button id="quit-btn" class="btn ghost">QUIT TO MENU</button>
+        </div>
+    </div>
+
+    <!-- Game over -->
+    <div id="gameover" class="overlay hidden">
+        <div class="menu-card small">
+            <h2 class="card-title" id="go-title">ELIMINATED</h2>
+            <p class="go-sub" id="go-sub"></p>
+            <div class="go-stats">
+                <div><span id="go-place">#1</span><label>Placement</label></div>
+                <div><span id="go-kills">0</span><label>Kills</label></div>
+                <div><span id="go-time">0:00</span><label>Survived</label></div>
+            </div>
+            <p class="go-best" id="go-best"></p>
+            <button id="again-btn" class="btn primary">PLAY AGAIN</button>
+            <button id="menu-btn" class="btn ghost">MAIN MENU</button>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 
