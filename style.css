@@ -785,3 +785,13 @@ kbd {
     outline: none;
 }
 .sl-input:focus { border-color: #ffb347; }
+
+/* Play with friends */
+.friends-btn { margin-top: 14px; }
+.host-strip { margin: -4px 0 14px; padding: 10px 14px; border-radius: 10px; background: rgba(255, 209, 102, 0.14); border: 1px solid rgba(255, 209, 102, 0.5); color: #ffe6a8; font-weight: 600; letter-spacing: 0.04em; text-align: center; }
+.host-strip strong { font-family: 'Black Ops One', sans-serif; letter-spacing: 0.18em; color: #ffd166; }
+.fr-code { font-family: 'Black Ops One', sans-serif; font-size: 54px; letter-spacing: 0.22em; color: #ffd166; text-align: center; margin: 4px 0 10px; user-select: all; }
+.fr-input { text-transform: uppercase; letter-spacing: 0.3em; text-align: center; }
+#fr-choose { display: flex; flex-direction: column; gap: 10px; }
+#net-video { position: fixed; inset: 0; width: 100vw; height: 100vh; object-fit: contain; background: #000; z-index: 50; cursor: crosshair; }
+#net-leave { z-index: 60; }

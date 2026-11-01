@@ -186,6 +186,7 @@
     <div id="mapsel" class="overlay menu-overlay hidden">
         <div class="menu-card wide">
             <h2 class="card-title">CHOOSE YOUR BATTLEFIELD</h2>
+            <div id="host-strip" class="host-strip hidden"></div>
             <div class="map-grid">
                 <button class="map-card" data-map="ordinary"><canvas width="300" height="180"></canvas><span class="map-name">ORDINARY</span><span class="map-desc">Open fields, forests, rocky hills and little towns.</span></button>
                 <button class="map-card" data-map="city"><canvas width="300" height="180"></canvas><span class="map-name">CITY</span><span class="map-desc">Streets, parked cars, hotels, hospitals and houses.</span></button>
@@ -193,7 +194,42 @@
                 <button class="map-card" data-map="maze"><canvas width="300" height="180"></canvas><span class="map-name">MAZE</span><span class="map-desc"></span></button>
                 <button class="map-card" data-map="mountain"><canvas width="300" height="180"></canvas><span class="map-name">MOUNTAINS</span><span class="map-desc"></span></button>
             </div>
+            <button id="friends-btn" class="btn primary friends-btn">PLAY WITH FRIENDS</button>
             <button id="mapsel-back" class="btn ghost">BACK</button>
+        </div>
+    </div>
+
+    <!-- Play with friends: host a game (get a code) or join one (type the code) -->
+    <div id="friends" class="overlay menu-overlay hidden">
+        <div class="menu-card small">
+            <h2 class="card-title">PLAY WITH FRIENDS</h2>
+            <div id="fr-choose">
+                <button id="fr-host" class="btn primary">HOST GAME</button>
+                <button id="fr-join" class="btn primary">JOIN GAME</button>
+            </div>
+            <div id="fr-hosting" class="hidden">
+                <p class="go-sub">Send this code to your friends:</p>
+                <div id="fr-code" class="fr-code">·····</div>
+                <p class="go-sub" id="fr-list">Setting up...</p>
+                <button id="fr-pick" class="btn primary">PICK A BATTLEFIELD TO START</button>
+                <button id="fr-stop" class="btn ghost">STOP HOSTING</button>
+            </div>
+            <div id="fr-joining" class="hidden">
+                <p class="go-sub" id="fr-join-msg">Type the code your friend sent you:</p>
+                <input id="fr-input" class="sl-input fr-input" maxlength="5" autocomplete="off" spellcheck="false" placeholder="CODE">
+                <button id="fr-go" class="btn primary">JOIN</button>
+            </div>
+            <button id="fr-back" class="btn ghost">BACK</button>
+        </div>
+    </div>
+
+    <!-- Playing on a friend's game: their picture of your view -->
+    <video id="net-video" class="hidden" autoplay playsinline muted></video>
+    <div id="net-leave" class="overlay hidden">
+        <div class="menu-card small">
+            <h2 class="card-title">FRIEND'S GAME</h2>
+            <button id="nl-back" class="btn primary">BACK TO THE GAME</button>
+            <button id="nl-leave" class="btn ghost">LEAVE GAME</button>
         </div>
     </div>
 

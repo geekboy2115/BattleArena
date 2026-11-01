@@ -159,7 +159,9 @@ const TEAMS = [
 const RED_EDGE = { team: 1, aim: 0.75, hits: 1.12, takes: 0.85 };
 const ENEMY_EDGE = { aim: 0.82, hits: 1.08, takes: 0.9 };
 const NO_EDGE = { aim: 1, hits: 1, takes: 1 };
-const edgeOf = f => !G.war || !f || f.isPlayer || f.team === null || f.team === 0 ? NO_EDGE : f.team === RED_EDGE.team ? RED_EDGE : ENEMY_EDGE;
+// A person playing (you, or a friend on your game) rather than a bot
+const isHuman = f => !!(f && (f.isPlayer || f.remote));
+const edgeOf = f => !G.war || !f || isHuman(f) || f.team === null || f.team === 0 ? NO_EDGE : f.team === RED_EDGE.team ? RED_EDGE : ENEMY_EDGE;
 const WAR_GUN_TABLE = [...GUN_TABLE, ['Assault Rifle', 8], ['Minigun', 0.6], ['Rocket Launcher', 0.6], ['Barrett', 0.4]];
 const SUPPLY_TABLE = [
     ['Mac10', 6], ['Shotgun', 6], ['Double Barrel', 4], ['Breacher', 4], ['Machine Gun', 5], ['Sniper', 4], ['AWP', 2],
@@ -451,6 +453,9 @@ function makeVignette(color) {
 
 const keys = new Set();
 const mouse = { x: 0, y: 0, down: false };
+// Whose keys and mouse: yours, or (for a friend playing on your game) theirs, sent over the network
+const LOCAL_INPUT = { keys, mouse, world: () => mouseWorld() };
+const inputOf = p => (p && p.remote ? p.remote.input : LOCAL_INPUT);
 
 window.addEventListener('keydown', e => {
     // (typing into a box, like the boss strike's ammo amount, doesn't move you or switch guns)
@@ -483,9 +488,8 @@ window.addEventListener('mouseup', e => {
     if (e.button === 2) playerRelease();
 });
 
-function playerCook() {
-    if (!G || G.mode !== 'playing' || G.player.dead || G.player.downed || G.player.cook) return;
-    const p = G.player;
+function playerCook(p = G && G.player) {
+    if (!G || G.mode !== 'playing' || !p || p.dead || p.downed || p.cook) return;
     // Fall back to whatever throwable you actually have
     if (!(p.items[p.throwSel] > 0)) {
         const next = THROWABLES.find(k => p.items[k] > 0);
@@ -495,10 +499,10 @@ function playerCook() {
     startCook(p, p.throwSel);
 }
 
-function playerRelease() {
-    if (!G || !G.player || !G.player.cook) return;
-    const m = mouseWorld();
-    releaseCook(G.player, m.x, m.y);
+function playerRelease(p = G && G.player) {
+    if (!G || !p || !p.cook) return;
+    const m = inputOf(p).world();
+    releaseCook(p, m.x, m.y);
 }
 
 function cycleThrowable(p) {
@@ -518,8 +522,10 @@ canvas.addEventListener('wheel', e => {
 
 let cheatKeys = '';
 let secretKeys = '';
-function onKeyPress(code, caps = false) {
+function onKeyPress(code, caps = false, who = null) {
     if (!G) return;
+    // (a friend's key presses: only the ones that act in the game)
+    if (who) { if (G.mode === 'playing' && !who.dead) playerAction(who, code); return; }
     if (code === 'Escape') {
         if (G.mode === 'playing') setPaused(true);
         else if (G.mode === 'paused') setPaused(false);
@@ -544,20 +550,24 @@ function onKeyPress(code, caps = false) {
         travel({ b: G.hq, to: 10, dir: 'up', ...floorStairs(G.hq.R, 9) });
         return;
     }
+    playerAction(p, code);
+}
+// What a key does for someone in the game (you, or a friend playing on your game)
+function playerAction(p, code) {
     if (code.startsWith('Digit')) {
         const i = parseInt(code.slice(5), 10) - 1;
         if (i >= 0 && i < 5) switchSlot(p, i);
     }
     if (code === 'KeyR') startReload(p);
-    if (code === 'Space' && G.strikeCam) { G.strikeCam = null; return; }
+    if (code === 'Space' && p.isPlayer && G.strikeCam) { G.strikeCam = null; return; }
     if (code === 'KeyF') {
         // F: launch the boss strike, get out of the car, pick up what's at your feet, or get into a car nearby
         // (up on the castle walkway, the only thing to get into is a corner gun)
         if (tryLaunchStrike(p)) return;
-        if (nearOwnPad(p)) { openStrikeLoad(p); return; }
+        if (nearOwnPad(p)) { if (p.remote) loadAllAmmo(p); else openStrikeLoad(p); return; }
         if (p.car) exitCar(p);
         else if (!nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE) && nearestCar(p, 90) && !p.zombie && (!p.up || nearestCar(p, 90).tower === p.up) && !(nearestCar(p, 90).type === 'bigtower' && nearestCar(p, 90).tower && !nearestCar(p, 90).tower.fallen && p.up !== nearestCar(p, 90).tower)) enterCar(p, nearestCar(p, 90));
-        else playerPickup();
+        else playerPickup(p);
     }
     if (code === 'KeyZ' && p.scopes.length > 1) {
         p.scope = p.scopes[(p.scopes.indexOf(p.scope) + 1) % p.scopes.length];
@@ -568,7 +578,7 @@ function onKeyPress(code, caps = false) {
     if (code === 'KeyC' && G.survival) startHeal(p, 'meat');
     if (code === 'KeyV' && G.survival) playerDrink(p);
     if (code === 'KeyB' && G.survival) toggleRest(p);
-    if (code === 'KeyG') playerCook();
+    if (code === 'KeyG') playerCook(p);
     if (code === 'KeyT') cycleThrowable(p);
 }
 
@@ -2155,7 +2165,7 @@ function populateFloor(b, level) {
         // Outside Escape the building isn't empty: a few of the other players (or zombies) are already up here
         const street = G.layers.street ? G.layers.street.fighters : [];
         const arrive = G.world.stairs.find(s => s.dir === 'down');
-        const movers = street.filter(f => !f.dead && !f.isPlayer && (!G.player || dist(f, G.player) > 1500));
+        const movers = street.filter(f => !f.dead && !isHuman(f) && (!G.player || dist(f, G.player) > 1500));
         for (let i = randInt(0, Math.min(3, movers.length)); i > 0; i--) {
             const f = movers.splice(randInt(0, movers.length - 1), 1)[0];
             street.splice(street.indexOf(f), 1);
@@ -3358,7 +3368,7 @@ function updateBossStrikes(ammoTick) {
         if (ammoTick && st.ammo < S.cost) for (const f of G.fighters) {
             if (f.dead || f.team !== base.team || f.car || f.up) continue;
             // (bots hand theirs in at the pad; you load yours by pressing F there)
-            if (f.isPlayer || Math.hypot(f.x - st.x, f.y - st.y) > S.padR + 40) continue;
+            if (isHuman(f) || Math.hypot(f.x - st.x, f.y - st.y) > S.padR + 40) continue;
             const got = takeAmmo(f, Math.min(botSpare(f), S.cost - st.ammo), 2);
             if (!got) continue;
             st.ammo = Math.min(S.cost, st.ammo + got);
@@ -3438,6 +3448,15 @@ function openStrikeLoad(p) {
     keys.clear(); mouse.down = false;
     G.mode = 'paused';
     setTimeout(() => { box.focus(); box.select(); }, 0);
+}
+// A friend at the pad loads all their spare ammo
+function loadAllAmmo(p) {
+    const st = G.revolution && G.revolution.bases[p.team] && G.revolution.bases[p.team].strike;
+    if (!st) return;
+    const n = takeAmmo(p, REVO.strike.cost - Math.floor(st.ammo));
+    if (!n) return;
+    st.ammo = Math.min(REVO.strike.cost, st.ammo + n);
+    addFloat(p.x, p.y - 40, `+${n} ammo loaded`, '#ffb347');
 }
 function closeStrikeLoad(load) {
     const panel = $('strike-load');
@@ -3537,7 +3556,7 @@ function updateDeckStairs(dt) {
             if (b.fallen) continue;
             for (const L of [b]) for (const st of L.stairs) {
                 // (bots only climb when they mean to: you go up whenever you stand on the stairs)
-                if ((f.up || null) === L.lower && (f.isPlayer || f.deckTrip) && Math.hypot(f.x - st.b.x, f.y - st.b.y) < 30) { on = st; goingUp = true; lvl = L; }
+                if ((f.up || null) === L.lower && (isHuman(f) || f.deckTrip) && Math.hypot(f.x - st.b.x, f.y - st.b.y) < 30) { on = st; goingUp = true; lvl = L; }
                 else if (f.up === L && Math.hypot(f.x - st.t.x, f.y - st.t.y) < 30) { on = st; lvl = L; }
             }
         }
@@ -3549,7 +3568,7 @@ function updateDeckStairs(dt) {
         const to = goingUp ? on.up : on.down;
         f.x = to.x; f.y = to.y; f.vx = f.vy = 0; f.path = null;
         const top = f.up && !f.up.midFloor;
-        if (!f.isPlayer) { f.nextThink = G.time; if (top) f.deckUntil = G.time + rand(60000, 120000); if (top && f.deckTrip) { f.deckTrip = false; f.mode = 'wander'; } if (!goingUp) { f.deckDuty = false; f.deckTrip = false; f.post = null; } }
+        if (!isHuman(f)) { f.nextThink = G.time; if (top) f.deckUntil = G.time + rand(60000, 120000); if (top && f.deckTrip) { f.deckTrip = false; f.mode = 'wander'; } if (!goingUp) { f.deckDuty = false; f.deckTrip = false; f.post = null; } }
         if (f.isPlayer) {
             const n = floorOf(f);
             showBanner(FLOOR_NAME[n], false, n === 2 ? 'Up on the balcony: look out over the walls and shoot. The big guns are on the corners' : 'Back down on the ground');
@@ -5512,8 +5531,7 @@ function lootRefusal(f, key) {
     return 'No guns that use ammo';
 }
 
-function playerPickup() {
-    const p = G.player;
+function playerPickup(p = G.player) {
     if (p.zombie) return;
     const l = nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE);
     if (!l) return;
@@ -6371,6 +6389,7 @@ function mouseWorld() {
 }
 
 function updatePlayer(p, dt) {
+    const I = inputOf(p), keys = I.keys, mouse = I.mouse, mouseWorld = I.world;
     let mx = 0, my = 0;
     if (keys.has('KeyW') || keys.has('ArrowUp')) my -= 1;
     if (keys.has('KeyS') || keys.has('ArrowDown')) my += 1;
@@ -9433,7 +9452,7 @@ function enterCar(p, c) {
     const T = vt(c);
     if (T.seats) {
         for (const f of G.fighters) {
-            if (c.riders.length >= T.seats || f === p || f.dead || f.car || f.isPlayer || foe(p, f) || dist(f, c) > 260) continue;
+            if (c.riders.length >= T.seats || f === p || f.dead || f.car || isHuman(f) || foe(p, f) || dist(f, c) > 260) continue;
             f.car = c; f.riding = true; c.riders.push(f);
         }
         if (c.riders.length && p.isPlayer) addFloat(c.x, c.y - 50, `${c.riders.length} aboard`, '#fff7ec');
@@ -9487,7 +9506,8 @@ function updateCars(dt) {
         const p = c.driver, T = vt(c);
         if (p.dead) { exitCar(p); continue; }
         let up, down, left, right;
-        if (p.isPlayer) {
+        const I = inputOf(p), keys = I.keys;
+        if (isHuman(p)) {
             up = keys.has('KeyW') || keys.has('ArrowUp'); down = keys.has('KeyS') || keys.has('ArrowDown');
             left = keys.has('KeyA') || keys.has('ArrowLeft'); right = keys.has('KeyD') || keys.has('ArrowRight');
         } else {
@@ -9495,15 +9515,15 @@ function updateCars(dt) {
             if (!k) continue;  // the bot got out
             ({ up, down, left, right } = k);
         }
-        const drive = (G.mode === 'playing' || !p.isPlayer) && !G.frozen && !stunned(p);
+        const drive = (G.mode === 'playing' || !isHuman(p)) && !G.frozen && !stunned(p);
         // The jet bike's boost (hold Shift)
-        const boost = T.boost && p.isPlayer && (keys.has('ShiftLeft') || keys.has('ShiftRight'));
+        const boost = T.boost && isHuman(p) && (keys.has('ShiftLeft') || keys.has('ShiftRight'));
         const top = T.max * terrainDrag(c) * (boost ? 1.45 : 1);
         if (boost && (up || down || left || right) && inView(c.x, c.y, 60)) G.particles.push({ type: 'glow', x: c.x - Math.cos(c.a) * T.len / 2, y: c.y - Math.sin(c.a) * T.len / 2, vx: -Math.cos(c.a) * 200, vy: -Math.sin(c.a) * 200, life: 0.3, max: 0.3, size: 6, color: TECH_DROP.neon });
         c.braking = false;
         const dirX = (right ? 1 : 0) - (left ? 1 : 0), dirY = (down ? 1 : 0) - (up ? 1 : 0);
         const a0 = c.a;
-        if (p.isPlayer && !T.fixed) {
+        if (isHuman(p) && !T.fixed) {
             if (dirX || dirY) c.auto = null;  // touching the keys takes the wheel back
             const auto = c.auto && drive ? autoDrive(c, T, dt, top) : null;
             if (auto) {
@@ -9529,7 +9549,7 @@ function updateCars(dt) {
             c.a += steer * T.turn * dt * (T.fly ? 1 : clamp(c.speed / 260, -1, 1));
         }
         // Don't swing the body round into something solid (that wedges it in for good)
-        if (p.isPlayer && c.a !== a0 && !T.fly && !T.water && poseBlocked(c, T, c.x, c.y, c.a) && !poseBlocked(c, T, c.x, c.y, a0)) c.a = a0;
+        if (isHuman(p) && c.a !== a0 && !T.fly && !T.water && poseBlocked(c, T, c.x, c.y, c.a) && !poseBlocked(c, T, c.x, c.y, a0)) c.a = a0;
         const nx = c.x + Math.cos(c.a) * c.speed * dt, ny = c.y + Math.sin(c.a) * c.speed * dt;
         const ca = Math.cos(c.a), sa = Math.sin(c.a), W = CONFIG.WORLD_SIZE;
         const probes = [[T.len / 2, 0], [T.len / 2, T.wid / 2 - 4], [T.len / 2, -T.wid / 2 + 4], [-T.len / 2, T.wid / 2 - 4], [-T.len / 2, -T.wid / 2 + 4]];
@@ -9567,10 +9587,10 @@ function updateCars(dt) {
             if (G.survival && G.agrid) G.agrid.query(c.x, c.y, T.len, a => { if (!a.dead) hitOne(a, (t, d) => damageAnimal(t, d, p)); });
         }
         // Mounted weapons fire where you aim
-        if ((T.gun || T.cannon || T.rockets) && p.isPlayer) {
-            const m = mouseWorld();
+        if ((T.gun || T.cannon || T.rockets) && isHuman(p)) {
+            const m = I.world();
             c.turret = Math.atan2(m.y - c.y, m.x - c.x);
-            if (mouse.down && drive && G.time >= c.fireAt) vehicleFire(c, p);
+            if (I.mouse.down && drive && G.time >= c.fireAt) vehicleFire(c, p);
         }
         // The ice-cream truck plays its tune (and everyone hears it)
         if (T.music && Math.abs(c.speed) > 30 && G.time >= (c.tuneAt || 0)) {
@@ -10080,7 +10100,7 @@ function drawCars(only) {
         if (c.driver && c.type !== 'heli' && c.type !== 'gunship' && !(c.type === 'stealth' && c.driver.hidden)) {
             ctx.fillStyle = c.driver.color;
             const rxg = c.type === 'horse' ? -L * 0.04 : c.type === 'wagon' ? -L / 2 + (L - 60) - 14 : c.type === 'bike' || c.type === 'quad' ? -4 : 2;
-            if (c.driver.isPlayer) playerGlow(rxg, c.type === 'bike' || c.type === 'quad' || c.type === 'horse' || c.type === 'wagon' ? 0 : -Wd * 0.18, 12);
+            if (c.driver === G.player) playerGlow(rxg, c.type === 'bike' || c.type === 'quad' || c.type === 'horse' || c.type === 'wagon' ? 0 : -Wd * 0.18, 12);
             const rx = c.type === 'horse' ? -L * 0.04 : c.type === 'wagon' ? -L / 2 + (L - 60) - 14 : c.type === 'bike' || c.type === 'quad' ? -4 : 2;
             const ry = c.type === 'bike' || c.type === 'quad' || c.type === 'horse' || c.type === 'wagon' ? 0 : -Wd * 0.18;
             ctx.beginPath(); ctx.arc(rx, ry, 9, 0, TAU); ctx.fill();
@@ -10153,7 +10173,7 @@ function techTrim(L, Wd, now) {
 }
 
 // ----- Bots behind the wheel -----
-const canDrive = b => !b.isPlayer && !b.zombie && !b.decoy && !b.riding && !b.up && !G.escape && b.likesCars && G.time > (b.carCool || 0) && !G.world.floor && G.world.cars;
+const canDrive = b => !isHuman(b) && !b.zombie && !b.decoy && !b.riding && !b.up && !G.escape && b.likesCars && G.time > (b.carCool || 0) && !G.world.floor && G.world.cars;
 
 // Steer toward a point, swerving round anything in the way; back up and try again when stuck
 function botDrive(c, b, dt) {
@@ -10899,7 +10919,7 @@ function moveFighter(f, dt) {
     if (f.up) clampToDeck(f);
 
     // Bots that get wedged against something take a short detour
-    if (!f.isPlayer && f._wantSpeed > 0) {
+    if (!isHuman(f) && f._wantSpeed > 0) {
         const moved = Math.hypot(f.x - ox, f.y - oy) / dt;
         if (moved < f._wantSpeed * 0.25) f.stuck += dt; else f.stuck = 0;
         if (f.stuck > 0.4) {
@@ -11080,7 +11100,7 @@ function update(dt) {
     for (const f of G.fighters) {
         if (f.dead) continue;
         updateHidden(f);
-        if (f.isPlayer) { if (G.mode === 'playing') updatePlayer(f, dt); else { f.vx = 0; f.vy = 0; } }
+        if (isHuman(f)) { if (G.mode === 'playing') updatePlayer(f, dt); else { f.vx = 0; f.vy = 0; } }
         else if (G.frozen || stunned(f) || f.car) { f.vx = f.vy = 0; }
         else { updateBot(f, dt); fleeNuke(f); }
         updateReload(f);
@@ -12532,7 +12552,7 @@ function drawFighter(f) {
 
     // Body (drawn unrotated so the highlight stays top-left)
     ctx.rotate(-f.angle);
-    if (f.isPlayer) playerGlow(0, 0, r);
+    if (f === G.player) playerGlow(0, 0, r);
     ctx.fillStyle = f.dark;
     ctx.beginPath(); ctx.arc(0, 0, r + 2.5, 0, TAU); ctx.fill();
     ctx.fillStyle = f.color;
@@ -12564,8 +12584,9 @@ function drawFighter(f) {
             ctx.beginPath(); ctx.arc(-r * 0.25, -r * 0.3, r * 0.25, 0, TAU); ctx.fill();
         }
     }
-    if (f.isPlayer) {
-        ctx.strokeStyle = '#fff7ec';
+    // (a white ring round you; a gold one round the other people playing: the host and their friends)
+    if (f === G.player || isHuman(f)) {
+        ctx.strokeStyle = f === G.player ? '#fff7ec' : '#ffd166';
         ctx.lineWidth = 3.5;
         ctx.beginPath(); ctx.arc(0, 0, r + 5, 0, TAU); ctx.stroke();
     }
@@ -12614,7 +12635,7 @@ function drawOverhead(f) {
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 12, -Math.PI / 2, -Math.PI / 2 + TAU * t); ctx.stroke();
     }
-    if (f.cook && f.isPlayer) {
+    if (f.cook && f === G.player) {
         const left = cookLeft(f), t = clamp(left / f.cook.fuse, 0, 1);
         ctx.strokeStyle = 'rgba(0,0,0,0.4)';
         ctx.lineWidth = 6;
@@ -12623,7 +12644,7 @@ function drawOverhead(f) {
         ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 18, -Math.PI / 2, -Math.PI / 2 + TAU * t); ctx.stroke();
     }
-    if (f.isPlayer) {
+    if (f === G.player) {
         if (f.reload) {
             const t = (G.time - f.reload.start) / (f.reload.end - f.reload.start);
             ctx.strokeStyle = 'rgba(0,0,0,0.4)';
@@ -13795,9 +13816,11 @@ function startGame(map = lastMap) {
     else if (G.heavy && !war) showBanner('HEAVY WARFARE', true, `${G.alive} players. Find the heavy guns: supply crates everywhere!`);
     else if (G.epic) showBanner(`EPIC FREE FOR ALL: ${G.alive} PLAYERS`, false, 'Supply crates everywhere. Grab the heavy guns!');
     else showBanner(`${G.alive} PLAYERS. SURVIVE!`);
+    if (NET.role === 'host') netGameStarted();
 }
 
 function toMenu() {
+    netGameEnded();
     newDemo();
     screens.pause.classList.add('hidden');
     screens.over.classList.add('hidden');
@@ -13846,6 +13869,8 @@ let last = performance.now();
 function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    // (playing on a friend's game: their computer runs it and you watch their picture of your view)
+    if (NET.viewing) { requestAnimationFrame(frame); return; }
     if (G && G.mode !== 'paused') {
         // Slow-mo eases back to normal speed (slower recovery during the victory moment)
         G.timeScale = Math.min(1, G.timeScale + dt * (G.victory ? 0.35 : 2.2));
@@ -13855,6 +13880,8 @@ function frame(now) {
     }
     render();
     if (G && G.player && G.mode !== 'demo') updateHUD();
+    // Hosting: draw each friend's own view for their stream
+    if (G && G.netHosted && G.mode !== 'demo') for (const g of NET.guests) if (g.f) renderGuest(g, G.mode === 'paused' ? 0 : dt);
     if (!screens.menu.classList.contains('hidden')) drawModePreview(now / 1000);
     requestAnimationFrame(frame);
 }
@@ -13876,3 +13903,355 @@ for (const k of THROWABLES) {
 }
 newDemo();
 requestAnimationFrame(frame);
+
+// ---------- Play with friends ----------
+// The host runs the game. Each friend takes over a bot (on the host's side in team games): the host draws that
+// friend's own view every frame and streams it to them like a video call, and the friend's keys and mouse come
+// back over the same connection. Connecting uses PeerJS (WebRTC); the code is the host's id on its free broker.
+const NET = {
+    lib: 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js',
+    prefix: 'battlearena-v1-',
+    letters: 'ABCDEFGHJKMNPQRSTUVWXYZ23456789',
+    maxFriends: 7, maxPixels: 1280 * 720,
+    peer: null, role: null, code: null,
+    guests: [],          // (host) the friends who've joined
+    conn: null, viewing: false, stream: null, lastMove: 0   // (friend) the connection to the host
+};
+function loadPeerJS() {
+    if (window.Peer) return Promise.resolve();
+    return new Promise((ok, fail) => {
+        const s = document.createElement('script');
+        s.src = NET.lib; s.onload = () => ok(); s.onerror = () => fail(new Error('Could not load the networking library. Check your internet connection.'));
+        document.head.appendChild(s);
+    });
+}
+const netCode = () => Array.from({ length: 5 }, () => NET.letters[randInt(0, NET.letters.length - 1)]).join('');
+function friendsView(which) {
+    for (const id of ['fr-choose', 'fr-hosting', 'fr-joining']) $(id).classList.toggle('hidden', id !== which);
+}
+function openFriends() {
+    $('friends').classList.remove('hidden');
+    friendsView(NET.role === 'host' ? 'fr-hosting' : NET.role === 'guest' ? 'fr-joining' : 'fr-choose');
+}
+function netStop() {
+    for (const g of NET.guests) dropGuest(g, true);
+    NET.guests = [];
+    if (NET.peer) { try { NET.peer.destroy(); } catch (e) { /* already gone */ } }
+    NET.peer = null; NET.role = null; NET.code = null; NET.conn = null;
+    stopViewing();
+    updateHostStrip();
+}
+
+// ----- Hosting -----
+async function hostGame() {
+    netStop();
+    friendsView('fr-hosting');
+    $('fr-code').textContent = '·····';
+    $('fr-list').textContent = 'Setting up...';
+    try { await loadPeerJS(); } catch (e) { $('fr-list').textContent = e.message; return; }
+    NET.role = 'host';
+    const tryOpen = (tries) => {
+        const code = netCode(), peer = new Peer(NET.prefix + code.toLowerCase());
+        NET.peer = peer;
+        peer.on('open', () => { NET.code = code; $('fr-code').textContent = code; updateHostList(); updateHostStrip(); });
+        peer.on('error', err => {
+            if (err.type === 'unavailable-id' && tries > 0) { peer.destroy(); tryOpen(tries - 1); return; }
+            if (NET.peer === peer) $('fr-list').textContent = `Couldn't host: ${err.type || err.message}`;
+        });
+        peer.on('connection', conn => conn.on('open', () => addGuest(conn)));
+    };
+    tryOpen(4);
+}
+function updateHostList() {
+    if (NET.role !== 'host') return;
+    $('fr-list').textContent = NET.guests.length ? `Joined: ${NET.guests.map(g => g.name).join(', ')}` : 'Waiting for friends to join...';
+    updateHostStrip();
+}
+function updateHostStrip() {
+    const el = $('host-strip');
+    if (!el) return;
+    el.classList.toggle('hidden', NET.role !== 'host' || !NET.code);
+    if (NET.role === 'host' && NET.code) el.innerHTML = `HOSTING · CODE <strong>${NET.code}</strong> · ${NET.guests.length} friend${NET.guests.length === 1 ? '' : 's'} joined · pick a battlefield to start`;
+}
+function addGuest(conn) {
+    if (NET.guests.length >= NET.maxFriends) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 300); return; }
+    const used = new Set(NET.guests.map(g => g.n));
+    let n = 1; while (used.has(n)) n++;
+    const g = { n, name: `Friend ${n}`, conn, call: null, f: null, w: 1280, h: 720, input: { keys: new Set(), mouse: { x: 640, y: 360, down: false }, world: null }, cam: { x: 0, y: 0 }, zoom: 1, va: null, hurt: 0 };
+    g.input.world = () => ({ x: (g.input.mouse.x - g.w / 2) / g.zoom + g.cam.x, y: (g.input.mouse.y - g.h / 2) / g.zoom + g.cam.y });
+    NET.guests.push(g);
+    conn.on('data', msg => onGuestMsg(g, msg));
+    conn.on('close', () => dropGuest(g));
+    conn.send({ t: 'welcome', name: g.name });
+    updateHostList();
+    if (G && G.netHosted && G.mode !== 'demo') attachGuest(g);
+}
+function dropGuest(g, keepList) {
+    if (g.call) { try { g.call.close(); } catch (e) { /* gone */ } g.call = null; }
+    if (g.f) { g.f.remote = null; g.f.nextThink = G ? G.time : 0; g.f = null; }
+    if (!keepList) { NET.guests = NET.guests.filter(x => x !== g); updateHostList(); try { g.conn.close(); } catch (e) { /* gone */ } }
+}
+function onGuestMsg(g, m) {
+    if (!m || typeof m !== 'object') return;
+    const I = g.input;
+    if (m.t === 'hello') {
+        // (their screen's shape, kept to a size the host can draw and send every frame)
+        const w = Math.max(320, +m.w || 1280), h = Math.max(240, +m.h || 720), k = Math.min(1, Math.sqrt(NET.maxPixels / (w * h)));
+        g.w = Math.round(w * k); g.h = Math.round(h * k);
+        return;
+    }
+    if (m.t === 'k') {
+        const code = String(m.code || '').slice(0, 24);
+        if (m.down) { if (!I.keys.has(code) && g.f) onKeyPress(code, false, g.f); I.keys.add(code); }
+        else { I.keys.delete(code); if (code === 'KeyG' && g.f) playerRelease(g.f); }
+    } else if (m.t === 'm') { I.mouse.x = +m.x || 0; I.mouse.y = +m.y || 0; }
+    else if (m.t === 'b') {
+        const p = g.f, down = !!m.down;
+        if (m.button === 0) I.mouse.down = down;
+        if (!p || !G || G.mode !== 'playing' || p.dead) return;
+        if (down && p.car && !vt(p.car).fixed && (m.button === 2 || (m.button === 0 && !(vt(p.car).gun || vt(p.car).cannon || vt(p.car).rockets)))) { I.mouse.down = false; const w = I.world(); setDriveGoal(p.car, w.x, w.y); return; }
+        if (m.button === 2) down ? playerCook(p) : playerRelease(p);
+    } else if (m.t === 'w') {
+        const p = g.f;
+        if (p && G && G.mode === 'playing' && !p.dead) { const n = p.inv.length; switchSlot(p, (p.slot + (m.dy > 0 ? 1 : -1) + n) % n); }
+    } else if (m.t === 'blur') { I.keys.clear(); I.mouse.down = false; }
+}
+// A friend takes over a bot: one on your side if there are sides, the nearest to you
+function attachGuest(g) {
+    if (!G || !G.player || g.f) return;
+    const me = G.player, side = me.team;
+    const ok = f => !f.dead && !isHuman(f) && !f.soldier && !f.zombie && !f.decoy && !f.car && !f.riding && (side === null || f.team === side);
+    let best = null, bd = Infinity;
+    for (const f of G.fighters) if (ok(f)) { const d = dist(f, me); if (d < bd) { bd = d; best = f; } }
+    if (!best) {
+        // (nobody to take over: they arrive next to you)
+        const s = spawnNear(me, 160, 18) || { x: me.x + 60, y: me.y };
+        best = createFighter(s.x, s.y, { name: g.name, color: pick(BOT_COLORS), team: side });
+        G.fighters.push(best);
+    }
+    best.remote = g; best.name = g.name;
+    best.mode = 'wander'; best.goal = null; best.path = null; best.target = null; best.vx = best.vy = 0;
+    if (best.up && !G.revolution) best.up = null;
+    g.f = best; g.cam = { x: best.x, y: best.y }; g.va = null; g.hurt = 0;
+    g.input.keys.clear(); g.input.mouse.down = false;
+    // Their view, drawn here and streamed to them
+    g.canvas = document.createElement('canvas'); g.canvas.width = g.w; g.canvas.height = g.h;
+    g.ctx = g.canvas.getContext('2d');
+    g.vig = null; g.hv = null; g.light = [null, null];
+    renderGuest(g, 0);
+    const stream = g.canvas.captureStream(30);
+    if (g.call) { try { g.call.close(); } catch (e) { /* gone */ } }
+    g.call = NET.peer.call(g.conn.peer, stream);
+    g.conn.send({ t: 'start', name: g.name, mode: MODES[menuMode].name });
+    showBanner(`${g.name.toUpperCase()} JOINED`, false, `${g.name} is playing as ${best.team !== null && G.war ? 'your teammate' : 'one of the players'}`);
+}
+// Called when a game starts with friends connected
+function netGameStarted() {
+    if (NET.role !== 'host') return;
+    G.netHosted = true;
+    for (const g of NET.guests) { g.f = null; attachGuest(g); }
+}
+function netGameEnded() {
+    if (NET.role !== 'host') return;
+    for (const g of NET.guests) { if (g.call) { try { g.call.close(); } catch (e) { /* gone */ } g.call = null; } g.f = null; try { g.conn.send({ t: 'end' }); } catch (e) { /* gone */ } }
+}
+
+// ----- Drawing a friend's view -----
+function updateGuestCam(g, dt) {
+    let f = g.f;
+    if (!f) return;
+    // (once they're out, they watch a teammate, or whoever's still going)
+    if (f.dead) {
+        if (!g.watch || g.watch.dead) { const alive = G.fighters.filter(x => !x.dead && (f.team === null || x.team === f.team)); g.watch = alive.length ? alive.reduce((a, x) => (dist(x, f) < dist(a, f) ? x : a)) : null; }
+        if (g.watch) f = g.watch;
+    }
+    const k = Math.min(1, dt * 12);
+    g.cam.x += (f.x - g.cam.x) * k; g.cam.y += (f.y - g.cam.y) * k;
+    const gun = g.f.car && g.f.car.type === 'bigtower' ? GUN_VIEW : 1;
+    const target = BASE_ZOOM * Math.hypot(g.w, g.h) / Math.hypot(1400, 850) / SCOPE_VIEW[g.f.scope || 1] * gun;
+    g.zoom = g.zoom ? lerp(g.zoom, target, Math.min(1, dt * 4)) : target;
+    const W = CONFIG.WORLD_SIZE, hw = g.w / 2 / g.zoom, hh = g.h / 2 / g.zoom;
+    g.cam.x = hw * 2 < W ? clamp(g.cam.x, hw, W - hw) : W / 2;
+    g.cam.y = hh * 2 < W ? clamp(g.cam.y, hh, W - hh) : W / 2;
+    // (their own red flash when they get hurt)
+    if (g.lastHp !== undefined && g.f.hp < g.lastHp) g.hurt = Math.min(1, g.hurt + 0.35);
+    g.lastHp = g.f.hp;
+    g.hurt = Math.max(0, g.hurt - dt * 1.2);
+}
+// Each viewer keeps their own see-through roofs and balconies
+function swapViewState(g) {
+    if (!g.va) g.va = new Map();
+    const objs = G.revolution ? G.world.buildings.concat(G.revolution.bases) : G.world.buildings;
+    for (const o of objs) {
+        const mine = g.va.get(o);
+        g.va.set(o, { r: o.roofAlpha, d: o.deckAlpha });
+        if (mine) { o.roofAlpha = mine.r; o.deckAlpha = mine.d; }
+    }
+}
+function renderGuest(g, dt) {
+    if (!g.f || !g.ctx) return;
+    updateGuestCam(g, dt);
+    const keep = { ctx, viewW, viewH, dpr, vignette, hurtVignette, lightCv, lightG, player: G.player, cam: G.cam, zoom: G.zoom, hurt: G.hurt, strike: G.strikeCam, shake: G.shake, flash: G.flash, whiteout: G.whiteout, mx: mouse.x, my: mouse.y, md: mouse.down };
+    ctx = g.ctx; viewW = g.w; viewH = g.h; dpr = 1;
+    if (!g.vig) { g.vig = makeVignette('rgba(10,4,24,0.55)'); g.hv = makeVignette('rgba(220,20,60,0.75)'); }
+    vignette = g.vig; hurtVignette = g.hv; [lightCv, lightG] = g.light;
+    G.player = g.f; G.cam = g.cam; G.zoom = g.zoom; G.hurt = g.hurt; G.strikeCam = null; G.shake = 0; G.flash = 0; G.whiteout = 0;
+    mouse.x = g.input.mouse.x; mouse.y = g.input.mouse.y; mouse.down = g.input.mouse.down;
+    swapViewState(g);
+    try { render(); drawGuestHud(g); }
+    finally {
+        swapViewState(g);
+        g.light = [lightCv, lightG];
+        ({ ctx, viewW, viewH, dpr, vignette, hurtVignette, lightCv, lightG } = keep);
+        G.player = keep.player; G.cam = keep.cam; G.zoom = keep.zoom; G.hurt = keep.hurt; G.strikeCam = keep.strike; G.shake = keep.shake; G.flash = keep.flash; G.whiteout = keep.whiteout;
+        mouse.x = keep.mx; mouse.y = keep.my; mouse.down = keep.md;
+    }
+}
+// The friend's HUD, drawn into their view: health and armor, the gun and its ammo, their slots and supplies
+function drawGuestHud(g) {
+    const p = g.f, c = ctx, W = viewW, H = viewH;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.textBaseline = 'middle';
+    const panel = (x, y, w, h) => { c.fillStyle = 'rgba(14,10,28,0.72)'; roundRect(c, x, y, w, h, 10); c.fill(); };
+    // top left: alive and kills
+    panel(14, 14, 190, 46);
+    c.font = '700 22px "Black Ops One", sans-serif'; c.textAlign = 'left'; c.fillStyle = '#fff7ec';
+    c.fillText(`${G.alive ?? G.fighters.length}`, 28, 38); c.fillText(`${p.kills || 0}`, 118, 38);
+    c.font = '600 12px Rajdhani, sans-serif'; c.fillStyle = '#b8b0d0'; c.fillText('ALIVE', 66, 39); c.fillText('KILLS', 150, 39);
+    // bottom middle: health and armor
+    const bw = Math.min(340, W * 0.4), bx = W / 2 - bw / 2, by = H - 64;
+    const bar = (y, frac, col, label) => { c.fillStyle = 'rgba(14,10,28,0.72)'; roundRect(c, bx, y, bw, 18, 6); c.fill(); c.fillStyle = col; roundRect(c, bx + 2, y + 2, Math.max(0, (bw - 4) * clamp(frac, 0, 1)), 14, 5); c.fill(); c.font = '700 12px Rajdhani, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(label, W / 2, y + 10); };
+    if (p.armor > 0) bar(by - 24, p.armor / 100, '#5ec3ff', `ARMOR ${Math.ceil(p.armor)}`);
+    bar(by, p.hp / p.maxHp, p.hp < p.maxHp * 0.3 ? '#ff4f6d' : '#5ee08a', `${Math.ceil(Math.max(0, p.hp))} / ${p.maxHp}`);
+    // bottom left: slots, and bandages / medkits
+    c.textAlign = 'left';
+    p.inv.forEach((k, i) => {
+        const x = 14, y = H - 30 - (p.inv.length - i) * 30;
+        panel(x, y, 190, 26);
+        if (i === p.slot) { c.strokeStyle = '#ffd166'; c.lineWidth = 2; roundRect(c, x, y, 190, 26, 10); c.stroke(); }
+        c.font = '600 14px Rajdhani, sans-serif'; c.fillStyle = k ? '#fff7ec' : '#6f6890'; c.fillText(`${i + 1}  ${k || '—'}`, x + 12, y + 14);
+    });
+    panel(14, H - 28 - 2, 190, 24);
+    c.font = '600 13px Rajdhani, sans-serif'; c.fillStyle = '#fff7ec';
+    c.fillText(`Q bandage ${p.items.bandage || 0}   E medkit ${p.items.medkit || 0}`, 26, H - 17);
+    // bottom right: the gun and its ammo
+    const w = held(p), W8 = WEAPONS[w];
+    panel(W - 214, H - 74, 200, 60);
+    c.textAlign = 'right'; c.font = '700 15px Rajdhani, sans-serif'; c.fillStyle = '#b8b0d0'; c.fillText((w || 'Fists').toUpperCase(), W - 28, H - 58);
+    c.font = '700 26px "Black Ops One", sans-serif'; c.fillStyle = '#fff7ec';
+    const reserve = p.ammo[w] === Infinity ? '∞' : Math.max(0, p.ammo[w] || 0);
+    c.fillText(W8 && !W8.melee ? `${p.mag[w] ?? 0} / ${reserve}` : '—', W - 28, H - 32);
+    // what F does here
+    const loot = !p.dead && !p.car && nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE), car = !p.dead && !p.car && !loot && nearestCar(p, 90);
+    const hint = p.car ? 'F  get out' : loot ? `F  pick up ${lootName(loot.key)}` : car ? `F  get in the ${vt(car).name}` : '';
+    if (hint) { c.font = '700 16px Rajdhani, sans-serif'; c.textAlign = 'center'; const tw = c.measureText(hint).width + 30; panel(W / 2 - tw / 2, H - 132, tw, 30); c.fillStyle = '#ffd166'; c.fillText(hint, W / 2, H - 116); }
+    // out of the game, or the game's over
+    if (p.dead || G.result) {
+        c.fillStyle = 'rgba(10,6,20,0.45)'; c.fillRect(0, H * 0.36, W, H * 0.2);
+        c.textAlign = 'center'; c.font = '900 50px "Black Ops One", sans-serif';
+        const won = G.result && (G.result.won || (G.war && G.result.winner === p.team));
+        c.fillStyle = G.result ? (won ? '#5ee08a' : '#ff6b6b') : '#ff6b6b';
+        c.fillText(G.result ? (won ? 'VICTORY!' : 'GAME OVER') : 'YOU DIED', W / 2, H * 0.44);
+        c.font = '600 19px Rajdhani, sans-serif'; c.fillStyle = '#fff7ec';
+        c.fillText(G.result ? 'Waiting for the host to start the next game' : `Watching ${g.watch ? g.watch.name : 'the game'}`, W / 2, H * 0.51);
+    }
+}
+
+// ----- Joining -----
+async function joinGame(code) {
+    code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 5) { $('fr-join-msg').textContent = 'Codes are 5 letters and numbers. Check it and try again:'; return; }
+    netStop();
+    friendsView('fr-joining');
+    $('fr-join-msg').textContent = 'Connecting...';
+    try { await loadPeerJS(); } catch (e) { $('fr-join-msg').textContent = e.message; return; }
+    NET.role = 'guest';
+    const peer = new Peer();
+    NET.peer = peer;
+    peer.on('error', err => {
+        if (NET.peer !== peer) return;
+        $('fr-join-msg').textContent = err.type === 'peer-unavailable' ? `No game found with code ${code}. Check the code with your friend:` : `Couldn't connect (${err.type || err.message}). Try again:`;
+        NET.role = null;
+    });
+    peer.on('open', () => {
+        const conn = peer.connect(NET.prefix + code.toLowerCase(), { reliable: true });
+        NET.conn = conn;
+        conn.on('open', () => conn.send({ t: 'hello', w: window.innerWidth, h: window.innerHeight }));
+        conn.on('data', m => onHostMsg(m));
+        conn.on('close', () => { if (NET.peer !== peer) return; stopViewing(); $('friends').classList.remove('hidden'); friendsView('fr-joining'); $('fr-join-msg').textContent = 'The host left the game. Type a code to join another:'; NET.role = null; });
+    });
+    peer.on('call', call => {
+        call.answer();
+        call.on('stream', s => startViewing(s));
+        call.on('close', () => stopViewing(true));
+    });
+}
+function onHostMsg(m) {
+    if (!m || typeof m !== 'object') return;
+    if (m.t === 'welcome') $('fr-join-msg').textContent = `Connected as ${m.name}! Waiting for the host to start the game...`;
+    if (m.t === 'full') $('fr-join-msg').textContent = 'That game is full.';
+    if (m.t === 'start') $('fr-join-msg').textContent = `Joining ${m.mode}...`;
+    if (m.t === 'end') { stopViewing(true); $('fr-join-msg').textContent = 'The host is back at the menu. Waiting for the next game...'; }
+}
+function startViewing(stream) {
+    const v = $('net-video');
+    NET.stream = stream; NET.viewing = true;
+    v.srcObject = stream; v.classList.remove('hidden');
+    v.play().catch(() => { /* starts on the next click */ });
+    for (const k in screens) screens[k].classList.add('hidden');
+    $('friends').classList.add('hidden');
+    hud.root.classList.add('hidden');
+    document.body.classList.add('playing', 'net-viewing');
+    keys.clear(); mouse.down = false;
+}
+function stopViewing(backToLobby) {
+    const v = $('net-video');
+    if (v) { v.srcObject = null; v.classList.add('hidden'); }
+    $('net-leave') && $('net-leave').classList.add('hidden');
+    document.body.classList.remove('net-viewing');
+    if (!NET.viewing) return;
+    NET.viewing = false; NET.stream = null;
+    document.body.classList.remove('playing');
+    if (backToLobby) { screens.mapsel.classList.remove('hidden'); $('friends').classList.remove('hidden'); friendsView('fr-joining'); }
+}
+// Where the mouse is in the host's picture of your view (it's letterboxed to fit your window)
+function netMouse(e) {
+    const v = $('net-video'), r = v.getBoundingClientRect(), vw = v.videoWidth || 1280, vh = v.videoHeight || 720;
+    const k = Math.min(r.width / vw, r.height / vh), ox = r.left + (r.width - vw * k) / 2, oy = r.top + (r.height - vh * k) / 2;
+    return { x: (e.clientX - ox) / k, y: (e.clientY - oy) / k };
+}
+const netSend = m => { if (NET.conn && NET.conn.open) NET.conn.send(m); };
+// While playing on a friend's game, your keys and mouse go to them (capture first, so the game here ignores them)
+window.addEventListener('keydown', e => {
+    if (!NET.viewing) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    if (e.code === 'Escape') { $('net-leave').classList.toggle('hidden'); return; }
+    if (!e.repeat) netSend({ t: 'k', code: e.code, down: true });
+}, true);
+window.addEventListener('keyup', e => { if (!NET.viewing) return; e.stopImmediatePropagation(); netSend({ t: 'k', code: e.code, down: false }); }, true);
+window.addEventListener('mousemove', e => {
+    if (!NET.viewing) return;
+    const now = performance.now();
+    if (now - NET.lastMove < 25) return;
+    NET.lastMove = now; netSend({ t: 'm', ...netMouse(e) });
+}, true);
+window.addEventListener('blur', () => { if (NET.viewing) netSend({ t: 'blur' }); });
+
+$('net-video').addEventListener('mousedown', e => { const m = netMouse(e); netSend({ t: 'm', ...m }); netSend({ t: 'b', button: e.button, down: true }); e.preventDefault(); });
+$('net-video').addEventListener('mouseup', e => netSend({ t: 'b', button: e.button, down: false }));
+$('net-video').addEventListener('contextmenu', e => e.preventDefault());
+$('net-video').addEventListener('wheel', e => netSend({ t: 'w', dy: e.deltaY }), { passive: true });
+$('friends-btn').addEventListener('click', openFriends);
+$('fr-host').addEventListener('click', hostGame);
+$('fr-join').addEventListener('click', () => { friendsView('fr-joining'); $('fr-join-msg').textContent = 'Type the code your friend sent you:'; setTimeout(() => $('fr-input').focus(), 0); });
+$('fr-go').addEventListener('click', () => joinGame($('fr-input').value));
+$('fr-input').addEventListener('keydown', e => { if (e.code === 'Enter') joinGame($('fr-input').value); });
+$('fr-pick').addEventListener('click', () => $('friends').classList.add('hidden'));
+$('fr-stop').addEventListener('click', () => { netStop(); friendsView('fr-choose'); });
+$('fr-back').addEventListener('click', () => {
+    // (backing out of joining stops it; a host keeps hosting and goes back to choosing a battlefield)
+    if (NET.role === 'guest') netStop();
+    $('friends').classList.add('hidden');
+});
+$('nl-leave').addEventListener('click', () => { netStop(); $('friends').classList.add('hidden'); toMenu(); });
+$('nl-back').addEventListener('click', () => $('net-leave').classList.add('hidden'));
