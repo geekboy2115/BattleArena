@@ -564,9 +564,6 @@ kbd {
 #shield-bar { height: 12px; }
 #shield-bar .fill { background: linear-gradient(90deg, #00e5ff, #00f5d4); box-shadow: 0 0 8px #00e5ff; }
 #shield-bar span { font-size: 10px; }
-#stam-bar { height: 6px; transition: opacity 0.4s; }
-#stam-bar .fill { background: linear-gradient(180deg, #ffe7a0, #f2b53a); }
-#stam-bar.full { opacity: 0; }
 #hunger-bar { height: 12px; }
 #hunger-bar .fill { background: linear-gradient(180deg, #ffd29a, #e8892e); }
 #hunger-bar span { font-size: 10px; }
@@ -612,10 +609,6 @@ kbd {
 #weapon-name { font-size: 16px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
 #ammo-count { line-height: 1; }
 #mag { font-size: 44px; font-weight: 700; }
-#reserve { font-size: 20px; color: var(--muted); font-weight: 700; margin-left: 6px; }
-#reload-bar { height: 4px; margin-top: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); overflow: hidden; visibility: hidden; }
-#reload-bar div { height: 100%; width: 0; background: var(--gold); }
-#reload-bar.on { visibility: visible; }
 
 @media (max-width: 720px) {
     #vitals { width: calc(100vw - 32px); }
@@ -738,7 +731,6 @@ kbd {
     .supply img { width: 34px; height: 34px; }
 }
 
-#scope { color: #8fd8ff; }
 .stat-label kbd { font-size: 9px; min-width: 14px; padding: 0 3px; }
 
 /* ---------- Throwables ---------- */
@@ -805,7 +797,6 @@ body.touch #game { touch-action: none; }
 .stick .knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); border: 2px solid rgba(255, 255, 255, 0.6); }
 .stick.on .knob { background: rgba(255, 209, 102, 0.65); }
 .stick-label { position: absolute; left: 0; right: 0; bottom: -2px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: rgba(255, 255, 255, 0.55); }
-#touch-buttons { position: fixed; display: grid; grid-template-columns: repeat(3, 56px); gap: 8px; }
 .tbtn { width: 56px; height: 56px; border-radius: 50%; background: rgba(14, 10, 28, 0.62); border: 2px solid rgba(255, 255, 255, 0.32); color: #fff7ec; font: 700 11px Rajdhani, sans-serif; letter-spacing: 0.5px; padding: 0; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .tbtn.down, .tbtn.on { background: rgba(255, 209, 102, 0.55); color: #1a1030; }
 #tb-pause { position: fixed; top: 10px; left: 50%; margin-left: -22px; width: 44px; height: 44px; font-size: 16px; }
@@ -825,8 +816,6 @@ body.touch #grenade-panel .supply-row { flex-wrap: wrap-reverse; justify-content
 /* (on a touch screen the hotbar already shows your ammo, so the ammo box goes; a smaller minimap leaves room for the buttons) */
 body.touch #ammo-panel { display: none; }
 body.touch #minimap { width: 120px; height: 120px; }
-body.touch #touch-buttons .tbtn { width: var(--tb, 50px); height: var(--tb, 50px); font-size: calc(var(--tb, 50px) * 0.22); }
-body.touch #touch-buttons { grid-template-columns: repeat(3, var(--tb, 50px)); }
 @media (max-height: 500px) { body.touch #killfeed { display: none; } }
 #tb-pick { position: fixed; left: 50%; transform: translateX(-50%); padding: 12px 20px; overflow: hidden; text-overflow: ellipsis; border-radius: 999px; background: rgba(255, 209, 102, 0.92); color: #1a1030; border: 2px solid #fff7ec; font: 700 17px Rajdhani, sans-serif; letter-spacing: 1px; white-space: nowrap; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 #tb-pick:active { transform: translateX(-50%) scale(0.95); }
@@ -840,3 +829,4 @@ body.touch .supply.throwable:not(.selected) { display: none; }
 body.touch #grenade-panel { pointer-events: auto; }
 body.touch #tb-pause { top: auto; left: 12px; margin-left: 0; bottom: auto; }
 body.touch .slot .key { display: none; }
+.supply.armed { border-color: #ffb347; box-shadow: 0 0 18px rgba(255, 179, 71, 0.75); background: rgba(255, 179, 71, 0.22); }

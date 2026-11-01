@@ -20,7 +20,6 @@
         <div id="hud-topleft" class="panel">
             <div class="stat"><span class="stat-value" id="alive">0</span><span class="stat-label">Alive</span></div>
             <div class="stat"><span class="stat-value" id="kills">0</span><span class="stat-label">Kills</span></div>
-            <div class="stat"><span class="stat-value" id="scope">1x</span><span class="stat-label">Scope <kbd>Z</kbd></span></div>
         </div>
 
         <div id="hud-topright">
@@ -41,7 +40,6 @@
                 <div class="bar hidden" id="shield-bar"><div class="fill"></div><span></span></div>
                 <div class="bar" id="armor-bar"><div class="fill"></div><span></span></div>
                 <div class="bar" id="hp-bar"><div class="ghost"></div><div class="fill"></div><span></span></div>
-                <div class="bar full" id="stam-bar"><div class="fill"></div></div>
                 <div class="bar hidden" id="hunger-bar"><div class="fill"></div><span></span></div>
                 <div class="bar hidden" id="thirst-bar"><div class="fill"></div><span></span></div>
                 <div class="bar hidden" id="energy-bar"><div class="fill"></div><span></span></div>
@@ -62,7 +60,7 @@
         </div>
 
         <div id="grenade-panel" class="panel">
-            <div class="throw-hint"><kbd>G</kbd> hold &amp; release · <kbd>T</kbd> or click to switch</div>
+            <div class="throw-hint">Click a grenade (or <kbd>T</kbd>) to hold it · then shoot to throw</div>
             <div class="supply-row">
                 <div class="supply throwable" id="cell-grenade" title="Frag grenade"><img alt=""><span class="count" id="count-grenade"></span></div>
                 <div class="supply throwable" id="cell-smoke" title="Smoke grenade"><img alt=""><span class="count" id="count-smoke"></span></div>
@@ -90,8 +88,7 @@
 
         <div id="ammo-panel" class="panel">
             <div id="weapon-name"></div>
-            <div id="ammo-count"><span id="mag"></span><span id="reserve"></span></div>
-            <div id="reload-bar"><div></div></div>
+            <div id="ammo-count"><span id="mag"></span></div>
         </div>
     </div>
 
@@ -99,13 +96,6 @@
     <div id="touch">
         <div id="stick-move" class="stick"><div class="knob"></div><span class="stick-label">MOVE</span></div>
         <div id="stick-aim" class="stick"><div class="knob"></div><span class="stick-label">AIM · FIRE</span></div>
-        <div id="touch-buttons">
-            <button class="tbtn" data-key="KeyR">RELOAD</button>
-            <button class="tbtn" data-key="KeyG">THROW</button>
-            <button class="tbtn" id="tb-swap">SWAP</button>
-            <button class="tbtn" data-key="ShiftLeft" data-toggle="1">SPRINT</button>
-            <button class="tbtn" data-key="KeyZ">SCOPE</button>
-        </div>
         <button class="tbtn" id="tb-pause">II</button>
         <button id="tb-pick" class="hidden">PICK UP</button>
     </div>
@@ -169,16 +159,13 @@
             <details class="controls-wrap">
             <summary>Controls</summary>
             <div class="controls">
-                <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move · <kbd>Shift</kbd> Sprint</div>
+                <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</div>
                 <div><kbd>Mouse</kbd> Aim &amp; shoot</div>
                 <div><kbd>F</kbd> Pick up · get in / out of cars</div>
-                <div><kbd>R</kbd> Reload</div>
                 <div><kbd>1</kbd>–<kbd>5</kbd> / Scroll Switch</div>
                 <div><kbd>Q</kbd> Bandage · <kbd>E</kbd> Medkit · <kbd>C</kbd> Eat</div>
                 <div>Survival: <kbd>V</kbd> Drink / fill buckets at water · <kbd>B</kbd> Rest</div>
-                <div><kbd>G</kbd> / Right-click Hold to cook, release to throw</div>
-                <div><kbd>T</kbd> Switch throwable</div>
-                <div><kbd>Z</kbd> Switch scope</div>
+                <div>Click a grenade or <kbd>T</kbd> to hold it, then hold the mouse to pull the pin and let go to throw</div>
                 <div><kbd>Esc</kbd> Pause · <kbd>M</kbd> Mute</div>
             </div>
             </details>

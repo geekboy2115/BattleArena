@@ -39,33 +39,33 @@ const RARITY = {
 const WEAPONS = {
     'Fist': { damage: 10, range: 60, rate: 450, melee: true, rarity: 'common' },
     'Claws': { damage: 30, range: 64, rate: 380, melee: true, rarity: 'common' },  // zombies only
-    'Pistol': { damage: 15, range: 1000, rate: 300, speed: 1100, spread: 0.04, mag: 12, reload: 1300, rarity: 'common', len: 16, w: 6, sound: 'light', shake: 1.5 },
-    'Mac10': { damage: 8, range: 800, rate: 80, speed: 1150, spread: 0.15, mag: 30, reload: 1800, rarity: 'uncommon', len: 20, w: 7, sound: 'light', shake: 1 },
-    'Shotgun': { damage: 10, count: 5, range: 620, rate: 1000, speed: 1000, spread: 0.25, mag: 8, reload: 2000, rarity: 'uncommon', len: 34, w: 8, sound: 'heavy', shake: 6 },
-    'Double Barrel': { damage: 15, count: 6, range: 480, rate: 200, speed: 1000, spread: 0.3, mag: 2, reload: 2000, rarity: 'rare', len: 30, w: 10, sound: 'heavy', shake: 7 },
-    'Breacher': { damage: 12, count: 8, range: 400, rate: 800, speed: 950, spread: 0.4, mag: 5, reload: 2500, rarity: 'rare', len: 28, w: 11, sound: 'heavy', shake: 8 },
-    'Machine Gun': { damage: 12, range: 1300, rate: 100, speed: 1400, spread: 0.1, mag: 100, reload: 4000, rarity: 'epic', len: 40, w: 9, sound: 'mid', shake: 2 },
-    'Sniper': { damage: 80, range: Infinity, rate: 1500, speed: 2200, spread: 0, mag: 5, reload: 3000, rarity: 'epic', len: 50, w: 6, sound: 'sniper', shake: 7 },
-    'AWP': { damage: 150, range: Infinity, rate: 2000, speed: 2600, spread: 0, mag: 5, reload: 3500, rarity: 'legendary', len: 56, w: 7, sound: 'sniper', shake: 10 },
+    'Pistol': { damage: 15, range: 1000, rate: 300, speed: 1100, spread: 0.04, mag: 12, rarity: 'common', len: 16, w: 6, sound: 'light', shake: 1.5 },
+    'Mac10': { damage: 8, range: 800, rate: 80, speed: 1150, spread: 0.15, mag: 30, rarity: 'uncommon', len: 20, w: 7, sound: 'light', shake: 1 },
+    'Shotgun': { damage: 10, count: 5, range: 620, rate: 1000, speed: 1000, spread: 0.25, mag: 8, rarity: 'uncommon', len: 34, w: 8, sound: 'heavy', shake: 6 },
+    'Double Barrel': { damage: 15, count: 6, range: 480, rate: 200, speed: 1000, spread: 0.3, mag: 2, rarity: 'rare', len: 30, w: 10, sound: 'heavy', shake: 7 },
+    'Breacher': { damage: 12, count: 8, range: 400, rate: 800, speed: 950, spread: 0.4, mag: 5, rarity: 'rare', len: 28, w: 11, sound: 'heavy', shake: 8 },
+    'Machine Gun': { damage: 12, range: 1300, rate: 100, speed: 1400, spread: 0.1, mag: 100, rarity: 'epic', len: 40, w: 9, sound: 'mid', shake: 2 },
+    'Sniper': { damage: 80, range: Infinity, rate: 1500, speed: 2200, spread: 0, mag: 5, rarity: 'epic', len: 50, w: 6, sound: 'sniper', shake: 7 },
+    'AWP': { damage: 150, range: Infinity, rate: 2000, speed: 2600, spread: 0, mag: 5, rarity: 'legendary', len: 56, w: 7, sound: 'sniper', shake: 10 },
     // Airdrop-only
-    'Vector': { damage: 11, range: 1000, rate: 55, speed: 1350, spread: 0.08, mag: 33, reload: 1600, rarity: 'mythic', len: 24, w: 8, sound: 'light', shake: 1.2 },
-    'Heavy MG': { damage: 16, range: 1800, rate: 85, speed: 1900, spread: 0.06, mag: 150, reload: 4200, rarity: 'mythic', len: 48, w: 10, sound: 'mid', shake: 2.5 },
+    'Vector': { damage: 11, range: 1000, rate: 55, speed: 1350, spread: 0.08, mag: 33, rarity: 'mythic', len: 24, w: 8, sound: 'light', shake: 1.2 },
+    'Heavy MG': { damage: 16, range: 1800, rate: 85, speed: 1900, spread: 0.06, mag: 150, rarity: 'mythic', len: 48, w: 10, sound: 'mid', shake: 2.5 },
     // War mode heavy weapons (supply crates, and now and then a war-mode box)
-    'Assault Rifle': { damage: 14, range: 1400, rate: 110, speed: 1600, spread: 0.07, mag: 30, reload: 2000, rarity: 'epic', len: 36, w: 8, sound: 'mid', shake: 2 },
-    'Minigun': { damage: 11, range: 1300, rate: 45, speed: 1600, spread: 0.13, mag: 200, reload: 5000, rarity: 'mythic', len: 46, w: 13, sound: 'mid', shake: 1.6 },
-    'Rocket Launcher': { damage: 40, range: 1500, rate: 1200, speed: 800, spread: 0.01, mag: 1, reload: 2400, rarity: 'mythic', len: 50, w: 12, sound: 'heavy', shake: 9, rocket: true },
-    'Barrett': { damage: 200, range: Infinity, rate: 1800, speed: 3000, spread: 0, mag: 6, reload: 3600, rarity: 'mythic', len: 62, w: 8, sound: 'sniper', shake: 12 },
+    'Assault Rifle': { damage: 14, range: 1400, rate: 110, speed: 1600, spread: 0.07, mag: 30, rarity: 'epic', len: 36, w: 8, sound: 'mid', shake: 2 },
+    'Minigun': { damage: 11, range: 1300, rate: 45, speed: 1600, spread: 0.13, mag: 200, rarity: 'mythic', len: 46, w: 13, sound: 'mid', shake: 1.6 },
+    'Rocket Launcher': { damage: 40, range: 1500, rate: 1200, speed: 800, spread: 0.01, mag: 1, rarity: 'mythic', len: 50, w: 12, sound: 'heavy', shake: 9, rocket: true },
+    'Barrett': { damage: 200, range: Infinity, rate: 1800, speed: 3000, spread: 0, mag: 6, rarity: 'mythic', len: 62, w: 8, sound: 'sniper', shake: 12 },
     // Hyper drop weapons
-    'Plasma Rifle': { damage: 24, range: 1500, rate: 105, speed: 1800, spread: 0.03, mag: 45, reload: 1700, rarity: 'hyper', len: 38, w: 9, sound: 'mid', shake: 1.5, hyper: true },
-    'Railgun': { damage: 220, range: Infinity, rate: 1800, speed: 4200, spread: 0, mag: 4, reload: 3000, rarity: 'hyper', len: 64, w: 9, sound: 'sniper', shake: 10, hyper: true, pierce: true },  // goes through everyone in a line
-    'Tesla Cannon': { damage: 32, range: 900, rate: 420, speed: 1300, spread: 0.02, mag: 12, reload: 2200, rarity: 'hyper', len: 34, w: 13, sound: 'heavy', shake: 4, hyper: true, chain: 3 },  // arcs to 3 more enemies
-    'Laser Beam': { damage: 7, range: 950, rate: 50, speed: 0, spread: 0, mag: 120, reload: 2200, rarity: 'hyper', len: 36, w: 9, sound: 'mid', shake: 0.3, hyper: true, beam: true },  // hold it on them
-    'Freeze Ray': { damage: 2, range: 800, rate: 50, speed: 0, spread: 0, mag: 120, reload: 2200, rarity: 'hyper', len: 34, w: 10, sound: 'mid', shake: 0.2, hyper: true, beam: true, freeze: 0.09 },  // chills, then freezes solid
-    'Homing Launcher': { damage: 45, range: 1100, rate: 900, speed: 480, spread: 0.02, mag: 4, reload: 2600, rarity: 'hyper', len: 52, w: 13, sound: 'heavy', shake: 7, hyper: true, rocket: true, homing: true },
-    'Minigun of Doom': { damage: 12, range: 1300, rate: 40, speed: 1600, spread: 0.12, mag: 300, reload: 5500, rarity: 'hyper', len: 50, w: 15, sound: 'mid', shake: 2, hyper: true, explosive: true },  // every round explodes
-    'Sonic Cannon': { damage: 55, range: 480, rate: 1100, speed: 0, spread: 0, mag: 6, reload: 2600, rarity: 'hyper', len: 40, w: 16, sound: 'heavy', shake: 6, hyper: true, sonic: true },  // a cone of force
+    'Plasma Rifle': { damage: 24, range: 1500, rate: 105, speed: 1800, spread: 0.03, mag: 45, rarity: 'hyper', len: 38, w: 9, sound: 'mid', shake: 1.5, hyper: true },
+    'Railgun': { damage: 220, range: Infinity, rate: 1800, speed: 4200, spread: 0, mag: 4, rarity: 'hyper', len: 64, w: 9, sound: 'sniper', shake: 10, hyper: true, pierce: true },  // goes through everyone in a line
+    'Tesla Cannon': { damage: 32, range: 900, rate: 420, speed: 1300, spread: 0.02, mag: 12, rarity: 'hyper', len: 34, w: 13, sound: 'heavy', shake: 4, hyper: true, chain: 3 },  // arcs to 3 more enemies
+    'Laser Beam': { damage: 7, range: 950, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 36, w: 9, sound: 'mid', shake: 0.3, hyper: true, beam: true },  // hold it on them
+    'Freeze Ray': { damage: 2, range: 800, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 34, w: 10, sound: 'mid', shake: 0.2, hyper: true, beam: true, freeze: 0.09 },  // chills, then freezes solid
+    'Homing Launcher': { damage: 45, range: 1100, rate: 900, speed: 480, spread: 0.02, mag: 4, rarity: 'hyper', len: 52, w: 13, sound: 'heavy', shake: 7, hyper: true, rocket: true, homing: true },
+    'Minigun of Doom': { damage: 12, range: 1300, rate: 40, speed: 1600, spread: 0.12, mag: 300, rarity: 'hyper', len: 50, w: 15, sound: 'mid', shake: 2, hyper: true, explosive: true },  // every round explodes
+    'Sonic Cannon': { damage: 55, range: 480, rate: 1100, speed: 0, spread: 0, mag: 6, rarity: 'hyper', len: 40, w: 16, sound: 'heavy', shake: 6, hyper: true, sonic: true },  // a cone of force
     // Ordinary finds
-    'Crossbow': { damage: 85, range: 1400, rate: 600, speed: 1500, spread: 0.005, mag: 1, reload: 1000, rarity: 'rare', len: 34, w: 12, sound: 'light', shake: 2, silent: true, string: true, quiver: 6 },  // firing it doesn't give you away
+    'Crossbow': { damage: 85, range: 1400, rate: 600, speed: 1500, spread: 0.005, mag: 1, rarity: 'rare', len: 34, w: 12, sound: 'light', shake: 2, silent: true, string: true, quiver: 6 },  // firing it doesn't give you away
     // Early Warfare: blades, and arrows that you nock one at a time (quiver: arrows a pickup gives you)
     'Sword': { damage: 38, range: 84, rate: 520, melee: true, blade: 'sword', rarity: 'uncommon', len: 40 },
     'Spear': { damage: 30, range: 128, rate: 720, melee: true, blade: 'spear', rarity: 'uncommon', len: 72 },  // the longest reach
@@ -74,9 +74,9 @@ const WEAPONS = {
     'Mace': { damage: 42, range: 76, rate: 700, melee: true, blade: 'mace', rarity: 'rare', len: 32, crush: 35 },  // smashes armor off
     'War Hammer': { damage: 72, range: 86, rate: 1200, melee: true, blade: 'hammer', rarity: 'epic', len: 44, knock: 700 },  // slow, knocks them flying
     'Halberd': { damage: 46, range: 124, rate: 980, melee: true, blade: 'halberd', rarity: 'rare', len: 70 },  // spear reach, axe bite
-    'Longbow': { damage: 74, range: 1700, rate: 900, speed: 1500, spread: 0.008, mag: 1, reload: 800, rarity: 'epic', len: 30, w: 12, sound: 'light', shake: 1.5, silent: true, string: true, shape: 'bow', bowR: 27, quiver: 10 },
-    'Bow': { damage: 48, range: 1200, rate: 650, speed: 1150, spread: 0.02, mag: 1, reload: 550, rarity: 'rare', len: 26, w: 12, sound: 'light', shake: 1, silent: true, string: true, shape: 'bow', quiver: 12 },
-    'Revolver': { damage: 42, range: 1100, rate: 420, speed: 1500, spread: 0.02, mag: 6, reload: 2100, rarity: 'uncommon', len: 20, w: 7, sound: 'heavy', shake: 5 }
+    'Longbow': { damage: 74, range: 1700, rate: 900, speed: 1500, spread: 0.008, mag: 1, rarity: 'epic', len: 30, w: 12, sound: 'light', shake: 1.5, silent: true, string: true, shape: 'bow', bowR: 27, quiver: 10 },
+    'Bow': { damage: 48, range: 1200, rate: 650, speed: 1150, spread: 0.02, mag: 1, rarity: 'rare', len: 26, w: 12, sound: 'light', shake: 1, silent: true, string: true, shape: 'bow', quiver: 12 },
+    'Revolver': { damage: 42, range: 1100, rate: 420, speed: 1500, spread: 0.02, mag: 6, rarity: 'uncommon', len: 20, w: 7, sound: 'heavy', shake: 5 }
 };
 
 const ITEMS = {
@@ -113,7 +113,6 @@ const ITEMS = {
     'medpack': { type: 'gear', slots: 5, perk: 'heal', name: 'Medic Pack', rarity: 'hyper' },
     'jetpack': { type: 'gear', slots: 5, perk: 'jet', name: 'Jet Pack', rarity: 'hyper' },
     'ammopack': { type: 'gear', slots: 5, perk: 'ammo', name: 'Ammo Pack', rarity: 'hyper' },  // Zombies and Virus only
-    // Scopes widen how much of the map you can see
     'armor': { type: 'armor', val: 50, name: 'Body Armor', rarity: 'rare' },
     'ammo': { type: 'ammo', name: 'Ammo Box', rarity: 'common' },
     'backpack1': { type: 'gear', slots: 3, name: 'Backpack Lvl 1', rarity: 'uncommon' },
@@ -131,12 +130,10 @@ const GROUND_TABLE = [
     ['backpack1', 4], ['backpack2', 2], ['backpack3', 0.7],
     ['smoke', 3], ['strobe', 0.5], ['mine', 0.6]
 ];
-// Without a scope you're zoomed in a bit; this is the zoom on a reference 1400x850 screen
+// The camera's zoom on a reference 1400x850 screen
 const BASE_ZOOM = 1.35;
-// How much wider each scope makes your view (the label is the item's name, not a literal multiplier)
-// Scopes aren't found any more: everyone starts with a 4x (Early Warfare has none)
-const SCOPE_VIEW = { 1: 1, 4: 1.3 };
-const START_SCOPE = 4;
+// How far out the camera sits (Early Warfare's a little closer in)
+const viewScale = () => (G && G.early ? 1 : 1.3);
 const AIRDROP_GUNS = ['Vector', 'Heavy MG'];
 // Early Warfare: every gun anywhere is swapped for one of these
 const EARLY_TABLE = [['Sword', 10], ['Spear', 8], ['Bow', 8], ['Crossbow', 4], ['Dagger', 9], ['Axe', 7], ['Mace', 5], ['Halberd', 4], ['War Hammer', 2.5], ['Longbow', 2.5]];
@@ -505,7 +502,10 @@ function playerRelease(p = G && G.player) {
     releaseCook(p, m.x, m.y);
 }
 
+// Take a grenade in hand (and the next kind you're carrying if one's already in hand): then the trigger throws it
 function cycleThrowable(p) {
+    if (!p.nadeReady && p.items[p.throwSel] > 0) { p.nadeReady = true; return; }
+    p.nadeReady = THROWABLES.some(k => p.items[k] > 0);
     const i = THROWABLES.indexOf(p.throwSel);
     for (let k = 1; k <= THROWABLES.length; k++) {
         const next = THROWABLES[(i + k) % THROWABLES.length];
@@ -558,7 +558,6 @@ function playerAction(p, code) {
         const i = parseInt(code.slice(5), 10) - 1;
         if (i >= 0 && i < 5) switchSlot(p, i);
     }
-    if (code === 'KeyR') startReload(p);
     if (code === 'Space' && p.isPlayer && G.strikeCam) { G.strikeCam = null; return; }
     if (code === 'KeyF') {
         // F: launch the boss strike, get out of the car, pick up what's at your feet, or get into a car nearby
@@ -568,10 +567,6 @@ function playerAction(p, code) {
         if (p.car) exitCar(p);
         else if (!nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE) && nearestCar(p, 90) && !p.zombie && (!p.up || nearestCar(p, 90).tower === p.up) && !(nearestCar(p, 90).type === 'bigtower' && nearestCar(p, 90).tower && !nearestCar(p, 90).tower.fallen && p.up !== nearestCar(p, 90).tower)) enterCar(p, nearestCar(p, 90));
         else playerPickup(p);
-    }
-    if (code === 'KeyZ' && p.scopes.length > 1) {
-        p.scope = p.scopes[(p.scopes.indexOf(p.scope) + 1) % p.scopes.length];
-        addFloat(p.x, p.y - 34, p.scope === 1 ? 'No scope' : `${p.scope}x scope`, '#8fd8ff');
     }
     if (code === 'KeyQ') startHeal(p, 'bandage');
     if (code === 'KeyE') startHeal(p, 'medkit');
@@ -654,7 +649,6 @@ const Sound = {
     hit() { this.tone(1400, 0.05, 'square', 0.06); },
     hurt() { this.tone(220, 0.15, 'sawtooth', 0.12, 90); },
     pickup() { this.tone(660, 0.07, 'triangle', 0.15); setTimeout(() => this.tone(990, 0.09, 'triangle', 0.15), 60); },
-    reload() { this.tone(500, 0.04, 'square', 0.06); setTimeout(() => this.tone(800, 0.05, 'square', 0.06), 120); },
     empty() { this.tone(300, 0.03, 'square', 0.05); },
     // Kill chime rises in pitch with each kill in a streak
     kill(streak = 1) {
@@ -1111,29 +1105,6 @@ function makeLootSprite(key) {
         g.quadraticCurveTo(-6, 12, -10, 5); g.lineTo(-12, -9); g.closePath();
         g.fillStyle = '#4cc3ff'; g.fill();
         g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(-2, -10, 4, 20);
-    } else if (it.type === 'scope') {
-        g.strokeStyle = '#1a1424';
-        g.lineWidth = 7;
-        g.beginPath(); g.arc(0, -2, 13, 0, TAU); g.stroke();
-        const lens = g.createRadialGradient(-4, -6, 2, 0, -2, 13);
-        lens.addColorStop(0, '#bfe9ff');
-        lens.addColorStop(1, '#2b6c9e');
-        g.fillStyle = lens;
-        g.beginPath(); g.arc(0, -2, 11, 0, TAU); g.fill();
-        g.strokeStyle = col;
-        g.lineWidth = 3;
-        g.beginPath(); g.arc(0, -2, 13, 0, TAU); g.stroke();
-        g.strokeStyle = 'rgba(10,10,20,0.8)';
-        g.lineWidth = 1.2;
-        g.beginPath(); g.moveTo(-11, -2); g.lineTo(11, -2); g.moveTo(0, -13); g.lineTo(0, 9); g.stroke();
-        g.font = '700 11px Rajdhani, sans-serif';
-        g.textAlign = 'center';
-        g.textBaseline = 'middle';
-        g.lineWidth = 3;
-        g.strokeStyle = '#160e28';
-        g.strokeText(it.zoom + 'x', 0, 15);
-        g.fillStyle = col;
-        g.fillText(it.zoom + 'x', 0, 15);
     } else if (it.type === 'throwable') {
         drawThrowable(g, key, 0, 2, 1.25);
     } else if (key === 'ammo') {
@@ -3291,7 +3262,7 @@ function respawnFighter(f) {
     s = s || { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 };
     const fresh = createFighter(s.x, s.y, { isPlayer: f.isPlayer, name: f.name, color: f.color, team: f.team });
     // (everything from the last life is reset: on the deck, stunned, frozen, mid-throw, in a car...)
-    Object.assign(f, fresh, { downed: false, finishing: false, reviveRegen: false, reviveT: 0, helper: null, up: null, car: null, riding: false, stunUntil: 0, frozenUntil: 0, chill: 0, cook: null, healing: null, reload: null, hidden: false, post: null, path: null, deckTrip: false, wasHealing: false, deckDuty: undefined, tanker: Math.random() < REVO.tankers, raider: Math.random() < REVO.raiders, kills: f.kills, hp: REVO.hp, maxHp: REVO.hp, protectUntil: G.time + REVO.protect, chasesDrops: f.chasesDrops, likesCars: f.likesCars, nextThink: G.time });
+    Object.assign(f, fresh, { downed: false, finishing: false, reviveRegen: false, reviveT: 0, helper: null, up: null, car: null, riding: false, stunUntil: 0, frozenUntil: 0, chill: 0, cook: null, healing: null, hidden: false, post: null, path: null, deckTrip: false, wasHealing: false, deckDuty: undefined, tanker: Math.random() < REVO.tankers, raider: Math.random() < REVO.raiders, kills: f.kills, hp: REVO.hp, maxHp: REVO.hp, protectUntil: G.time + REVO.protect, chasesDrops: f.chasesDrops, likesCars: f.likesCars, nextThink: G.time });
     G.fighters.push(f);
     G.alive++;
     G.teamAlive[f.team]++;
@@ -3415,7 +3386,7 @@ function launchStrike(base) {
     Sound.tone(90, 1.6, 'sawtooth', 0.14, 40);
 }
 
-// Spare ammo: everything in reserve for the guns you carry, past `keep` reloads of each
+// Spare ammo: everything for the guns you carry, past `keep` boxes' worth of each
 const AMMO_BOX_ROUNDS = 40;  // what an ammo box holds when there's no gun to load it into
 function spareAmmo(f, keep = 0) {
     let n = f.ammoBank || 0;
@@ -3423,7 +3394,7 @@ function spareAmmo(f, keep = 0) {
     return n;
 }
 const botSpare = f => spareAmmo(f, 2);
-// Take up to n rounds out of someone's reserves (keeping `keep` reloads of each gun); returns how many came out
+// Take up to n rounds out of someone's ammo (keeping `keep` boxes' worth for each gun); returns how many came out
 function takeAmmo(f, n, keep = 0) {
     let got = Math.min(n, f.ammoBank || 0);
     if (got) f.ammoBank -= got;
@@ -4485,13 +4456,12 @@ function createFighter(x, y, opts) {
         // Weapon slots: null = empty, which means fists. Everyone starts with nothing and loots everything
         inv: [null, null], slot: 0, maxSlots: CONFIG.BASE_SLOTS,
         items: { bandage: 0, medkit: 0, meat: 0, water: 0, bucket: 0, grenade: 0, smoke: 0, strobe: 0, mine: 0, cure: 0, nuke: 0, emissile: 0, shock: 0, cluster: 0, fire: 0, freeze: 0, gravity: 0, sticky: 0, decoy: 0, flash: 0, poison: 0, shockwave: 0, teleport: 0, heal: 0, drone: 0, megafrag: 0 },
-        scopes: [G && G.early ? 1 : START_SCOPE], scope: G && G.early ? 1 : START_SCOPE,
         healing: null, lastThrow: -9999, kx: 0, ky: 0, cook: null, throwSel: 'grenade',
-        mag: {}, ammo: {},
-        reload: null, lastShot: -9999, recoil: 0, punch: 0, punchHand: 0, hitFlash: 0, lastHurt: -9999,
+        ammo: {},
+        lastShot: -9999, recoil: 0, punch: 0, punchHand: 0, hitFlash: 0, lastHurt: -9999,
         kills: 0, hidden: false,
-        // Gun settle and stamina
-        bloom: 0, stamina: 100, likesCars: Math.random() < 0.45, shield: 0, shieldMax: 0, shieldKind: null, perk: null, hunger: 100, thirst: 100, energy: 100, resting: false,
+        // Gun settle
+        bloom: 0, likesCars: Math.random() < 0.45, shield: 0, shieldMax: 0, shieldKind: null, perk: null, hunger: 100, thirst: 100, energy: 100, resting: false,
         // Bot brain
         mode: 'wander', target: null, goal: null, nextThink: rand(0, 400), heading: rand(0, TAU),
         strafe: 1, engageAt: 0, aimErr: 0, stuck: 0, detour: 0, detourAngle: 0, hasLOS: false, lastSeen: 0, chasesDrops: Math.random() < 0.5, alert: Math.random() < 0.35,
@@ -4744,7 +4714,7 @@ function turnZombie(f, hp = ZOMBIE.hp) {
     f.inv = f.inv.map(() => null);
     f.slot = 0;
     for (const k in f.items) f.items[k] = 0;
-    f.healing = f.reload = f.cook = null;
+    f.healing = f.cook = null;
     f.mode = 'wander';
     f.target = f.goal = null;
     f.nextThink = G.time + 600;
@@ -5114,8 +5084,8 @@ function zoneGoal() {
 }
 
 // ---------- Loot ----------
-// Early Warfare: grenades (and every other throwable) and scopes hadn't been invented; something plain turns up instead
-const earlyBanned = key => { const it = ITEMS[key]; return !!it && (it.type === 'throwable' || it.type === 'scope'); };
+// Early Warfare: grenades (and every other throwable) hadn't been invented; something plain turns up instead
+const earlyBanned = key => { const it = ITEMS[key]; return !!it && it.type === 'throwable'; };
 function spawnLoot(x, y, key, mag, vx = 0, vy = 0, count) {
     if (G.early && earlyBanned(key)) { key = weightedPick([['bandage', 4], ['ammo', 4], ['armor', 2]]); count = undefined; }
     const l = { x, y, key, mag, vx, vy, count: count || LOOT_COUNT[key] || 1, t: rand(0, TAU), gone: false, born: G.time, moving: false };
@@ -5433,10 +5403,10 @@ function nearestLoot(x, y, range, filter) {
 function equipNew(f, key, mag) {
     const w = WEAPONS[key];
     if (w.melee) return;  // a blade needs no ammo
-    f.mag[key] = mag !== undefined ? mag : w.mag;
     if (key === 'Pistol') f.ammo[key] = Infinity;
     else {
-        f.ammo[key] = (f.ammo[key] || 0) + (w.quiver || w.mag * 2);
+        // (a new gun comes with a box of ammo; one somebody dropped comes with what was left in it)
+        f.ammo[key] = (f.ammo[key] || 0) + (mag !== undefined ? mag : w.mag + (w.quiver || w.mag * 2));
         // Ammo you picked up with no gun to use it goes into the new one
         if (f.ammoBank) { f.ammo[key] += f.ammoBank; f.ammoBank = 0; }
     }
@@ -5457,7 +5427,7 @@ function applyLoot(f, key, swapIdx, mag, count = 1) {
             if (swapIdx < 0 || !f.inv[swapIdx]) return 0;
             idx = swapIdx;
             const old = f.inv[idx];
-            dropItems(f.x, f.y, [{ key: old, mag: f.mag[old] }], 0.9);
+            dropItems(f.x, f.y, [{ key: old, mag: 0 }], 0.9);
         }
         f.inv[idx] = key;
         equipNew(f, key, mag);
@@ -5473,12 +5443,6 @@ function applyLoot(f, key, swapIdx, mag, count = 1) {
             f.items[key] += take;
             return take;
         }
-        case 'scope':
-            if (f.scopes.includes(it.zoom)) return 0;
-            f.scopes.push(it.zoom);
-            f.scopes.sort((a, b) => a - b);
-            if (it.zoom > f.scope) f.scope = it.zoom;
-            return 1;
         case 'armor':
             if (f.armor >= CONFIG.MAX_ARMOR) return 0;
             f.armor = Math.min(CONFIG.MAX_ARMOR, f.armor + it.val);
@@ -5526,7 +5490,6 @@ function lootRefusal(f, key) {
     const it = ITEMS[key];
     if (it.type === 'heal' || it.type === 'throwable') return `Can't carry more ${it.name.toLowerCase()}s. Find a bigger backpack`;
     if (it.type === 'armor') return 'Armor is full';
-    if (it.type === 'scope') return 'You already have this scope';
     if (it.type === 'gear') return 'You have a better backpack';
     return 'No guns that use ammo';
 }
@@ -5558,7 +5521,6 @@ function botWants(b, key) {
     if (it.type === 'armor') return b.armor < 60;
     if (it.type === 'gear') return it.slots > b.maxSlots || (!!it.perk && !b.perk);
     if (it.type === 'shield') return (b.shield || 0) < it.val;
-    if (it.type === 'scope') return !b.scopes.includes(it.zoom);
     return b.inv.some(n => n && n !== 'Pistol' && b.ammo[n] < WEAPONS[n].mag);
 }
 
@@ -5574,41 +5536,22 @@ function worstSlot(b) {
 
 // ---------- Combat ----------
 function switchSlot(f, i, instant) {
+    if (i >= 0 && i < f.inv.length) f.nadeReady = false;  // (going back to a gun puts the grenade away)
     if (i < 0 || i >= f.inv.length || (i === f.slot && !instant)) return;
     f.slot = i;
-    f.reload = null;
     const w = WEAPONS[held(f)];
     // Short draw delay so swapping can't skip a weapon's fire rate
     f.lastShot = Math.max(f.lastShot, G.time - w.rate + 180);
 }
 
-function startReload(f) {
-    const name = held(f), w = WEAPONS[name];
-    if (w.melee || f.reload) return false;
-    if (f.mag[name] >= w.mag || !(f.ammo[name] > 0)) return false;
-    f.reload = { name, start: G.time, end: G.time + w.reload * REALISM.reload };
-    if (f.isPlayer) Sound.reload();
-    return true;
-}
-
-function updateReload(f) {
-    if (!f.reload || G.time < f.reload.end) return;
-    const name = f.reload.name, w = WEAPONS[name];
-    const take = Math.min(w.mag - f.mag[name], f.ammo[name]);
-    f.mag[name] += take;
-    if (f.perk !== 'ammo') f.ammo[name] -= take;  // the ammo pack never runs dry
-    f.reload = null;
-    if (f.isPlayer) Sound.tone(900, 0.05, 'square', 0.06);
-}
-
 function canShoot(f) {
     const name = held(f);
-    return WEAPONS[name].melee || f.mag[name] > 0 || f.ammo[name] > 0;
+    return WEAPONS[name].melee || f.ammo[name] > 0;
 }
 
 function tryAttack(f) {
     if (f.downed) return;
-    if (f.reload || f.cook || stunned(f) || f.car) return;
+    if (f.cook || stunned(f) || f.car) return;
     const name = held(f), w = WEAPONS[name];
     if (G.time - f.lastShot < w.rate) return;
     if (f.healing) cancelHeal(f);
@@ -5651,17 +5594,16 @@ function tryAttack(f) {
         return;
     }
 
-    if (f.mag[name] <= 0) {
-        if (!startReload(f) && f.isPlayer) { Sound.empty(); f.lastShot = G.time; }
+    if (!(f.ammo[name] > 0)) {
+        if (isHuman(f)) { Sound.empty(); f.lastShot = G.time; }
         return;
     }
 
-    f.mag[name]--;
+    if (f.ammo[name] !== Infinity && f.perk !== 'ammo') f.ammo[name]--;  // (the ammo pack never runs dry)
     f.lastShot = G.time;
     if (!w.silent) f.lastLoud = G.time;  // the crossbow fires without giving you away
     if (w.beam || w.sonic) {
         if (w.beam) fireBeam(f, w, name); else { fireSonic(f, w, name); f.recoil = 1; }
-        if (f.mag[name] === 0) startReload(f);
         return;
     }
     f.recoil = 1;
@@ -5685,7 +5627,6 @@ function tryAttack(f) {
         G.particles.push({ type: 'shell', x: f.x + ca * 14, y: f.y + sa * 14, vx: -sa * rand(150, 300) + ca * rand(-90, 40), vy: ca * rand(150, 300) + sa * rand(-90, 40), life: 0.45, max: 0.45, size: 2, rot: rand(0, TAU), spin: rand(-30, 30) });
     }
     if (w.silent) Sound.tone(220, 0.08, 'triangle', 0.08 * Sound.volAt(f.x, f.y), 120); else Sound.shot(w.sound, Sound.volAt(f.x, f.y));
-    if (f.mag[name] === 0) startReload(f);
 }
 
 // ---------- Healing ----------
@@ -5698,7 +5639,6 @@ function startHeal(f, key) {
         return false;
     }
     f.healing = { key, start: G.time, end: G.time + ITEMS[key].time };
-    f.reload = null;
     if (f.isPlayer) Sound.tone(520, 0.12, 'sine', 0.12, 700);
     return true;
 }
@@ -5741,7 +5681,6 @@ function startCook(f, key) {
     if (G.frozen || f.dead || f.cook || G.time - f.lastThrow < GRENADE.cooldown || !(f.items[key] > 0)) return false;
     if (key === 'mine') return placeMine(f);
     if (f.healing) cancelHeal(f);
-    f.reload = null;
     f.items[key]--;
     f.cook = { key, start: G.time, fuse: FUSE[key], nextBeep: G.time };
     if (f.isPlayer) Sound.pin();
@@ -5899,7 +5838,6 @@ function cureFighter(f) {
         f.light = shade(f.color, 0.35);
         f.hp = f.maxHp = CONFIG.MAX_HEALTH;
         f.inv[0] = 'Pistol';
-        f.mag.Pistol = WEAPONS.Pistol.mag;
         f.ammo.Pistol = Infinity;
         switchSlot(f, 0, true);
     }
@@ -6208,7 +6146,7 @@ function goDown(t, killer, weapon) {
     t.downAt = G.time;
     t.downBy = killer; t.downWeapon = weapon;
     t.hp = 1; t.downHp = REVIVE.downHp; t.reviveT = 0;
-    t.healing = null; t.reload = null; t.vx = t.vy = 0;
+    t.healing = null; t.vx = t.vy = 0;
     if (t.cook) { const { key } = t.cook, left = cookLeft(t); t.cook = null; if (left > 0) launchThrowable(t, t.x + Math.cos(t.angle) * 40, t.y + Math.sin(t.angle) * 40, key, left); }
     if (t.up && !t.isPlayer) t.post = null;
     bloodSplat(t.x, t.y, rand(0, TAU), 1);
@@ -6405,20 +6343,20 @@ function updatePlayer(p, dt) {
         if (p.resting && !stunned(p) && (mx || my || mouse.down)) p.resting = false;
         else { p.vx = p.vy = 0; const m = mouseWorld(); p.angle = Math.atan2(m.y - p.y, m.x - p.x); return; }
     }
-    // Shift to sprint: faster, but it costs stamina and you can't shoot while running flat out
-    const S = REALISM.sprint;
-    const sprintKey = keys.has('ShiftLeft') || keys.has('ShiftRight');
-    p.sprinting = sprintKey && !!(mx || my) && !mouse.down && !p.reload && !p.healing && p.stamina > (p.sprinting ? 0 : S.min);
-    if (p.sprinting) { if (p.perk !== 'jet') p.stamina = Math.max(0, p.stamina - S.drain * dt); p.restAt = G.time; }
-    else if (G.time - (p.restAt || 0) > S.rest) p.stamina = Math.min(100, p.stamina + S.regen * dt);
-    const sp = CONFIG.PLAYER_SPEED * (p.zombie ? 1.08 : 1) * (p.sprinting ? (p.perk === 'jet' ? 1.7 : S.speed) : 1);
+    // (the jet pack makes you faster)
+    const sp = CONFIG.PLAYER_SPEED * (p.zombie ? 1.08 : 1) * (p.perk === 'jet' ? 1.35 : 1);
     if (mx || my) p.moveHeading = Math.atan2(my, mx);
     p.vx = (mx / len) * sp;
     p.vy = (my / len) * sp;
 
     const m = mouseWorld();
     p.angle = Math.atan2(m.y - p.y, m.x - p.x);
-    if (mouse.down && !p.sprinting) tryAttack(p);
+    if (p.nadeReady && !(p.items[p.throwSel] > 0) && !p.cook) p.nadeReady = false;
+    if (p.nadeReady) {
+        // A grenade in hand: the trigger pulls the pin, and letting go throws it where you're aiming
+        if (mouse.down && !p.cook) { playerCook(p); if (p.cook) p.cookByTrigger = true; }
+        else if (!mouse.down && p.cook && p.cookByTrigger) { p.cookByTrigger = false; playerRelease(p); }
+    } else if (mouse.down) tryAttack(p);
 }
 
 // ---------- Bot AI ----------
@@ -6572,9 +6510,7 @@ function botThink(b) {
     b.hasLOS = !!enemy && (!enemy.hidden || bestD < CONFIG.HIDDEN_SIGHT) && lineOfSight(b, enemy);
     if (b.hasLOS) { b.lastSeen = G.time; b.lastSpot = { x: enemy.x, y: enemy.y }; }
 
-    if (!canShoot(b) || b.mag[held(b)] === 0) {
-        if (!startReload(b)) chooseBotWeapon(b, bestD);
-    }
+    if (!canShoot(b)) chooseBotWeapon(b, bestD);
 
     // Patch up when nobody can see us
     if (!b.healing && (!enemy || !b.hasLOS)) {
@@ -6736,10 +6672,9 @@ function chooseBotWeapon(b, d) {
     let best = 0, score = -1;
     b.inv.forEach((slot, i) => {
         const n = slot || 'Fist', w = WEAPONS[n];
-        if (!w.melee && !(b.mag[n] > 0 || b.ammo[n] > 0)) return;
+        if (!w.melee && !(b.ammo[n] > 0)) return;
         let s = w.melee ? (w.blade ? (w.damage / w.rate) * 100 * (d < w.range * 2.5 ? 1.6 : 0.4) : 0.5) : w.rocket ? (d > ROCKET.radius + 40 ? 14 : 0.1) : (w.damage * (w.count || 1)) / w.rate * 100;
         if (!w.melee && d > w.range * 0.9) s *= 0.2;
-        if (!w.melee && b.mag[n] <= 0) s *= 0.3;
         if (s > score) { score = s; best = i; }
     });
     if (best !== b.slot) switchSlot(b, best);
@@ -7631,12 +7566,10 @@ function drawJets() {
 
 // ---------- Realism: blood and bodies, brass, bullet holes, ground detail, day and night ----------
 const REALISM = {
-    reload: 1.2,              // reloads take a bit longer
     headZone: 0.2,            // a hit this close to the middle (as a share of the body radius) is a headshot
     headMul: 1.6, helmetMul: 1.2, zombieHeadMul: 2,
     bloomDecay: 1.2,          // how fast the gun settles after firing
     moveSpread: 0.035,        // extra spread while moving
-    sprint: { speed: 1.4, drain: 30, regen: 20, rest: 800, min: 20 },
     decals: 900, casings: 260
 };
 const DAY = { length: 420000, dark: 0.74 };
@@ -8717,7 +8650,7 @@ function drawMeatIcon(g, s = 1) {
 
 // ----- Survival, part two: thirst, rest, ponds and buckets, and the countdown start -----
 const THIRST = { drain: 0.85, die: 3, warn: 25, drink: 40 };
-const ENERGY = { drain: 0.3, sprint: 1.5, rest: 8, indoors: 2, tired: 25 };
+const ENERGY = { drain: 0.3, rest: 8, indoors: 2, tired: 25 };
 const START = { countdown: 10000 };
 
 // Lakes and ponds to drink from (flooded craters on the rusty map, ponds in the city parks)
@@ -8785,7 +8718,6 @@ function toggleRest(p) {
     if (p.energy >= 99) { addFloat(p.x, p.y - 34, 'Not tired', '#c9a7ff'); return; }
     p.resting = true;
     if (p.healing) cancelHeal(p);
-    p.reload = null;
     addFloat(p.x, p.y - 34, 'Resting...', '#c9a7ff');
 }
 
@@ -8805,7 +8737,7 @@ function updateNeeds(f, dt) {
         f.hp = Math.min(f.maxHp || CONFIG.MAX_HEALTH, f.hp + dt);
         if (f.energy >= 100) { f.resting = false; if (f.isPlayer) addFloat(f.x, f.y - 34, 'Rested', '#c9a7ff'); }
     } else {
-        f.energy = Math.max(0, f.energy - (ENERGY.drain + (f.sprinting ? ENERGY.sprint : 0)) * dt);
+        f.energy = Math.max(0, f.energy - ENERGY.drain * dt);
     }
 }
 
@@ -9447,7 +9379,6 @@ function enterCar(p, c) {
     unparkCar(c);
     c.driver = p;
     p.car = c;
-    p.reload = null;
     if (p.healing) cancelHeal(p);
     p.x = c.x; p.y = c.y;
     // The armored truck: friends nearby pile in the back
@@ -10880,7 +10811,7 @@ function secretGrenades(p) {
 function moveFighter(f, dt) {
     if (f.car) return;
     const ox = f.x, oy = f.y;
-    const slow = (f.downed ? 0.2 : 1) * (f.healing ? 0.5 : 1) * (f.reload ? 0.85 : 1) * hurtPace(f) * tiredPace(f) * (G.survival && G.world.ponds && inPond(f) ? 0.6 : 1);
+    const slow = (f.downed ? 0.2 : 1) * (f.healing ? 0.5 : 1) * hurtPace(f) * tiredPace(f) * (G.survival && G.world.ponds && inPond(f) ? 0.6 : 1);
     f.x += (f.vx * slow + f.kx) * dt;
     f.y += (f.vy * slow + f.ky) * dt;
     const kd = Math.exp(-7 * dt);
@@ -11105,7 +11036,6 @@ function update(dt) {
         if (isHuman(f)) { if (G.mode === 'playing') updatePlayer(f, dt); else { f.vx = 0; f.vy = 0; } }
         else if (G.frozen || stunned(f) || f.car) { f.vx = f.vy = 0; }
         else { updateBot(f, dt); fleeNuke(f); }
-        updateReload(f);
         updateHeal(f, dt);
         if (G.survival && !G.frozen) { updateHunger(f, dt); if (!f.dead) updateNeeds(f, dt); }
         updateCook(f);
@@ -11148,8 +11078,8 @@ function update(dt) {
     G.hurt = Math.max(0, G.hurt - dt * 1.2);
     G.hitMarker = Math.max(0, G.hitMarker - dt * 6);
     G.zoomKick = Math.max(0, G.zoomKick - dt * 0.5);
-    // Scope sets how far out the camera sits; it eases between levels
-    const target = G.mode === 'demo' ? 1 : strikeCamOn() ? Math.min(viewW, viewH) / (REVO.base.width + 700) : gunCam() ? gunCam().zoom : baseZoom() / SCOPE_VIEW[G.player ? G.player.scope : 1];
+    // How far out the camera sits; it eases between views
+    const target = G.mode === 'demo' ? 1 : strikeCamOn() ? Math.min(viewW, viewH) / (REVO.base.width + 700) : gunCam() ? gunCam().zoom : baseZoom() / viewScale();
     G.viewZoom = G.viewZoom ? lerp(G.viewZoom, target, Math.min(1, dt * 4)) : target;
     G.zoom = G.viewZoom * (1 + G.zoomKick + G.winZoom);
 
@@ -11183,7 +11113,7 @@ const GUN_VIEW = 0.7;  // how far in, against the normal view
 function gunCam() {
     const p = G.player, c = p && !p.dead && p.car;
     if (!c || c.type !== 'bigtower' || G.mode === 'demo') return null;
-    return { x: c.x, y: c.y, zoom: baseZoom() / SCOPE_VIEW[p.scope || 1] * GUN_VIEW };
+    return { x: c.x, y: c.y, zoom: baseZoom() / viewScale() * GUN_VIEW };
 }
 function updateCamera(dt) {
     let tx = G.cam.x, ty = G.cam.y;
@@ -11221,7 +11151,7 @@ function updateCamera(dt) {
 }
 
 // ---------- Rendering ----------
-let lowDetail = false;  // skip small touches when zoomed far out with a big scope
+let lowDetail = false;  // skip small touches when zoomed far out
 function render() {
     const now = performance.now() / 1000;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -11394,7 +11324,7 @@ function render() {
 
     for (const f of visible) drawOverhead(f);
 
-    // Keep yourself easy to spot when a big scope shrinks everything
+    // Keep yourself easy to spot when zoomed far out
     if (p && G.zoom < 0.6) {
         const pulse = 1 + Math.sin(now * 5) * 0.15;
         ctx.strokeStyle = '#fff7ec';
@@ -12531,7 +12461,7 @@ function drawFighter(f) {
     } else if (w.shape === 'bow') {
         // The bow out in front; the string drawn back with an arrow on it when one's nocked
         const R0 = w.bowR || 20, bx = r * 1.25 + 18 + (R0 - 20) * 0.5, A = 1.1, ex = bx + Math.cos(A) * R0 - R0, ey = Math.sin(A) * R0;
-        const nocked = f.mag[held(f)] > 0 && !f.reload, pull = nocked ? 14 : 0;
+        const nocked = f.ammo[held(f)] > 0, pull = nocked ? 14 : 0;
         ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(bx - R0, 0, R0, -A, A); ctx.stroke();
         ctx.strokeStyle = '#8a5a2e'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(bx - R0, 0, R0, -A, A); ctx.stroke();
         ctx.strokeStyle = '#efe6d0'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(ex, -ey); ctx.lineTo(ex - pull, 0); ctx.lineTo(ex, ey); ctx.stroke();
@@ -12624,7 +12554,7 @@ function drawFighter(f) {
     ctx.restore();
 }
 
-// Health bars over hurt bots, reload ring around the player
+// Health bars over hurt bots
 function drawOverhead(f) {
     const p = G.player;
     if (f.hidden && p && !p.dead && f !== p && foe(p, f) && dist(f, p) > CONFIG.HIDDEN_SIGHT) return;
@@ -12646,18 +12576,7 @@ function drawOverhead(f) {
         ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 18, -Math.PI / 2, -Math.PI / 2 + TAU * t); ctx.stroke();
     }
-    if (f === G.player) {
-        if (f.reload) {
-            const t = (G.time - f.reload.start) / (f.reload.end - f.reload.start);
-            ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-            ctx.lineWidth = 5;
-            ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 12, 0, TAU); ctx.stroke();
-            ctx.strokeStyle = '#ffd166';
-            ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 12, -Math.PI / 2, -Math.PI / 2 + TAU * t); ctx.stroke();
-        }
-        return;
-    }
+    if (f === G.player) return;
     if (G.war && G.player && f.team === G.player.team) {
         // Little chevron so you can pick out your squad in a crowd
         const y0 = f.y - f.r - (G.time - f.lastHurt > 2500 ? 12 : 24);
@@ -12961,12 +12880,12 @@ function drawCrosshair(p) {
 const $ = id => document.getElementById(id);
 const hud = {
     root: $('hud'), alive: $('alive'), kills: $('kills'), zone: $('zone-info'), killfeed: $('killfeed'),
-    banner: $('banner'), prompt: $('prompt'), hpBar: $('hp-bar'), armorBar: $('armor-bar'), shieldBar: $('shield-bar'), stamBar: $('stam-bar'), hungerBar: $('hunger-bar'), thirstBar: $('thirst-bar'), energyBar: $('energy-bar'), hotbar: $('hotbar'),
-    weapon: $('weapon-name'), mag: $('mag'), reserve: $('reserve'), reloadBar: $('reload-bar'),
+    banner: $('banner'), prompt: $('prompt'), hpBar: $('hp-bar'), armorBar: $('armor-bar'), shieldBar: $('shield-bar'), hungerBar: $('hunger-bar'), thirstBar: $('thirst-bar'), energyBar: $('energy-bar'), hotbar: $('hotbar'),
+    weapon: $('weapon-name'), mag: $('mag'),
     minimap: $('minimap').getContext('2d'), cache: {},
     cells: Object.fromEntries(STACKABLE.map(k => [k, $('cell-' + k)])),
     counts: Object.fromEntries(STACKABLE.map(k => [k, $('count-' + k)])),
-    healBar: $('heal-bar'), healLabel: $('heal-label'), scope: $('scope'), teamScore: $('team-score')
+    healBar: $('heal-bar'), healLabel: $('heal-label'), teamScore: $('team-score')
 };
 
 // Only touch the DOM when a value actually changes
@@ -12987,7 +12906,6 @@ function updateHUD() {
     const z = G.zone;
     setText(hud.alive, 'alive', String(G.alive));
     setText(hud.kills, 'kills', String(p.kills));
-    setText(hud.scope, 'scope', p.scope === 1 ? '1x' : `${p.scope}x`);
     if (G.revolution) {
         const Rv = G.revolution;
         setHTML(hud.teamScore, 'teams', [0, 1].map(t => `<div class="ts${t === p.team ? ' mine' : ''}${revoLeft(t) === 0 ? ' out' : ''}"><i style="background:${REVO.sides[t].flag}"></i><b>${G.teamAlive[t]}</b><span>${revoName(t)} · ${Rv.bases[t].fallen ? 'base fallen' : `base ${Math.round(baseHealth(Rv.bases[t]) * 100)}% · strike ${Math.floor(Rv.bases[t].strike.ammo / 100) / 10}k/${REVO.strike.cost / 1000}k`}</span></div>`).join('<em>vs</em>'));
@@ -13029,8 +12947,6 @@ function updateHUD() {
         hud.shieldBar.querySelector('.fill').style.transform = `scaleX(${clamp(p.shield / p.shieldMax, 0, 1)})`;
         setText(hud.shieldBar.querySelector('span'), 'shield', `${ITEMS[p.shieldKind].name.toUpperCase()} ${Math.ceil(p.shield)}`);
     }
-    hud.stamBar.firstChild.style.transform = `scaleX(${clamp(p.stamina / 100, 0, 1)})`;
-    hud.stamBar.classList.toggle('full', p.stamina >= 100);
     if (G.survival) {
         hud.hungerBar.querySelector('.fill').style.transform = `scaleX(${clamp(p.hunger / 100, 0, 1)})`;
         setText(hud.hungerBar.querySelector('span'), 'hunger', p.hunger <= 0 ? 'STARVING' : `HUNGER ${Math.ceil(p.hunger)}`);
@@ -13059,7 +12975,7 @@ function updateHUD() {
         }
         const w = WEAPONS[n];
         const col = RARITY[w.rarity].color;
-        const sub = w.melee ? (THRUST[w.blade] ? 'Long reach' : w.chop ? 'Chops trees' : w.crush ? 'Breaks armor' : w.knock ? 'Knockback' : w.blade === 'dagger' ? 'Fast' : 'Melee') : `${p.mag[n]} / ${p.ammo[n] === Infinity ? '∞' : p.ammo[n]}`;
+        const sub = w.melee ? (THRUST[w.blade] ? 'Long reach' : w.chop ? 'Chops trees' : w.crush ? 'Breaks armor' : w.knock ? 'Knockback' : w.blade === 'dagger' ? 'Fast' : 'Melee') : `${p.ammo[n] === Infinity ? '∞' : p.ammo[n]} rounds`;
         html += `<div class="slot${active ? ' active' : ''}" style="border-color:${active ? col : col + '44'}"><span class="key">${i + 1}</span><span class="name" style="color:${col}">${n}</span><span class="sub">${sub}</span></div>`;
     }
     setHTML(hud.hotbar, 'hotbar', html);
@@ -13072,6 +12988,7 @@ function updateHUD() {
         hud.cells[k].classList.toggle('full', p.items[k] >= lim);
         hud.cells[k].classList.toggle('using', !!p.healing && p.healing.key === k);
         hud.cells[k].classList.toggle('selected', p.throwSel === k);
+        hud.cells[k].classList.toggle('armed', p.throwSel === k && !!p.nadeReady);
     }
     hud.healBar.classList.toggle('on', !!p.healing);
     if (p.healing) {
@@ -13080,13 +12997,10 @@ function updateHUD() {
     } else setText(hud.healLabel, 'healLabel', '');
 
     const name = held(p), w = WEAPONS[name];
-    setText(hud.weapon, 'wname', name);
-    hud.weapon.style.color = RARITY[w.rarity].color;
-    setText(hud.mag, 'mag', w.melee ? '—' : String(p.mag[name]));
-    setText(hud.reserve, 'reserve', w.melee ? '' : `/ ${p.ammo[name] === Infinity ? '∞' : p.ammo[name]}`);
-    hud.mag.style.color = !w.melee && p.mag[name] === 0 ? '#ff4f6d' : '';
-    hud.reloadBar.classList.toggle('on', !!p.reload);
-    if (p.reload) hud.reloadBar.firstChild.style.width = `${((G.time - p.reload.start) / (p.reload.end - p.reload.start)) * 100}%`;
+    setText(hud.weapon, 'wname', p.nadeReady ? `${ITEMS[p.throwSel].name} (in hand)` : name);
+    hud.weapon.style.color = p.nadeReady ? '#ffb347' : RARITY[w.rarity].color;
+    setText(hud.mag, 'mag', w.melee ? '—' : p.ammo[name] === Infinity ? '∞' : String(Math.max(0, p.ammo[name] || 0)));
+    hud.mag.style.color = !w.melee && !(p.ammo[name] > 0) ? '#ff4f6d' : '';
 
     // Context prompt
     let prompt = '', warn = false;
@@ -13135,7 +13049,7 @@ function updateHUD() {
         } else if (outside) {
             prompt = 'You are outside the zone! Get to safety';
             warn = true;
-        } else if (!w.melee && p.mag[name] === 0 && !p.reload && !(p.ammo[name] > 0)) {
+        } else if (!w.melee && !(p.ammo[name] > 0)) {
             prompt = 'Out of ammo: find more or switch weapons';
             warn = true;
         } else if (p.hp < 50 && !p.healing && (p.items.medkit > 0 || p.items.bandage > 0)) {
@@ -13796,9 +13710,8 @@ function startGame(map = lastMap) {
     hud.teamScore.classList.toggle('hidden', !war && !G.noZone);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
-    // Early Warfare: nothing to throw and no scopes, so no grenade panel or scope readout
+    // Early Warfare: nothing to throw, so no grenade panel
     $('grenade-panel').classList.toggle('hidden', !!G.early);
-    hud.scope.parentElement.classList.toggle('hidden', !!G.early);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
@@ -13901,7 +13814,7 @@ for (const k of STACKABLE) hud.cells[k].querySelector('img').src = SPR.loot[k].t
 for (const k of THROWABLES) {
     hud.cells[k].addEventListener('mousedown', e => {
         e.stopPropagation();
-        if (G && G.player && !G.player.cook) G.player.throwSel = k;
+        if (G && G.player && !G.player.cook && G.player.items[k] > 0) { G.player.throwSel = k; G.player.nadeReady = true; }
     });
 }
 newDemo();
@@ -14071,7 +13984,7 @@ function updateGuestCam(g, dt) {
     const k = Math.min(1, dt * 12);
     g.cam.x += (f.x - g.cam.x) * k; g.cam.y += (f.y - g.cam.y) * k;
     const gun = g.f.car && g.f.car.type === 'bigtower' ? GUN_VIEW : 1;
-    const target = BASE_ZOOM * Math.hypot(g.w, g.h) / Math.hypot(1400, 850) / SCOPE_VIEW[g.f.scope || 1] * gun;
+    const target = BASE_ZOOM * Math.hypot(g.w, g.h) / Math.hypot(1400, 850) / viewScale() * gun;
     g.zoom = g.zoom ? lerp(g.zoom, target, Math.min(1, dt * 4)) : target;
     const W = CONFIG.WORLD_SIZE, hw = g.w / 2 / g.zoom, hh = g.h / 2 / g.zoom;
     g.cam.x = hw * 2 < W ? clamp(g.cam.x, hw, W - hw) : W / 2;
@@ -14143,7 +14056,7 @@ function drawGuestHud(g) {
     c.textAlign = 'right'; c.font = '700 15px Rajdhani, sans-serif'; c.fillStyle = '#b8b0d0'; c.fillText((w || 'Fists').toUpperCase(), W - 28, H - 58);
     c.font = '700 26px "Black Ops One", sans-serif'; c.fillStyle = '#fff7ec';
     const reserve = p.ammo[w] === Infinity ? '∞' : Math.max(0, p.ammo[w] || 0);
-    c.fillText(W8 && !W8.melee ? `${p.mag[w] ?? 0} / ${reserve}` : '—', W - 28, H - 32);
+    c.fillText(W8 && !W8.melee ? `${reserve}` : '—', W - 28, H - 32);
     // what F does here
     const loot = !p.dead && !p.car && nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE), car = !p.dead && !p.car && !loot && nearestCar(p, 90);
     const hint = p.car ? 'F  get out' : loot ? `F  pick up ${lootName(loot.key)}` : car ? `F  get in the ${vt(car).name}` : '';
@@ -14261,7 +14174,8 @@ $('nl-back').addEventListener('click', () => $('net-leave').classList.add('hidde
 
 // ---------- Touch controls (phones and iPads) ----------
 // Left thumb: a joystick that walks you (as fast as you push it). Right thumb: a joystick that aims, and fires
-// once you push it out past the middle. Buttons for F, reload, heal, throw, switch gun and sprint
+// once you push it out past the middle (with a grenade in hand: pull it back to pull the pin, let go to throw). A
+// pick-up button shows up when there's something to pick up; tap the supplies to heal, a slot to switch guns
 const TOUCH = {
     enabled: false,
     move: { on: false, id: null, x: 0, y: 0, ox: 0, oy: 0 },
@@ -14314,7 +14228,7 @@ function touchFrame() {
     const p = G && G.player;
     if (!p || G.mode === 'demo') return;
     // (the crosshair sits out along the way you're aiming; further the harder you push)
-    const reach = 140 + 260 * (a.on ? a.mag : 0.6);
+    const reach = 140 + 260 * (a.on ? a.mag : (a.lastMag ?? 0.6));
     mouse.x = viewW / 2 + (p.x - G.cam.x) * G.zoom + a.x * reach;
     mouse.y = viewH / 2 + (p.y - G.cam.y) * G.zoom + a.y * reach;
     if (a.on || TOUCH.wasFiring) mouse.down = firing;
@@ -14352,25 +14266,12 @@ function touchFrame() {
         for (const [st, el, isMove] of [[TOUCH.move, moveEl, true], [TOUCH.aim, aimEl, false]]) {
             if (!st.on || st.id !== e.pointerId) continue;
             st.on = false; st.id = null;
-            if (isMove) { st.x = st.y = 0; stickKeys(0, 0); } else st.mag = 0;
+            if (isMove) { st.x = st.y = 0; stickKeys(0, 0); } else { st.lastMag = st.mag; st.mag = 0; }
             drawStick(el, st, { x: 0, y: 0 });
         }
     };
     layer.addEventListener('pointerup', end);
     layer.addEventListener('pointercancel', end);
-    // Buttons: held down like keys
-    for (const b of document.querySelectorAll('#touch-buttons [data-key]')) {
-        const code = b.dataset.key;
-        b.addEventListener('pointerdown', e => {
-            e.preventDefault(); e.stopPropagation();
-            enableTouch(); Sound.init();
-            if (b.dataset.toggle) { const on = !b.classList.contains('on'); b.classList.toggle('on', on); touchKey(code, on); return; }
-            b.classList.add('down'); b.setPointerCapture(e.pointerId); touchKey(code, true);
-        });
-        const up = e => { if (b.dataset.toggle || !b.classList.contains('down')) return; b.classList.remove('down'); touchKey(code, false); };
-        b.addEventListener('pointerup', up);
-        b.addEventListener('pointercancel', up);
-    }
     // Tap the grenade to switch to the next kind you're carrying
     $('grenade-panel').addEventListener('pointerdown', e => { if (!TOUCH.enabled) return; e.preventDefault(); e.stopPropagation(); touchKey('KeyT', true); touchKey('KeyT', false); });
     // Tap the bandages, medkit, meat or water to use them
@@ -14390,15 +14291,6 @@ function touchFrame() {
         const ax = clamp(nadeLeft - s - 14, W * 0.55, W - s - 12), stickTop = H - s - 18;
         aimEl.style.left = `${ax}px`;
         aimEl.style.top = `${stickTop}px`;
-        // Buttons: two rows of three, sized to the gap above the stick (below the minimap)
-        const bt = $('touch-buttons'), gap = 8;
-        const room = stickTop - 8 - ((top.height ? top.bottom : 0) + 8);
-        const b = Math.round(clamp((room - gap) / 2, 34, 52));
-        bt.style.setProperty('--tb', `${b}px`);
-        const bw = 3 * b + 2 * gap, bh = 2 * b + gap;
-        const right = Math.min(W - 8, nade.width && nade.top < stickTop + s ? nadeLeft - 6 : W - 8);
-        bt.style.left = `${clamp(Math.min(ax + s / 2 - bw / 2, right - bw), W * 0.5, W - bw - 8)}px`;
-        bt.style.top = `${Math.max((top.height ? top.bottom : 0) + 8, stickTop - 8 - bh)}px`;
         // (pause: just under your stats, top left)
         const tl = $('hud-topleft').getBoundingClientRect();
         $('tb-pause').style.top = `${(tl.height ? tl.bottom : 60) + 8}px`;
@@ -14431,13 +14323,6 @@ function touchFrame() {
         if (t && pick.textContent !== t) pick.textContent = t;
     }, 150);
     pick.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); touchKey('KeyF', true); touchKey('KeyF', false); });
-    // Next gun
-    $('tb-swap').addEventListener('pointerdown', e => {
-        e.preventDefault(); e.stopPropagation();
-        if (NET.viewing) { netSend({ t: 'w', dy: 1 }); return; }
-        const p = G && G.player;
-        if (p && G.mode === 'playing' && !p.dead) switchSlot(p, (p.slot + 1) % p.inv.length);
-    });
     $('tb-pause').addEventListener('pointerdown', e => {
         e.preventDefault(); e.stopPropagation();
         if (NET.viewing) { $('net-leave').classList.toggle('hidden'); return; }
