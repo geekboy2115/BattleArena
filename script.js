@@ -14371,27 +14371,66 @@ function touchFrame() {
         b.addEventListener('pointerup', up);
         b.addEventListener('pointercancel', up);
     }
+    // Tap the grenade to switch to the next kind you're carrying
+    $('grenade-panel').addEventListener('pointerdown', e => { if (!TOUCH.enabled) return; e.preventDefault(); e.stopPropagation(); touchKey('KeyT', true); touchKey('KeyT', false); });
     // Tap the bandages, medkit, meat or water to use them
     for (const [id, code] of [['cell-bandage', 'KeyQ'], ['cell-medkit', 'KeyE'], ['cell-meat', 'KeyC'], ['cell-water', 'KeyV']]) {
         $(id).addEventListener('pointerdown', e => { if (!TOUCH.enabled) return; e.preventDefault(); e.stopPropagation(); touchKey(code, true); touchKey(code, false); });
     }
-    // Keep the sticks beside the supply panels (medical on the left, grenades on the right) as the HUD changes size
+    // Keep the sticks beside the supply panels (medical on the left, grenades on the right), and fit the buttons into
+    // the space between the minimap, the aiming stick and the grenades, smaller on a small phone
     const place = () => {
         if (!TOUCH.enabled) return;
-        const heal = $('heal-panel').getBoundingClientRect(), nade = $('grenade-panel').getBoundingClientRect(), H = window.innerHeight;
-        const s = moveEl.offsetWidth || 130;
+        const heal = $('heal-panel').getBoundingClientRect(), nade = $('grenade-panel').getBoundingClientRect(), top = $('hud-topright').getBoundingClientRect();
+        const W = window.innerWidth, H = window.innerHeight, s = moveEl.offsetWidth || 130;
         moveEl.style.left = `${Math.max(12, (heal.width ? heal.right : 12) + 14)}px`;
         moveEl.style.top = `${H - s - 18}px`;
         // (never off the right half of the screen, however many kinds of grenade you're carrying)
-        const ax = clamp((nade.width ? nade.left : window.innerWidth - 12) - s - 14, window.innerWidth * 0.55, window.innerWidth - s - 12);
+        const nadeLeft = nade.width ? nade.left : W - 12;
+        const ax = clamp(nadeLeft - s - 14, W * 0.55, W - s - 12), stickTop = H - s - 18;
         aimEl.style.left = `${ax}px`;
-        aimEl.style.top = `${H - s - 18}px`;
-        const bt = $('touch-buttons');
-        bt.style.left = `${Math.min(ax - 6, window.innerWidth - bt.offsetWidth - 8)}px`;
-        bt.style.top = `${H - s - 18 - bt.offsetHeight - 10}px`;
+        aimEl.style.top = `${stickTop}px`;
+        // Buttons: two rows of three, sized to the gap above the stick (below the minimap)
+        const bt = $('touch-buttons'), gap = 8;
+        const room = stickTop - 8 - ((top.height ? top.bottom : 0) + 8);
+        const b = Math.round(clamp((room - gap) / 2, 34, 52));
+        bt.style.setProperty('--tb', `${b}px`);
+        const bw = 3 * b + 2 * gap, bh = 2 * b + gap;
+        const right = Math.min(W - 8, nade.width && nade.top < stickTop + s ? nadeLeft - 6 : W - 8);
+        bt.style.left = `${clamp(Math.min(ax + s / 2 - bw / 2, right - bw), W * 0.5, W - bw - 8)}px`;
+        bt.style.top = `${Math.max((top.height ? top.bottom : 0) + 8, stickTop - 8 - bh)}px`;
+        // (pause: just under your stats, top left)
+        const tl = $('hud-topleft').getBoundingClientRect();
+        $('tb-pause').style.top = `${(tl.height ? tl.bottom : 60) + 8}px`;
+        // The pick-up button sits at the bottom, between the two sticks
+        const pk = $('tb-pick'), mr = moveEl.getBoundingClientRect(), gapW = ax - mr.right - 12;
+        pk.style.maxWidth = `${Math.max(120, gapW)}px`;
+        pk.style.top = `${H - pk.offsetHeight - 24}px`;
+        pk.style.left = `${(mr.right + ax) / 2}px`;
     };
     setInterval(place, 400);
     window.addEventListener('resize', place);
+    // The pick-up button: only there when there's something to pick up (or a vehicle to get in or out of)
+    const pick = $('tb-pick');
+    const pickLabel = () => {
+        if (NET.viewing) return 'USE';
+        const p = G && G.player;
+        if (!p || G.mode !== 'playing' || p.dead || p.zombie) return '';
+        if (p.car) return `GET OUT`;
+        if (G.revolution && nearOwnPad(p)) return 'BOSS STRIKE';
+        const l = nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE);
+        if (l) return `PICK UP ${lootName(l.key).toUpperCase()}`;
+        const c = nearestCar(p, 90);
+        if (c && (!p.up || c.tower === p.up) && !(c.type === 'bigtower' && c.tower && !c.tower.fallen && p.up !== c.tower)) return `GET IN ${vt(c).name.toUpperCase()}`;
+        return '';
+    };
+    setInterval(() => {
+        if (!TOUCH.enabled) return;
+        const t = pickLabel();
+        pick.classList.toggle('hidden', !t);
+        if (t && pick.textContent !== t) pick.textContent = t;
+    }, 150);
+    pick.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); touchKey('KeyF', true); touchKey('KeyF', false); });
     // Next gun
     $('tb-swap').addEventListener('pointerdown', e => {
         e.preventDefault(); e.stopPropagation();
