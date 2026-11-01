@@ -3387,15 +3387,17 @@ function launchStrike(base) {
 }
 
 // Spare ammo: everything in reserve for the guns you carry, past `keep` reloads of each
+const AMMO_BOX_ROUNDS = 40;  // what an ammo box holds when there's no gun to load it into
 function spareAmmo(f, keep = 0) {
-    let n = 0;
+    let n = f.ammoBank || 0;
     for (const k of f.inv) { const w = k && WEAPONS[k]; if (w && !w.melee && w.mag && f.ammo[k] !== Infinity) n += Math.max(0, (f.ammo[k] || 0) - ammoUnit(w) * keep); }
     return n;
 }
 const botSpare = f => spareAmmo(f, 2);
 // Take up to n rounds out of someone's reserves (keeping `keep` reloads of each gun); returns how many came out
 function takeAmmo(f, n, keep = 0) {
-    let got = 0;
+    let got = Math.min(n, f.ammoBank || 0);
+    if (got) f.ammoBank -= got;
     for (const k of f.inv) {
         const w = k && WEAPONS[k];
         if (got >= n || !w || w.melee || !w.mag || f.ammo[k] === Infinity) continue;
@@ -5424,7 +5426,11 @@ function equipNew(f, key, mag) {
     if (w.melee) return;  // a blade needs no ammo
     f.mag[key] = mag !== undefined ? mag : w.mag;
     if (key === 'Pistol') f.ammo[key] = Infinity;
-    else f.ammo[key] = (f.ammo[key] || 0) + (w.quiver || w.mag * 2);
+    else {
+        f.ammo[key] = (f.ammo[key] || 0) + (w.quiver || w.mag * 2);
+        // Ammo you picked up with no gun to use it goes into the new one
+        if (f.ammoBank) { f.ammo[key] += f.ammoBank; f.ammoBank = 0; }
+    }
 }
 
 // Returns how many units were taken (0 = refused). `swapIdx` = slot to replace when full (-1 = never swap).
@@ -5487,7 +5493,12 @@ function applyLoot(f, key, swapIdx, mag, count = 1) {
                 f.ammo[n] = (f.ammo[n] || 0) + Math.ceil(ammoUnit(WEAPONS[n]) * 1.5);
                 used = 1;
             }
-            return used;
+            // Ammo can always be picked up: with no gun to load it into, it's kept for the next gun you find
+            if (!used) {
+                f.ammoBank = (f.ammoBank || 0) + AMMO_BOX_ROUNDS;
+                if (f.isPlayer) addFloat(f.x, f.y - 40, `+${AMMO_BOX_ROUNDS} AMMO SAVED`, '#e0b84a');
+            }
+            return 1;
         }
     }
     return 0;
