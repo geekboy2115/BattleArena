@@ -2940,7 +2940,7 @@ function revoDeath(t, killer, weapon) {
         G.killedBy = killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : null;
         G.timeScale = 0.25; G.flash = 0.5; G.flashColor = '255,40,70';
         Sound.death();
-        showBanner('YOU ARE DEAD', true, 'No respawns in Revolution. Spectating your side');
+        showBanner('YOU ARE DEAD', true, 'No respawns in Revolution');
     }
     revoCheckEnd();
 }
@@ -5764,7 +5764,7 @@ function warDeath(t, killer, weapon) {
         G.flash = 0.5;
         G.flashColor = '255,40,70';
         Sound.death();
-        if (G.teamAlive[0] > 0) showBanner('YOU ARE DOWN', true, `Spectating your team: ${G.teamAlive[0]} still fighting`);
+        if (G.teamAlive[0] > 0) showBanner('YOU ARE DEAD', true, `${G.teamAlive[0]} of your team still fighting`);
     } else if (G.teamAlive[t.team] === 0 && !G.result) {
         showBanner(`${TEAMS[t.team].name.toUpperCase()} TEAM WIPED OUT`, t.team === 0, t.team === 0 ? '' : `${G.teamAlive.filter(n => n > 0).length} teams left`);
     }
@@ -8610,8 +8610,10 @@ const HYPER_LOOT = {
 };
 const SHOCK = { radius: 400, damage: 45, stun: 4000, chain: 2, building: 220 };  // stuns and hurts, but never kills a healthy person on its own (the Electricity Missile is the killer)
 
+const HYPER_GUNS = 4;  // different quantum weapons in every drop
 function hyperDropItems() {
-    return [pick(HYPER_LOOT.weapons), pick(HYPER_LOOT.shields), pick(HYPER_LOOT.grenades), pick(HYPER_LOOT.grenades), pick(HYPER_LOOT.packs), weightedPick(NADE2_TABLE), 'ammo'];
+    const guns = [...HYPER_LOOT.weapons].sort(() => Math.random() - 0.5).slice(0, HYPER_GUNS);
+    return [...guns, 'ammo', 'ammo', pick(HYPER_LOOT.shields), pick(HYPER_LOOT.grenades), pick(HYPER_LOOT.grenades), pick(HYPER_LOOT.packs), weightedPick(NADE2_TABLE), 'ammo'];
 }
 
 // ----- Shields: an energy layer that soaks damage before armor -----
@@ -10429,7 +10431,19 @@ function update(dt) {
     updateCamera(dt);
 
     if (G.mode === 'demo' && (G.fighters.length < 8 || (G.war && G.teamAlive.filter(n => n > 0).length < 2) || (G.noZone && (G.sides.b === 0 || G.sides.a < 5)) || (G.escape && G.time > 90000))) newDemo();
+    // Team modes: once you're dead (and your side fights on), ask whether you want to spectate
+    if (G.war && G.mode === 'playing' && G.player && G.player.dead && !G.result && !G.spectateAsked && G.time - (G.player.diedAt || 0) > 1200) askSpectate();
+    if (G.result && !screens.spectate.classList.contains('hidden')) screens.spectate.classList.add('hidden');
     if (G.result && G.mode === 'playing' && G.time >= G.overAt) showGameOver();
+}
+
+function askSpectate() {
+    G.spectateAsked = true;
+    const p = G.player, left = G.teamAlive[p.team] || 0;
+    $('sp-sub').textContent = `${left} of your team ${left === 1 ? 'is' : 'are'} still fighting.${G.revolution ? ' There are no respawns in Revolution.' : ''}`;
+    screens.spectate.classList.remove('hidden');
+    document.body.classList.remove('playing');
+    mouse.down = false;
 }
 
 // Scaled to the screen so every window size sees the same amount of the world
@@ -10447,8 +10461,8 @@ function updateCamera(dt) {
     } else if (G.player && !G.player.dead) {
         G.cam.x += (G.player.x - G.cam.x) * Math.min(1, dt * 12);
         G.cam.y += (G.player.y - G.cam.y) * Math.min(1, dt * 12);
-    } else if (G.war && G.player) {
-        // Spectate a teammate after you go down
+    } else if (G.war && G.player && G.spectating) {
+        // Spectate a teammate (once you've chosen to after dying)
         if (!G.demoFollow || G.demoFollow.dead) {
             const mates = G.fighters.filter(f => f.team === G.player.team);
             G.demoFollow = mates.length ? mates.reduce((a, f) => (dist(f, G.cam) < dist(a, G.cam) ? f : a)) : null;
@@ -10710,7 +10724,7 @@ function render() {
         ctx.restore();
     }
     // Revolution: you're dead for good; spectating your side
-    if (G.revolution && G.mode === 'playing' && G.player && G.player.dead && !G.result) {
+    if (G.revolution && G.mode === 'playing' && G.player && G.player.dead && !G.result && G.spectating) {
         const q = G.revolution.queue.find(q => q.f === G.player);
         ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(10,6,20,0.45)'; ctx.fillRect(0, viewH * 0.36, viewW, viewH * 0.2);
@@ -12506,7 +12520,7 @@ function showBanner(text, danger, sub) {
 }
 
 // ---------- Screens ----------
-const screens = { menu: $('menu'), pause: $('pause'), over: $('gameover'), mapsel: $('mapsel'), typesel: $('typesel') };
+const screens = { menu: $('menu'), pause: $('pause'), over: $('gameover'), mapsel: $('mapsel'), typesel: $('typesel'), spectate: $('spectate') };
 const slider = $('cpu-slider');
 // AI level, remembered between visits
 let aiLevel = 5;
@@ -12941,6 +12955,14 @@ function drawMapPreview(cv, map) {
     }
 }
 $('resume-btn').addEventListener('click', () => setPaused(false));
+// After dying in a team mode: watch your team, or leave
+$('spectate-btn').addEventListener('click', () => {
+    G.spectating = true;
+    screens.spectate.classList.add('hidden');
+    if (G.mode === 'playing') document.body.classList.add('playing');
+});
+$('spectate-quit').addEventListener('click', toMenu);
+$('spectate-again').addEventListener('click', () => { screens.spectate.classList.add('hidden'); startGame(lastMap); });
 $('quit-btn').addEventListener('click', toMenu);
 $('menu-btn').addEventListener('click', toMenu);
 
@@ -13000,6 +13022,7 @@ function toMenu() {
     newDemo();
     screens.pause.classList.add('hidden');
     screens.over.classList.add('hidden');
+    screens.spectate.classList.add('hidden');
     hud.root.classList.add('hidden');
     canvas.classList.remove('dead');
     screens.menu.classList.remove('hidden');
