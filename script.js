@@ -11107,11 +11107,28 @@ function askSpectate() {
     mouse.down = false;
 }
 
+// Manning a castle cannon: the camera looks out ahead, toward the enemy castle: the view starts at your castle's
+// front wall and runs out across the field (rather than your own castle filling it)
+function cannonLook(f, w, h, zoom) {
+    const c = f.car, e = c.foeBase && c.foeBase.c;
+    if (!e) return { x: c.x, y: c.y };
+    const a = Math.atan2(e.y - c.y, e.x - c.x), dx = Math.cos(a), dy = Math.sin(a);
+    const hw = w / 2 / zoom, hh = h / 2 / zoom, edge = Math.min(Math.abs(dx) > 1e-3 ? hw / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-3 ? hh / Math.abs(dy) : Infinity);
+    // (the near edge of the view sits at your castle's front wall, so it's all the ground out in front)
+    const own = c.tower, fx = own.c.x + own.fwd.x * REVO.base.depth / 2, fy = own.c.y + own.fwd.y * REVO.base.depth / 2;
+    const toFront = Math.max(0, (fx - c.x) * dx + (fy - c.y) * dy);
+    const d = toFront + edge - 120;
+    return { x: c.x + dx * d, y: c.y + dy * d };
+}
 const strikeCamOn = () => !!(G.strikeCam && G.mode !== 'demo' && G.time < G.strikeCam.until);
 function updateCamera(dt) {
     let tx = G.cam.x, ty = G.cam.y;
     if (G.strikeCam && !strikeCamOn()) G.strikeCam = null;
-    if (strikeCamOn()) {
+    if (!strikeCamOn() && inCannon(G.player) && G.mode !== 'demo') {
+        const t = cannonLook(G.player, viewW, viewH, G.zoom);
+        G.cam.x += (t.x - G.cam.x) * Math.min(1, dt * 3);
+        G.cam.y += (t.y - G.cam.y) * Math.min(1, dt * 3);
+    } else if (strikeCamOn()) {
         G.cam.x += (G.strikeCam.x - G.cam.x) * Math.min(1, dt * 3);
         G.cam.y += (G.strikeCam.y - G.cam.y) * Math.min(1, dt * 3);
     } else if (G.mode === 'demo') {
@@ -13971,7 +13988,8 @@ function updateGuestCam(g, dt) {
         if (g.watch) f = g.watch;
     }
     const k = Math.min(1, dt * 12);
-    g.cam.x += (f.x - g.cam.x) * k; g.cam.y += (f.y - g.cam.y) * k;
+    const look = inCannon(g.f) && g.zoom ? cannonLook(g.f, g.w, g.h, g.zoom) : f;
+    g.cam.x += (look.x - g.cam.x) * k; g.cam.y += (look.y - g.cam.y) * k;
     const target = normalZoom(g.w, g.h, g.f);
     g.zoom = g.zoom ? lerp(g.zoom, target, Math.min(1, dt * 4)) : target;
     const W = CONFIG.WORLD_SIZE, hw = g.w / 2 / g.zoom, hh = g.h / 2 / g.zoom;
