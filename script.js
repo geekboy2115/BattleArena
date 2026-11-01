@@ -134,9 +134,11 @@ const GROUND_TABLE = [
 const BASE_ZOOM = 1.35;
 // How far out the camera sits (Early Warfare's a little closer in)
 const viewScale = () => (G && G.early ? 1 : 1.3);
-// Revolution: you always see as much as the boss strike shows, a whole castle across the short side of the screen
+// The boss strike's view, and a castle cannon's: a whole castle across the short side of the screen
 const wideZoom = (w = viewW, h = viewH) => Math.min(w, h) / (REVO.base.width + 700);
-const normalZoom = (w = viewW, h = viewH) => (G && G.revolution ? wideZoom(w, h) : BASE_ZOOM * Math.hypot(w, h) / Math.hypot(1400, 850) / viewScale());
+const inCannon = f => !!(f && !f.dead && f.car && f.car.type === 'bigtower');
+// The usual view (scaled to the screen so every window size sees the same amount), wide while you man a castle cannon
+const normalZoom = (w = viewW, h = viewH, f = G && G.player) => (inCannon(f) ? wideZoom(w, h) : BASE_ZOOM * Math.hypot(w, h) / Math.hypot(1400, 850) / viewScale());
 const AIRDROP_GUNS = ['Vector', 'Heavy MG'];
 // Early Warfare: every gun anywhere is swapped for one of these
 const EARLY_TABLE = [['Sword', 10], ['Spear', 8], ['Bow', 8], ['Crossbow', 4], ['Dagger', 9], ['Axe', 7], ['Mace', 5], ['Halberd', 4], ['War Hammer', 2.5], ['Longbow', 2.5]];
@@ -13970,7 +13972,7 @@ function updateGuestCam(g, dt) {
     }
     const k = Math.min(1, dt * 12);
     g.cam.x += (f.x - g.cam.x) * k; g.cam.y += (f.y - g.cam.y) * k;
-    const target = normalZoom(g.w, g.h);
+    const target = normalZoom(g.w, g.h, g.f);
     g.zoom = g.zoom ? lerp(g.zoom, target, Math.min(1, dt * 4)) : target;
     const W = CONFIG.WORLD_SIZE, hw = g.w / 2 / g.zoom, hh = g.h / 2 / g.zoom;
     g.cam.x = hw * 2 < W ? clamp(g.cam.x, hw, W - hw) : W / 2;
