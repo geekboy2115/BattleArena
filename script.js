@@ -2667,7 +2667,7 @@ function houseFloorArt(b) {
 const REVO = {
     hp: 250, ticketsPer: 9, respawn: 7000, protect: 3000, heal: 30, ammoEvery: 2000,
     timeLimit: 30 * 60000, chests: 230, chestRefill: 75000, armoryRefill: 15000,
-    base: { court: 760, depth: 760 + 2 * (44 + 400 + 110 + 18), width: 760 + 2 * (44 + 400 + 110 + 18), rooms: 400, corridor: 110, wall: 44, balcony: 170, gate: 220, edge: 260 }, cannons: 8, tanks: 24, tankers: 0.35, bayEvery: 60000,
+    base: { court: 700, depth: 700 + 2 * (44 + 360 + 110 + 18), width: 700 + 2 * (44 + 360 + 110 + 18), rooms: 360, corridor: 110, wall: 44, balcony: 170, gate: 220, edge: 260 }, cannons: 8, tanks: 24, tankers: 0.35, bayEvery: 60000,
     shellEvery: [4000, 9000],
     sides: [{ name: 'Rebels', flag: '#3d8bff', wall: '#66789a' }, { name: 'Regime', flag: '#ff4b4b', wall: '#a2675f' }],
     // Every section of base wall takes 3000 damage; lose 75% of them and the whole base comes down
@@ -3109,7 +3109,7 @@ function buildBase(team, c, fwd) {
     // ---- Outside the main gate the vehicle bay; in the courtyard sandbags by the gate, the flag and the boss strike pad ----
     // (the vehicles park in the courtyard, nose to the main gate)
     base.bay = [];
-    for (const [u, v] of [[170, -235], [170, 235], [-110, -235], [-110, 235]]) {
+    for (const [u, v] of [[170, -200], [170, 200], [-110, -200], [-110, 200]]) {
         const p = P(u, v);
         base.bay.push(rectOf(u - 75, v - 50, u + 75, v + 50));
         spawnVehicle(G.early ? 'horse' : 'tank', p.x, p.y, Math.atan2(fwd.y, fwd.x));
@@ -3149,7 +3149,7 @@ function buildBase(team, c, fwd) {
     g.fillStyle = 'rgba(255,255,255,0.5)'; g.font = '900 40px "Black Ops One", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const l of base.labels) g.fillText(l.text, l.x, l.y);
     const tag = (gg, text, p0, col) => { gg.font = '900 22px "Black Ops One", sans-serif'; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillStyle = 'rgba(0,0,0,0.55)'; gg.fillRect(p0.x - gg.measureText(text).width / 2 - 8, p0.y - 52, gg.measureText(text).width + 16, 28); gg.fillStyle = col; gg.fillText(text, p0.x, p0.y - 38); };
-    for (const st of base.stairs) { paintStairsA(g, st.b, st.face + Math.PI); tag(g, 'UP TO BALCONY', st.b, '#ffd166'); }
+    for (const st of base.stairs) { paintStairsA(g, st.b, st.face + Math.PI); tag(g, 'UP', st.b, '#ffd166'); }
     base.art = cv;
 
     // The walkway's art: concrete slabs, battlements along the outside, medical stations, ammo crates and nests
@@ -3160,16 +3160,32 @@ function buildBase(team, c, fwd) {
     for (const r of base.ring) dg.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
     dg.strokeStyle = 'rgba(0,0,0,0.25)'; dg.lineWidth = 3;
     for (const r of base.ring) { const hz = r.x1 - r.x0 > r.y1 - r.y0; for (let q = (hz ? r.x0 : r.y0); q < (hz ? r.x1 : r.y1); q += 36) { dg.beginPath(); hz ? (dg.moveTo(q, r.y0), dg.lineTo(q, r.y1)) : (dg.moveTo(r.x0, q), dg.lineTo(r.x1, q)); dg.stroke(); } }
-    for (const r of base.decks) paintFinish(dg, r, 'roof', rnd);
-    // a railing along the balcony's inner edge
-    dg.fillStyle = shade(wallCol, 0.25);
-    for (const k of base.deckSides) { const S = SIDES[k], ins = k === 'back' || k === 'front' ? 0 : BW, rr = rectS(S, -S.half + ins, BW - 10, S.half - ins, BW); dg.fillRect(rr.x0, rr.y0, rr.x1 - rr.x0, rr.y1 - rr.y0); }
-    dg.fillStyle = shade(wallCol, 0.15);
-    const R0 = base.rect;
-    for (let x = R0.x0; x < R0.x1; x += 40) { dg.fillRect(x, R0.y0, 22, 16); dg.fillRect(x, R0.y1 - 16, 22, 16); }
-    for (let y = R0.y0; y < R0.y1; y += 40) { dg.fillRect(R0.x0, y, 16, 22); dg.fillRect(R0.x1 - 16, y, 16, 22); }
+    // The balcony up on top of the wall: warm sandstone flagstones, quite unlike anything down on the ground
+    for (const r of base.decks) {
+        dg.fillStyle = '#cdb88f'; dg.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+        const hz = r.x1 - r.x0 > r.y1 - r.y0, A0 = hz ? r.x0 : r.y0, A1 = hz ? r.x1 : r.y1, B0 = hz ? r.y0 : r.x0, B1 = hz ? r.y1 : r.x1;
+        for (let b = B0, row = 0; b < B1; b += 42, row++) for (let a = A0 - (row % 2) * 34; a < A1; a += 68) {
+            const v = rnd(); dg.fillStyle = `rgba(${v < 0.5 ? '90,70,40' : '255,245,220'},${0.05 + rnd() * 0.12})`;
+            const x = hz ? a : b, y = hz ? b : a, w = hz ? 68 : 42, h = hz ? 42 : 68;
+            dg.fillRect(x, y, w, h); dg.strokeStyle = 'rgba(70,55,35,0.45)'; dg.lineWidth = 2.5; dg.strokeRect(x, y, w, h);
+        }
+    }
+    // the low wall along the balcony's inside edge, throwing a shadow down onto the roof below
+    for (const k of base.deckSides) {
+        const S = SIDES[k], ins = k === 'back' || k === 'front' ? 0 : BW;
+        const sh = rectS(S, -S.half + ins, BW, S.half - ins, BW + 46); const gr = dg.createLinearGradient(...(() => { const p0 = at(S, 0, BW), p1 = at(S, 0, BW + 46); return [p0.x, p0.y, p1.x, p1.y]; })()); gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); dg.fillStyle = gr; dg.fillRect(sh.x0, sh.y0, sh.x1 - sh.x0, sh.y1 - sh.y0);
+        const rr = rectS(S, -S.half + ins, BW - 14, S.half - ins, BW); dg.fillStyle = shade(wallCol, 0.3); dg.fillRect(rr.x0, rr.y0, rr.x1 - rr.x0, rr.y1 - rr.y0);
+        const tp = rectS(S, -S.half + ins, BW - 14, S.half - ins, BW - 10); dg.fillStyle = 'rgba(255,255,255,0.3)'; dg.fillRect(tp.x0, tp.y0, tp.x1 - tp.x0, tp.y1 - tp.y0);
+    }
+    // the battlements round the outside: a thick parapet with merlons standing up off it
+    const R0 = base.rect, PT = 26;
+    dg.fillStyle = shade(wallCol, 0.05);
+    dg.fillRect(R0.x0, R0.y0, R0.x1 - R0.x0, PT); dg.fillRect(R0.x0, R0.y1 - PT, R0.x1 - R0.x0, PT); dg.fillRect(R0.x0, R0.y0, PT, R0.y1 - R0.y0); dg.fillRect(R0.x1 - PT, R0.y0, PT, R0.y1 - R0.y0);
+    const merlon = (x, y, w, h) => { dg.fillStyle = 'rgba(0,0,0,0.35)'; dg.fillRect(x + 4, y + 5, w, h); dg.fillStyle = shade(wallCol, 0.35); dg.fillRect(x, y, w, h); dg.fillStyle = 'rgba(255,255,255,0.25)'; dg.fillRect(x, y, w, 3); };
+    for (let x = R0.x0 + 6; x < R0.x1 - 30; x += 44) { merlon(x, R0.y0, 26, PT); merlon(x, R0.y1 - PT, 26, PT); }
+    for (let y = R0.y0 + 6; y < R0.y1 - 30; y += 44) { merlon(R0.x0, y, PT, 26); merlon(R0.x1 - PT, y, PT, 26); }
     for (const n of base.deckDecor) for (let i = 0; i < 7; i++) { const a = n.face - Math.PI / 2 + (i / 6) * Math.PI; dg.save(); dg.translate(n.x + Math.cos(a) * 34, n.y + Math.sin(a) * 34); dg.rotate(a + Math.PI / 2); dg.fillStyle = i % 2 ? '#a8925f' : '#b9a26c'; roundRect(dg, -11, -6, 22, 12, 5); dg.fill(); dg.restore(); }
-    for (const st of base.stairs) { paintStairsA(dg, st.t, st.face + Math.PI); tag(dg, 'DOWN', st.t, '#d9c7a3'); }
+    for (const st of base.stairs) { paintStairsA(dg, st.t, st.face + Math.PI, true); tag(dg, 'DOWN', st.t, '#d9c7a3'); }
     base.deckArt = dc;
     return base;
 }
@@ -3182,11 +3198,42 @@ function towerFloor(gg, tr, col) {
     for (let k = 0; k < 12; k++) { const a = k / 12 * TAU; gg.beginPath(); gg.moveTo(tr.x + Math.cos(a) * tr.R / 4, tr.y + Math.sin(a) * tr.R / 4); gg.lineTo(tr.x + Math.cos(a) * tr.R, tr.y + Math.sin(a) * tr.R); gg.stroke(); }
 }
 // A flight of stairs drawn with its arrow pointing along angle a
-function paintStairsA(g, p, a) {
+function paintStairsA(g, p, a, down = false) {
+    // A stone flight seen from above, climbing along angle a: walled sides with a handrail, eleven treads that catch
+    // more light the higher they are, each with a bright nosing and a shadow under it. Seen from the top (down), it's
+    // a stairwell: the treads fall away into the dark, with a railing round the opening
+    const len = 104, wid = 72, n = 11, step = len / n, sw = 9;
     g.save(); g.translate(p.x, p.y); g.rotate(a);
-    g.fillStyle = '#3a3f46'; g.fillRect(-40, -30, 80, 60);
-    for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? '#8a9098' : '#a8aeb6'; g.fillRect(-36 + i * 12, -26, 11, 52); }
-    g.fillStyle = '#ffd166'; g.beginPath(); g.moveTo(24, 0); g.lineTo(6, -12); g.lineTo(6, 12); g.closePath(); g.fill();
+    // shadow the flight casts
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(-len / 2 + 6, -wid / 2 + 8, len, wid);
+    for (let i = 0; i < n; i++) {
+        const x = -len / 2 + i * step, t = i / (n - 1), lit = down ? 1 - t * 0.85 : 0.3 + t * 0.7;
+        const c = Math.round(80 + lit * 120), cc = `rgb(${c},${c - 4},${c - 12})`;
+        g.fillStyle = cc; g.fillRect(x, -wid / 2 + sw, step + 0.5, wid - sw * 2);
+        // riser shadow on the lower side, bright nosing on the upper edge of each tread
+        g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(x, -wid / 2 + sw, 2.5, wid - sw * 2);
+        g.fillStyle = `rgba(255,250,235,${0.15 + lit * 0.35})`; g.fillRect(x + step - 2, -wid / 2 + sw, 2, wid - sw * 2);
+        // worn middle of each tread
+        g.fillStyle = 'rgba(0,0,0,0.06)'; g.fillRect(x + 1, -wid * 0.18, step - 3, wid * 0.36);
+    }
+    if (down) { const gr = g.createLinearGradient(len / 2, 0, -len / 2, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.55)'); g.fillStyle = gr; g.fillRect(-len / 2, -wid / 2 + sw, len, wid - sw * 2); }
+    // side walls (stringers), lighter on top, and the handrails on posts
+    for (const sy of [-1, 1]) {
+        const y0 = sy < 0 ? -wid / 2 : wid / 2 - sw;
+        g.fillStyle = '#6e6a62'; g.fillRect(-len / 2, y0, len, sw);
+        g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(-len / 2, y0, len, 2);
+        g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(-len / 2, y0 + sw - 2, len, 2);
+        g.strokeStyle = '#3b2a1c'; g.lineWidth = 3.5; g.beginPath(); g.moveTo(-len / 2 + 4, y0 + sw / 2); g.lineTo(len / 2 - 4, y0 + sw / 2); g.stroke();
+        g.fillStyle = '#2a1d13'; for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(-len / 2 + 8 + k * (len - 16) / 3, y0 + sw / 2, 3, 0, TAU); g.fill(); }
+    }
+    if (down) {
+        // the railing round the stairwell's opening (open on the side you step in from)
+        g.strokeStyle = '#3b2a1c'; g.lineWidth = 4;
+        g.beginPath(); g.moveTo(len / 2, -wid / 2 - 3); g.lineTo(-len / 2 - 4, -wid / 2 - 3); g.lineTo(-len / 2 - 4, wid / 2 + 3); g.lineTo(len / 2, wid / 2 + 3); g.stroke();
+    } else {
+        // the top landing where it meets the wall
+        g.fillStyle = '#b9b2a4'; g.fillRect(len / 2, -wid / 2, 8, wid);
+    }
     g.restore();
 }
 
