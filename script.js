@@ -5215,7 +5215,7 @@ function spawnLoot(x, y, key, mag, vx = 0, vy = 0, count) {
 // Throws items out in an even ring so they glide apart and settle without piling up.
 // `items` are loot keys, or { key, mag, count } for guns that keep their ammo / stacks of supplies.
 function dropItems(x, y, items, spread = 1) {
-    const n = items.length;
+    const n = items.length, out = [];
     const base = rand(0, TAU);
     // Big drops (supply crates) fan out in rings inside each other so they stay close but never pile up
     const rings = [];
@@ -5229,8 +5229,9 @@ function dropItems(x, y, items, spread = 1) {
         const key = typeof it === 'string' ? it : it.key;
         const a = rings.length ? rings[i][0] + rand(-0.08, 0.08) : base + (i / n) * TAU + rand(-0.2, 0.2);
         const d = (rings.length ? rings[i][1] : n === 1 ? rand(35, 55) : 55 + n * 9 + rand(0, 15)) * spread;
-        spawnLoot(x, y, key, it.mag, Math.cos(a) * d * LOOT_DRAG, Math.sin(a) * d * LOOT_DRAG, it.count);
+        out.push(spawnLoot(x, y, key, it.mag, Math.cos(a) * d * LOOT_DRAG, Math.sin(a) * d * LOOT_DRAG, it.count));
     });
+    return out;
 }
 
 function updateLoot(dt) {
@@ -5593,6 +5594,28 @@ function applyLoot(f, key, swapIdx, mag, count = 1) {
         }
     }
     return 0;
+}
+
+// When someone dies, the guns they were carrying fall where they died, with whatever ammo was left.
+// (Not the free starting Pistol, and not from up on a castle balcony.) In team modes the dead come
+// back with new gear, so these drops fade out after a while instead of piling up.
+const DEATH_DROP_LIFE = 60000;
+function dropDeathWeapons(t) {
+    if (t.escaped || t.zombie || t.up || !t.inv) return;
+    const guns = t.inv.filter(k => k && WEAPONS[k] && k !== 'Pistol')
+        .map(k => ({ key: k, mag: WEAPONS[k].melee ? undefined : Math.max(0, Math.min(1e6, t.ammo[k] || 0)) }));
+    if (!guns.length) return;
+    const dropped = dropItems(t.x, t.y, guns, 0.8);
+    if (G.war) (G.deathDrops || (G.deathDrops = [])).push(...dropped);
+}
+function expireDeathDrops() {
+    if (!G.deathDrops || !G.deathDrops.length) return;
+    G.deathDrops = G.deathDrops.filter(l => {
+        if (l.gone) return false;
+        if (G.time - l.born < DEATH_DROP_LIFE) return true;
+        removeLoot(l);
+        return false;
+    });
 }
 
 // Picks up (part of) a loot pile; leftovers stay on the ground
@@ -6228,7 +6251,7 @@ function killFighter(t, killer, weapon) {
     if (killer && killer !== t) killer.kills++;
 
     if (!t.escaped && !t.vaporized) addCorpse(t);
-    // Nothing drops: everything they carried vanishes with them
+    dropDeathWeapons(t);
     if (inView(t.x, t.y, 100)) {
         burst(t.x, t.y, 22, t.color, 260, 'blood');
         burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
@@ -11181,6 +11204,7 @@ function update(dt) {
     if (G.cures.length) updateCures(dt);
     G.fighters = G.fighters.filter(f => !f.dead);
     updateLoot(dt);
+    expireDeathDrops();
     updateParticles(dt);
 
     G.shake = Math.max(0, G.shake - dt * 40);
