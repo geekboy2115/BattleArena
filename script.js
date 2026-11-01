@@ -65,7 +65,11 @@ const WEAPONS = {
     'Minigun of Doom': { damage: 12, range: 1300, rate: 40, speed: 1600, spread: 0.12, mag: 300, reload: 5500, rarity: 'hyper', len: 50, w: 15, sound: 'mid', shake: 2, hyper: true, explosive: true },  // every round explodes
     'Sonic Cannon': { damage: 55, range: 480, rate: 1100, speed: 0, spread: 0, mag: 6, reload: 2600, rarity: 'hyper', len: 40, w: 16, sound: 'heavy', shake: 6, hyper: true, sonic: true },  // a cone of force
     // Ordinary finds
-    'Crossbow': { damage: 85, range: 1400, rate: 600, speed: 1500, spread: 0.005, mag: 1, reload: 1000, rarity: 'rare', len: 34, w: 12, sound: 'light', shake: 2, silent: true },  // firing it doesn't give you away
+    'Crossbow': { damage: 85, range: 1400, rate: 600, speed: 1500, spread: 0.005, mag: 1, reload: 1000, rarity: 'rare', len: 34, w: 12, sound: 'light', shake: 2, silent: true, string: true, quiver: 6 },  // firing it doesn't give you away
+    // Early Warfare: blades, and arrows that you nock one at a time (quiver: arrows a pickup gives you)
+    'Sword': { damage: 38, range: 84, rate: 520, melee: true, blade: 'sword', rarity: 'uncommon', len: 40 },
+    'Spear': { damage: 30, range: 128, rate: 720, melee: true, blade: 'spear', rarity: 'uncommon', len: 72 },  // the longest reach
+    'Bow': { damage: 48, range: 1200, rate: 650, speed: 1150, spread: 0.02, mag: 1, reload: 550, rarity: 'rare', len: 26, w: 12, sound: 'light', shake: 1, silent: true, string: true, shape: 'bow', quiver: 12 },
     'Revolver': { damage: 42, range: 1100, rate: 420, speed: 1500, spread: 0.02, mag: 6, reload: 2100, rarity: 'uncommon', len: 20, w: 7, sound: 'heavy', shake: 5 }
 };
 
@@ -132,6 +136,11 @@ const BASE_ZOOM = 1.35;
 // How much wider each scope makes your view (the label is the item's name, not a literal multiplier)
 const SCOPE_VIEW = { 1: 1, 2: 1.35, 4: 1.75, 8: 2.2, 16: 2.8 };
 const AIRDROP_GUNS = ['Vector', 'Heavy MG'];
+// Early Warfare: every gun anywhere is swapped for one of these
+const EARLY_TABLE = [['Sword', 10], ['Spear', 8], ['Bow', 8], ['Crossbow', 4]];
+const gunFrom = table => (G && G.early ? weightedPick(EARLY_TABLE) : weightedPick(table));
+// How many arrows / rounds a pickup or an ammo box gives
+const ammoUnit = w => w.quiver || w.mag;
 
 // War mode: teams, heavier guns and big supply crates that arm a whole squad
 const TEAMS = [
@@ -688,7 +697,7 @@ function buildSprites() {
     SPR.bushes = [];
     for (let i = 0; i < 4; i++) SPR.bushes.push(makeBush(rand(85, 125)));
     SPR.loot = {};
-    for (const k of [...Object.keys(WEAPONS), ...Object.keys(ITEMS)]) if (!WEAPONS[k] || !WEAPONS[k].melee) SPR.loot[k] = makeLootSprite(k);
+    for (const k of [...Object.keys(WEAPONS), ...Object.keys(ITEMS)]) if (!WEAPONS[k] || !WEAPONS[k].melee || WEAPONS[k].blade) SPR.loot[k] = makeLootSprite(k);
 }
 
 function makeGrassPattern() {
@@ -961,6 +970,30 @@ function drawThrowable(g, key, x, y, s) {
     else drawGrenadeIcon(g, x, y, s);
 }
 
+// Loot icons for the Early Warfare weapons: a sword, a spear and a bow, laid diagonally in the tile
+function drawEarlyIcon(g, key) {
+    g.save(); g.rotate(-0.75);
+    if (key === 'Sword') {
+        g.fillStyle = '#5a3a1e'; g.fillRect(-20, -2.5, 9, 5);
+        g.fillStyle = '#c9a24a'; g.beginPath(); g.arc(-21, 0, 3, 0, TAU); g.fill(); g.fillRect(-11, -8, 3.5, 16);
+        g.fillStyle = '#e4e8ef'; g.beginPath(); g.moveTo(-7.5, -3); g.lineTo(15, -2.5); g.lineTo(21, 0); g.lineTo(15, 2.5); g.lineTo(-7.5, 3); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(120,130,150,0.8)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-6, 0); g.lineTo(15, 0); g.stroke();
+    } else if (key === 'Spear') {
+        g.fillStyle = '#8a5a2e'; g.fillRect(-24, -1.8, 36, 3.6);
+        g.fillStyle = '#d8dde6'; g.beginPath(); g.moveTo(11, -5); g.lineTo(24, 0); g.lineTo(11, 5); g.closePath(); g.fill();
+        g.fillStyle = '#c9a24a'; g.fillRect(9, -2.6, 3, 5.2);
+    } else {
+        g.rotate(0.75 + Math.PI / 4);
+        g.strokeStyle = '#8a5a2e'; g.lineWidth = 4; g.beginPath(); g.arc(-6, 0, 18, -1.15, 1.15); g.stroke();
+        const ex = -6 + Math.cos(1.15) * 18, ey = Math.sin(1.15) * 18;
+        g.strokeStyle = '#efe6d0'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(ex, -ey); g.lineTo(ex, ey); g.stroke();
+        g.strokeStyle = '#5a3a1e'; g.lineWidth = 2; g.beginPath(); g.moveTo(ex - 4, 0); g.lineTo(16, 0); g.stroke();
+        g.fillStyle = '#d8dde6'; g.beginPath(); g.moveTo(20, 0); g.lineTo(14, -3.5); g.lineTo(14, 3.5); g.closePath(); g.fill();
+        g.fillStyle = '#d64545'; g.beginPath(); g.moveTo(ex - 4, 0); g.lineTo(ex - 9, -4); g.lineTo(ex - 7, 0); g.lineTo(ex - 9, 4); g.closePath(); g.fill();
+    }
+    g.restore();
+}
+
 function makeLootSprite(key) {
     const S = 64;
     const [c, g] = makeCanvas(S, S);
@@ -973,6 +1006,7 @@ function makeLootSprite(key) {
     g.strokeStyle = col;
     g.stroke();
     const w = WEAPONS[key];
+    if (w && (w.blade || w.shape === 'bow')) { drawEarlyIcon(g, key); return c; }
     if (w) {
         g.rotate(-0.5);
         const L = Math.min(34, 12 + w.len * 0.45);
@@ -2103,11 +2137,12 @@ function spawnCommander(heli) {
     const f = G.fighters[G.fighters.length - 1];
     Object.assign(f, { boss: true, name: 'Commander', r: 24, hp: COMMANDER.hp, maxHp: COMMANDER.hp, armor: COMMANDER.armor, dmgMul: COMMANDER.dmgMul, color: '#3a4230' });
     f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
-    f.inv = ['Pistol', null];
+    f.inv = [G.early ? 'Sword' : 'Pistol', null];
     f.slot = 0;
-    applyLoot(f, 'Assault Rifle', -1);
+    if (G.early) equipNew(f, 'Sword');
+    applyLoot(f, G.early ? 'Crossbow' : 'Assault Rifle', -1);
     switchSlot(f, 1, true);
-    f.items.grenade = 4;
+    f.items.grenade = G.early ? 0 : 4;
 }
 
 // ---------- House interiors (street level) ----------
@@ -2564,8 +2599,8 @@ function houseFloorArt(b) {
 // Two sides, the Rebels and the Regime, each with a walled base: healing rooms that patch you up, an armory whose
 // chests refill with guns, a command room, barracks where you come back after you fall, cannons on the walls and
 // tanks in the yard. Chests are scattered everywhere and refill too. Everyone is tougher, and each side has a pool
-// of respawns: the match is meant to run 15 to 30 minutes, ending when one side is wiped out with none left, or on
-// the clock (most fighters plus respawns left wins).
+// No respawns and no reviving: whoever dies stays dead, lying where they fell, for the rest of the match. It ends
+// when one side is wiped out, or on the clock (most fighters left wins).
 const REVO = {
     hp: 250, ticketsPer: 9, respawn: 7000, protect: 3000, heal: 30, ammoEvery: 2000,
     timeLimit: 30 * 60000, chests: 230, chestRefill: 75000, armoryRefill: 15000,
@@ -2605,13 +2640,13 @@ function buildRevolution() {
         for (let i = 0; i < 4; i++) {
             const along = (i - 1.5) * 140, ahead = 760 + (i % 2) * 120;
             const x = base.c.x + base.fwd.x * ahead - base.fwd.y * along, y = base.c.y + base.fwd.y * ahead + base.fwd.x * along;
-            if (!blockedAt(G.world.grid, x, y, 70)) spawnVehicle('tank', x, y, Math.atan2(base.fwd.y, base.fwd.x));
+            if (!blockedAt(G.world.grid, x, y, 70)) spawnVehicle(G.early ? 'horse' : 'tank', x, y, Math.atan2(base.fwd.y, base.fwd.x));
         }
     }
     for (let i = 0, placed = 0; i < 300 && placed < (REVO.tanks - 8) * MAP_SCALE; i++) {
         const s = findSpawn(null, 0);
         if (R.bases.some(b => inRect(s, b.rect, 200)) || blockedAt(G.world.grid, s.x, s.y, 90) || buildingAt(s.x, s.y, 90)) continue;
-        spawnVehicle('tank', s.x, s.y, rand(0, TAU));
+        spawnVehicle(G.early ? (Math.random() < 0.7 ? 'horse' : 'wagon') : 'tank', s.x, s.y, rand(0, TAU));
         placed++;
     }
     revoWarzone();
@@ -2631,8 +2666,8 @@ function revoWarzone() {
     for (let i = 0; i < 12; i++) {
         const p = at(rand(0.25, 0.75), rand(-wide * 0.7, wide * 0.7));
         if (!clearOf(p, 70) || !farOff(p)) continue;
-        const side = Math.random() < 0.5, T = VTYPES.tank, wa = side ? (Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2) : (Math.random() < 0.5 ? 0 : Math.PI);
-        const w = { type: 'crate', car: true, wreck: true, x: p.x, y: p.y, hw: (side ? T.wid : T.len) / 2, hh: (side ? T.len : T.wid) / 2, color: '#4f5d33', horiz: !side, burnUntil: Infinity, driven: 'tank', wa };
+        const side = Math.random() < 0.5, T = VTYPES[G.early ? 'wagon' : 'tank'], wa = side ? (Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2) : (Math.random() < 0.5 ? 0 : Math.PI);
+        const w = { type: 'crate', car: true, wreck: true, x: p.x, y: p.y, hw: (side ? T.wid : T.len) / 2, hh: (side ? T.len : T.wid) / 2, color: G.early ? '#cdbb92' : '#4f5d33', horiz: !side, burnUntil: Infinity, driven: G.early ? 'wagon' : 'tank', wa };
         G.world.obstacles.push(w); grid.insertBox(w);
         G.world.smokers.push({ x: p.x, y: p.y });
         addDecal({ kind: 'scorch', x: p.x, y: p.y, r: 110, life: 1e12 });
@@ -2706,7 +2741,7 @@ function addChest(x, y, armory) {
 
 // What's in a chest: always a gun (the armory's are better), usually ammo, sometimes armour, meds or a grenade
 function chestItems(o) {
-    const items = [G.hightech ? pick(HYPER_LOOT.weapons) : weightedPick(G.supplies || o.armory ? WAR_GUN_TABLE : GUN_TABLE), 'ammo'];
+    const items = [G.hightech ? pick(HYPER_LOOT.weapons) : gunFrom(G.supplies || o.armory ? WAR_GUN_TABLE : GUN_TABLE), 'ammo'];
     if (o.armory) { if (Math.random() < 0.35) items.push(Math.random() < 0.5 ? 'armor' : 'grenade'); }
     else {
         if (Math.random() < 0.45) items.push(pick(['bandage', 'bandage', 'medkit']));
@@ -2839,7 +2874,7 @@ function buildBase(team, c, fwd) {
     for (let i = 0; i < 3; i++) {
         const v = bayV(i), p = P(uc + 210, v);
         base.bay.push(rectOf(uc + 140, v - 50, uc + 290, v + 50));
-        spawnVehicle('tank', p.x, p.y, Math.atan2(fwd.y, fwd.x));
+        spawnVehicle(G.early ? 'horse' : 'tank', p.x, p.y, Math.atan2(fwd.y, fwd.x));
     }
     // (the one on the bay's side is cut short so it stays out of the tanks' way to their gate)
     for (const [va, vb] of [[-gate - 210, -gate - 50], [gate + 50, gate + 210]].map(([a, b]) => Math.sign(a) === bayS ? (bayS > 0 ? [gate + 10, gate + 100] : [-gate - 100, -gate - 10]) : [a, b])) { const r = rectOf(D - 170, va, D - 140, vb); add({ type: 'crate', sandbags: true, x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2, hw: (r.x1 - r.x0) / 2, hh: (r.y1 - r.y0) / 2 }); }
@@ -2895,7 +2930,7 @@ function paintStairs(g, p, fwd, top) {
     g.restore();
 }
 
-// A fighter going down: one of the side's respawns brings them back at the barracks after a few seconds
+// A fighter dying: in Revolution that's for good (tickets are always 0, so nobody's queued to come back)
 function revoDeath(t, killer, weapon) {
     const R = G.revolution;
     G.teamAlive[t.team]--;
@@ -2905,7 +2940,7 @@ function revoDeath(t, killer, weapon) {
         G.killedBy = killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : null;
         G.timeScale = 0.25; G.flash = 0.5; G.flashColor = '255,40,70';
         Sound.death();
-        showBanner('YOU ARE DOWN', true, back ? `Back at your barracks in ${Math.round(REVO.respawn / 1000)} seconds` : `${revoName(0)} are out of respawns. Spectating your side`);
+        showBanner('YOU ARE DEAD', true, 'No respawns in Revolution. Spectating your side');
     }
     revoCheckEnd();
 }
@@ -2979,8 +3014,8 @@ function updateRevolution(dt) {
             }
         }
         if (f.isPlayer) f.wasHealing = f.hp < f.maxHp && inMed;
-        if (ammoTick && f.up === base && base.deckAmmo.some(r => inRect(f, r))) for (const n of f.inv) if (n && !WEAPONS[n].melee && WEAPONS[n].mag) f.ammo[n] = Math.min((f.ammo[n] || 0) + WEAPONS[n].mag, WEAPONS[n].mag * 4);
-        if (ammoTick && !f.up && base.armory && inRect(f, base.armory)) for (const n of f.inv) if (n && !WEAPONS[n].melee && WEAPONS[n].mag) f.ammo[n] = Math.min((f.ammo[n] || 0) + WEAPONS[n].mag, WEAPONS[n].mag * 4);
+        if (ammoTick && f.up === base && base.deckAmmo.some(r => inRect(f, r))) for (const n of f.inv) if (n && !WEAPONS[n].melee && WEAPONS[n].mag) f.ammo[n] = Math.min((f.ammo[n] || 0) + ammoUnit(WEAPONS[n]), ammoUnit(WEAPONS[n]) * 4);
+        if (ammoTick && !f.up && base.armory && inRect(f, base.armory)) for (const n of f.inv) if (n && !WEAPONS[n].melee && WEAPONS[n].mag) f.ammo[n] = Math.min((f.ammo[n] || 0) + ammoUnit(WEAPONS[n]), ammoUnit(WEAPONS[n]) * 4);
     }
     updateDeckStairs(dt);
     updateGates(dt);
@@ -2990,7 +3025,7 @@ function updateRevolution(dt) {
         if (base.fallen || G.time < (base.nextTank || REVO.bayEvery)) continue;
         base.nextTank = G.time + REVO.bayEvery;
         const free = base.bay.find(r => !G.world.cars.some(c => !c.dead && inRect(c, r)) && !blockedAt(G.world.grid, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 50));
-        if (free) spawnVehicle('tank', (free.x0 + free.x1) / 2, (free.y0 + free.y1) / 2, Math.atan2(base.fwd.y, base.fwd.x));
+        if (free) spawnVehicle(G.early ? 'horse' : 'tank', (free.x0 + free.x1) / 2, (free.y0 + free.y1) / 2, Math.atan2(base.fwd.y, base.fwd.x));
     }
     if (G.time > REVO.timeLimit) revoCheckEnd();
 }
@@ -3176,7 +3211,7 @@ function breakBaseWall(o) {
 const baseHealth = base => base.fallen ? 0 : clamp(1 - base.down / Math.ceil(base.walls.length * REVO.collapseAt), 0, 1);
 
 // The base falls: every wall and room caves in, the armory's guns and supplies spill out for anyone to take,
-// and that side has no more healing, armory or respawns. Whoever's still alive fights on to the end.
+// and that side has no more healing or armory. Whoever's still alive fights on to the end.
 function collapseBase(base) {
     const R = G.revolution, B = REVO.base;
     base.fallen = true;
@@ -3197,7 +3232,7 @@ function collapseBase(base) {
     }
     const mid = { x: (base.rect.x0 + base.rect.x1) / 2, y: (base.rect.y0 + base.rect.y1) / 2 };
     const stores = [];
-    for (let i = 0; i < 10; i++) stores.push(weightedPick(WAR_GUN_TABLE));
+    for (let i = 0; i < 10; i++) stores.push(gunFrom(WAR_GUN_TABLE));
     stores.push('ammo', 'ammo', 'ammo', 'ammo', 'armor', 'armor', 'medkit', 'medkit', { key: 'bandage', count: 4 }, { key: 'grenade', count: 3 });
     dropItems(mid.x, mid.y, stores, 1.6);
     base.heal = [];
@@ -3209,8 +3244,8 @@ function collapseBase(base) {
     Sound.thud(Sound.volAt(mid.x, mid.y));
     const p = G.player;
     if (p && G.mode === 'playing') {
-        if (base.team === p.team) showBanner('YOUR BASE HAS FALLEN', true, 'No more respawns or healing. Fight on to the last!');
-        else showBanner(`THE ${revoName(base.team).toUpperCase()} BASE HAS FALLEN`, true, 'Their supplies are spilled for the taking, and they have no more respawns. Finish them!');
+        if (base.team === p.team) showBanner('YOUR BASE HAS FALLEN', true, 'No more healing or armory. Fight on to the last!');
+        else showBanner(`THE ${revoName(base.team).toUpperCase()} BASE HAS FALLEN`, true, 'Their supplies are spilled for the taking. Finish them!');
     }
     revoCheckEnd();
 }
@@ -3974,15 +4009,15 @@ function findSpawn(avoid, minDist) {
 function newState(mode, setup) {
     const W = CONFIG.WORLD_SIZE;
     const zombies = setup.type === 'zombies', escape = setup.type === 'escape', survival = setup.type === 'survival';
-    const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy';
+    const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
         mode, cpuCount, war,
-        revolution: revolution ? { tickets: [setup.size * REVO.ticketsPer, setup.size * REVO.ticketsPer], queue: [], bases: [], chests: [] } : null,
+        revolution: revolution ? { tickets: [0, 0], queue: [], bases: [], chests: [] } : null,
         // War and Epic Free For All both have supply crates and the heavy guns
-        epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
+        epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
         zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape, sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
@@ -4035,6 +4070,8 @@ function newState(mode, setup) {
     };
     setNextZoneTarget(G.zone);
     if (G.noZone || revolution) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    // Early Warfare: no cars parked at the curbs or piled in scrapyards (the map is built before G.early exists)
+    if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
     for (const s of G.world.lootSpots) {
@@ -4245,7 +4282,8 @@ function spawnEscape(soldiers, people) {
         f.armor = CONFIG.MAX_ARMOR * (maze ? MZ.armor : ESCAPE.armor);
         f.items.bandage = 2;
         f.inv[1] = null;
-        applyLoot(f, 'Minigun', -1);
+        if (G.early) { applyLoot(f, 'Sword', -1); applyLoot(f, 'Bow', -1); }  // Early Warfare: a sword and a bow instead
+        else applyLoot(f, 'Minigun', -1);
         switchSlot(f, 1, true);
     }
     // The HQ keeps its big guard at the doors; everyone else is out in squads of 5 to 8, spread over the city
@@ -4402,9 +4440,9 @@ function addSoldier(s, i, guard) {
     const f = createFighter(s.x, s.y, { name: `Soldier ${i + 1}`, color: ESCAPE.soldier, team: 1 });
     f.soldier = true;
     f.dmgMul = G.world.terrain === 'maze' ? ESCAPE.maze.dmg : ESCAPE.soldierDmg;
-    const gun = pick(ESCAPE.guns);
+    const gun = G.early ? gunFrom() : pick(ESCAPE.guns);
     if (gun !== 'Pistol') applyLoot(f, gun, -1);
-    f.items.grenade = 2;
+    f.items.grenade = G.early ? 0 : 2;
     // Guards hold their pad; the rest patrol, and some sweep the city looking for the runners
     f.post = guard ? { x: s.x, y: s.y } : null;
     G.fighters.push(f);
@@ -4563,7 +4601,10 @@ function zoneGoal() {
 }
 
 // ---------- Loot ----------
+// Early Warfare: grenades (and every other throwable) and scopes hadn't been invented; something plain turns up instead
+const earlyBanned = key => { const it = ITEMS[key]; return !!it && (it.type === 'throwable' || it.type === 'scope'); };
 function spawnLoot(x, y, key, mag, vx = 0, vy = 0, count) {
+    if (G.early && earlyBanned(key)) { key = weightedPick([['bandage', 4], ['ammo', 4], ['armor', 2]]); count = undefined; }
     const l = { x, y, key, mag, vx, vy, count: count || LOOT_COUNT[key] || 1, t: rand(0, TAU), gone: false, born: G.time, moving: false };
     G.lootGrid.insert(l);
     if (vx || vy) { l.moving = true; G.movingLoot.push(l); }
@@ -4676,15 +4717,15 @@ function breakBox(o) {
         // Enough guns for the whole squad, plus ammo and patch-up gear
         const items = [];
         const n = randInt(15, 20);
-        for (let i = 0; i < n; i++) items.push(weightedPick(SUPPLY_TABLE));
+        for (let i = 0; i < n; i++) items.push(gunFrom(SUPPLY_TABLE));
         items.push('ammo', 'ammo', 'ammo', 'armor', 'armor', 'medkit', { key: 'bandage', count: 4 }, { key: 'grenade', count: 3 });
-        if (Math.random() < 0.25) items.push(Math.random() < 0.5 ? 'nuke' : 'emissile');
+        if (!G.early && Math.random() < 0.25) items.push(Math.random() < 0.5 ? 'nuke' : 'emissile');
         dropItems(o.x, o.y, items);
     } else if (o.airdrop) {
-        const items = [pick(AIRDROP_GUNS), pick([...AIRDROP_GUNS, 'AWP', 'Sniper', 'Machine Gun']), 'medkit', 'armor', 'ammo'];
+        const items = G.early ? [gunFrom(), gunFrom(), 'medkit', 'armor', 'ammo'] : [pick(AIRDROP_GUNS), pick([...AIRDROP_GUNS, 'AWP', 'Sniper', 'Machine Gun']), 'medkit', 'armor', 'ammo'];
         if (Math.random() < 0.5) items.push('backpack3');
         if (Math.random() < 0.6) items.push('strobe');
-        if (Math.random() < 0.12) items.push(Math.random() < 0.5 ? 'nuke' : 'emissile');
+        if (!G.early && Math.random() < 0.12) items.push(Math.random() < 0.5 ? 'nuke' : 'emissile');
         if (G.zombies && Math.random() < 0.5) items.push('cure');
         const r = Math.random();
         if (r < 0.15) items.push('scope16'); else if (r < 0.6) items.push('scope8');
@@ -4693,7 +4734,7 @@ function breakBox(o) {
         dropItems(o.x, o.y, chestItems(o));
         o.refillAt = G.time + (o.armory ? REVO.armoryRefill : REVO.chestRefill);
     } else {
-        const items = [G.hightech ? pick(HYPER_LOOT.weapons) : weightedPick(G.supplies ? WAR_GUN_TABLE : GUN_TABLE)];
+        const items = [G.hightech ? pick(HYPER_LOOT.weapons) : gunFrom(G.supplies ? WAR_GUN_TABLE : GUN_TABLE)];
         if (G.hightech && Math.random() < 0.5) items.push(Math.random() < 0.5 ? pick(HYPER_LOOT.grenades) : weightedPick(NADE2_TABLE));
         if (Math.random() < 0.55) items.push('ammo');
         if (Math.random() < 0.3) items.push(weightedPick(GROUND_TABLE));
@@ -4754,7 +4795,7 @@ function mineBreak(o) {
     if (Math.random() < K.chance) {
         // Survival: kitchens and vending machines are where the food and water are
         for (let i = K.count || 1; i > 0; i--) items.push(G.survival && K.food ? pick(['meat', 'water', 'meat']) : weightedPick(K.table));
-        if (K.guns || (o.home && Math.random() < 0.25)) items.push(G.hightech ? pick(HYPER_LOOT.weapons) : weightedPick(G.supplies ? WAR_GUN_TABLE : GUN_TABLE));
+        if (K.guns || (o.home && Math.random() < 0.25)) items.push(G.hightech ? pick(HYPER_LOOT.weapons) : gunFrom(G.supplies ? WAR_GUN_TABLE : GUN_TABLE));
         if (Math.random() < 0.3) items.push('ammo');
     }
     if (items.length) dropItems(o.x, o.y, items, 0.7);
@@ -4835,12 +4876,12 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.time >= G.nextHyper && G.zone.r > 400) {
+    if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
     }
     // And now and then a high-tech vehicle, lowered on a big parachute
-    if (G.time >= G.nextTech && G.zone.r > 400) {
+    if (G.time >= G.nextTech && G.zone.r > 400 && !G.early) {
         spawnAirdrop('vehicle');
         G.nextTech = G.time + rand(...(G.hightech ? HIGHTECH.drops : TECH_DROP.every));
     }
@@ -4881,9 +4922,10 @@ function nearestLoot(x, y, range, filter) {
 
 function equipNew(f, key, mag) {
     const w = WEAPONS[key];
+    if (w.melee) return;  // a blade needs no ammo
     f.mag[key] = mag !== undefined ? mag : w.mag;
     if (key === 'Pistol') f.ammo[key] = Infinity;
-    else f.ammo[key] = (f.ammo[key] || 0) + w.mag * 2;
+    else f.ammo[key] = (f.ammo[key] || 0) + (w.quiver || w.mag * 2);
 }
 
 // Returns how many units were taken (0 = refused). `swapIdx` = slot to replace when full (-1 = never swap).
@@ -4891,8 +4933,8 @@ function applyLoot(f, key, swapIdx, mag, count = 1) {
     const w = WEAPONS[key];
     if (w) {
         if (f.inv.includes(key)) {
-            if (key === 'Pistol') return 0;
-            f.ammo[key] += w.mag * 2;
+            if (key === 'Pistol' || w.melee) return 0;
+            f.ammo[key] += w.quiver || w.mag * 2;
             return 1;
         }
         // Fill the selected slot if it's empty, otherwise the first empty one, otherwise swap
@@ -4942,8 +4984,8 @@ function applyLoot(f, key, swapIdx, mag, count = 1) {
         case 'ammo': {
             let used = 0;
             for (const n of f.inv) {
-                if (!n || n === 'Pistol') continue;
-                f.ammo[n] = (f.ammo[n] || 0) + Math.ceil(WEAPONS[n].mag * 1.5);
+                if (!n || n === 'Pistol' || WEAPONS[n].melee) continue;
+                f.ammo[n] = (f.ammo[n] || 0) + Math.ceil(ammoUnit(WEAPONS[n]) * 1.5);
                 used = 1;
             }
             return used;
@@ -5114,7 +5156,7 @@ function tryAttack(f) {
         const sp = w.speed * (count > 1 ? rand(0.9, 1.08) : 1);
         G.bullets.push({ x: mx, y: my, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive });
     }
-    if (inView(mx, my, 100)) {
+    if (inView(mx, my, 100) && !w.string) {
         G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.06, max: 0.06, size: 10 + w.w * 1.4, angle: f.angle });
         for (let i = 0; i < 2; i++) G.particles.push({ type: 'smoke', x: mx, y: my, vx: ca * 40 + rand(-20, 20), vy: sa * 40 + rand(-20, 20), life: 0.5, max: 0.5, size: rand(4, 8) });
         G.particles.push({ type: 'shell', x: f.x + ca * 14, y: f.y + sa * 14, vx: -sa * rand(150, 300) + ca * rand(-90, 40), vy: ca * rand(150, 300) + sa * rand(-90, 40), life: 0.45, max: 0.45, size: 2, rot: rand(0, TAU), spin: rand(-30, 30) });
@@ -5594,7 +5636,7 @@ function killFighter(t, killer, weapon) {
     }
     if (t.decoy) { t.dead = true; burst(t.x, t.y, 20, '#ffd166', 220, 'glow'); if (killer && killer.isPlayer === false) killer.target = null; return; }
     // Team modes: you go down first, and a teammate has a chance to get you back up
-    if (G.war && !t.downed && !t.finishing && !t.vaporized && weapon !== 'zone' && weapon !== 'Collapse' && G.fighters.some(f => f !== t && !f.dead && !f.downed && f.team === t.team)) { goDown(t, killer, weapon); return; }
+    if (G.war && !G.revolution && !t.downed && !t.finishing && !t.vaporized && weapon !== 'zone' && weapon !== 'Collapse' && G.fighters.some(f => f !== t && !f.dead && !f.downed && f.team === t.team)) { goDown(t, killer, weapon); return; }
     t.downed = false;
     t.hp = 0;
     t.dead = true;
@@ -6165,7 +6207,7 @@ function chooseBotWeapon(b, d) {
     b.inv.forEach((slot, i) => {
         const n = slot || 'Fist', w = WEAPONS[n];
         if (!w.melee && !(b.mag[n] > 0 || b.ammo[n] > 0)) return;
-        let s = w.melee ? 0.5 : w.rocket ? (d > ROCKET.radius + 40 ? 14 : 0.1) : (w.damage * (w.count || 1)) / w.rate * 100;
+        let s = w.melee ? (w.blade ? (w.damage / w.rate) * 100 * (d < w.range * 2.5 ? 1.6 : 0.4) : 0.5) : w.rocket ? (d > ROCKET.radius + 40 ? 14 : 0.1) : (w.damage * (w.count || 1)) / w.rate * 100;
         if (!w.melee && d > w.range * 0.9) s *= 0.2;
         if (!w.melee && b.mag[n] <= 0) s *= 0.3;
         if (s > score) { score = s; best = i; }
@@ -6710,7 +6752,7 @@ function igniteCars(x, y, R, chance = 0.5, dmg = 100, owner = null) {
     G.world.grid.query(x, y, R, o => {
         if (!o.car || o.wreck || Math.hypot(o.x - x, o.y - y) > R + 30) return;
         o.wreck = true;
-        o.burnUntil = G.time + 20000;
+        o.burnUntil = Infinity;  // a wrecked car burns for good
         if (Math.random() < chance) G.pendingBooms.push({ x: o.x, y: o.y, at: G.time + rand(250, 900) });
     });
     for (const car of G.traffic) {
@@ -6753,6 +6795,7 @@ const VEHICLES = {
 const VEHICLE_TABLE = [['jeep', 4], ['humvee', 4], ['apc', 1.5], ['truck', 2.5]];
 
 function spawnCar(c) {
+    if (G.early) return;  // Early Warfare: no army jeeps and trucks on the streets
     const P = CITY.block, W = CONFIG.WORLD_SIZE, n = Math.round(W / P);
     const ax = Math.random() < 0.5 ? 'h' : 'v';
     const at = clamp(Math.round((ax === 'h' ? c.y : c.x) / P) + randInt(-3, 3), 1, n - 1) * P;
@@ -6888,7 +6931,7 @@ function updateDying(car, dt) {
     Sound.thud(Sound.volAt(car.x, car.y));
     addFire(car.x, car.y, 85, 25000);
     const V = VEHICLES[car.type], side = Math.abs(Math.sin(car.rot)) > 0.7;
-    const o = { type: 'crate', car: true, wreck: true, vtype: car.type, rot: car.rot, seed: car.seed, burnUntil: G.time + 25000, x: car.x, y: car.y, hw: (side ? V.wid : V.len) / 2, hh: (side ? V.len : V.wid) / 2, color: car.color };
+    const o = { type: 'crate', car: true, wreck: true, vtype: car.type, rot: car.rot, seed: car.seed, burnUntil: Infinity, x: car.x, y: car.y, hw: (side ? V.wid : V.len) / 2, hh: (side ? V.len : V.wid) / 2, color: car.color };
     G.world.grid.insertBox(o);
     G.world.obstacles.push(o);
 }
@@ -7105,7 +7148,7 @@ function addCorpse(f) {
     const a = f.angle + rand(-0.5, 0.5);
     // The pool spreads out from under the body, so it goes down first
     addDecal({ kind: 'pool', x: f.x - Math.cos(a) * 6, y: f.y - Math.sin(a) * 6, r: rand(28, 40), life: 90000 });
-    addDecal({ kind: 'corpse', x: f.x, y: f.y, a, r: f.r, color: f.color, dark: f.dark, light: f.light, helmet: f.soldier, life: 70000, armL: rand(0.6, 1.4), armR: rand(0.6, 1.4) });
+    f.corpse = addDecal({ kind: 'corpse', x: f.x, y: f.y, a, r: f.r, color: f.color, dark: f.dark, light: f.light, helmet: f.soldier, life: G.revolution ? Infinity : 70000, armL: rand(0.6, 1.4), armR: rand(0.6, 1.4) });
 }
 
 function decalAlpha(d) {
@@ -7154,6 +7197,7 @@ function drawDecals(L, T, R, B, layer) {
                 break;
             }
             case 'corpse': drawCorpse(d); break;
+            case 'deadhorse': drawDeadHorse(d); break;
             case 'scorch': {
                 const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r);
                 g.addColorStop(0, 'rgba(15,12,10,0.75)'); g.addColorStop(0.6, 'rgba(25,20,15,0.45)'); g.addColorStop(1, 'rgba(30,25,20,0)');
@@ -7231,6 +7275,19 @@ function drawDecals(L, T, R, B, layer) {
 }
 
 // A body lying where it fell, in the same round style as the living, hands flung out
+// A horse lying on its side where it fell, legs out
+function drawDeadHorse(d) {
+    const L = VTYPES.horse.len, Wd = VTYPES.horse.wid, dark = shade(d.color, -0.45);
+    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.a);
+    ctx.fillStyle = dark;
+    for (const [lx, a] of [[L * 0.2, 0.3], [L * 0.28, 0.6], [-L * 0.2, -0.3], [-L * 0.28, -0.1]]) { ctx.save(); ctx.translate(lx, Wd * 0.3); ctx.rotate(a); roundRect(ctx, -3.5, 0, 7, Wd * 0.75, 3); ctx.fill(); ctx.restore(); }
+    ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(-L * 0.04, 0, L * 0.36, Wd * 0.52, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = d.color; ctx.beginPath(); ctx.ellipse(-L * 0.04, -1, L * 0.34, Wd * 0.48, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = d.color; ctx.beginPath(); ctx.ellipse(L * 0.36, Wd * 0.12, L * 0.16, Wd * 0.2, 0.4, 0, TAU); ctx.fill();
+    ctx.strokeStyle = dark; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-L * 0.36, 0); ctx.lineTo(-L * 0.52, Wd * 0.15); ctx.stroke();
+    ctx.restore();
+}
+
 function drawCorpse(d) {
     const r = d.r;
     ctx.save();
@@ -8749,9 +8806,15 @@ const VTYPES = {
     // Revolution: a stone guard tower on the base wall with a cannon on top
     tower: { name: 'Guard Tower', len: 92, wid: 92, accel: 0, brake: 1, max: 0, reverse: 0, turn: 0, hp: 3000, ram: 0, share: 0, fixed: true, tower: true, cannon: { rate: 1300, dmg: 130, speed: 1400, range: 2400 } },
     cannon: { name: 'Cannon', len: 64, wid: 56, accel: 0, brake: 1, max: 0, reverse: 0, turn: 0, hp: 1400, ram: 0, share: 0, fixed: true, cannon: { rate: 1500, dmg: 120, speed: 1300, range: 2200 } },
+    // Early Warfare: no engines. A horse to ride, and a horse-drawn wagon that carries your friends in the back
+    horse: { name: 'Horse', len: 70, wid: 26, accel: 720, brake: 1000, max: 740, reverse: 140, turn: 3.3, hp: 260, ram: 0.1, share: 0.8, offroad: true, animal: true },
+    wagon: { name: 'Wagon', len: 124, wid: 46, accel: 300, brake: 700, max: 430, reverse: 120, turn: 1.7, hp: 700, ram: 0.18, share: 0.2, seats: 4, animal: true },
     gunship: { name: 'Gunship', len: 120, wid: 70, accel: 450, brake: 700, max: 660, reverse: 300, turn: 2.1, hp: 1500, ram: 0, share: 0.1, fly: true, gun: { weapon: 'Heavy MG', rate: 70, dmg: 18 }, rockets: { rate: 1400 }, tech: true }
 };
 const CAR = VTYPES.car;
+const HORSE_COLORS = ['#7a4a2a', '#5a3a22', '#b98a5e', '#3a2a20', '#e2d8c6', '#8a6a4a', '#2a2420'];
+const WAGON_COLORS = ['#efe6d0', '#ddd0ad', '#cdbb92'];
+const animalColor = type => pick(type === 'wagon' ? WAGON_COLORS : HORSE_COLORS);
 const DRIVE_COLORS = ['#d63031', '#0984e3', '#fdcb6e', '#00b894', '#e17055', '#2d3436', '#dfe6e9', '#6c5ce7'];
 
 function spawnCars() {
@@ -8762,10 +8825,11 @@ function spawnCars() {
     const mix = { car: tech ? 8 : maze ? 12 : mountain ? 12 : 26, bike: 10, gunjeep: 5, tank: 3, truck: 5, quad: mountain ? 15 : 8, heli: 2.5, dozer: maze ? 7 : 5, supercar: city ? 3 : 1, icecream: city ? 2 : 1 };
     if (tech) { for (const k in mix) mix[k] = 0; Object.assign(mix, { hovertank: 6, jetbike: 12, mech: 4, stealth: 6, gunship: 4 }); }
     else if (G.heavy) Object.assign(mix, { tank: 8, gunjeep: 12, truck: 8, heli: 4 });
+    if (G.early) { for (const k in mix) mix[k] = 0; Object.assign(mix, { horse: maze ? 14 : 30, wagon: maze ? 4 : 9 }); }
     const place = (type, s) => {
         const T = VTYPES[type];
         const a = city || maze ? randInt(0, 3) * Math.PI / 2 : rand(0, TAU);
-        const c = { type, x: s.x, y: s.y, a, speed: 0, hp: T.hp, color: type === 'tank' || type === 'gunjeep' || type === 'truck' ? '#4f5d33' : type === 'icecream' ? '#f4f0ff' : type === 'dozer' ? '#e8b13a' : type === 'supercar' ? pick(['#ff2d55', '#ffcc00', '#00e0ff']) : pick(DRIVE_COLORS), driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: a };
+        const c = { type, x: s.x, y: s.y, a, speed: 0, hp: T.hp, color: T.animal ? animalColor(type) : type === 'tank' || type === 'gunjeep' || type === 'truck' ? '#4f5d33' : type === 'icecream' ? '#f4f0ff' : type === 'dozer' ? '#e8b13a' : type === 'supercar' ? pick(['#ff2d55', '#ffcc00', '#00e0ff']) : pick(DRIVE_COLORS), driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: a };
         parkCar(c);
         cars.push(c);
     };
@@ -8780,7 +8844,7 @@ function spawnCars() {
         }
     }
     // Boats sit on the ponds
-    if (!tech) for (const pd of G.world.ponds || []) if (Math.random() < 0.6) place('boat', { x: pd.x, y: pd.y });
+    if (!tech && !G.early) for (const pd of G.world.ponds || []) if (Math.random() < 0.6) place('boat', { x: pd.x, y: pd.y });
 }
 
 const vt = c => VTYPES[c.type];
@@ -8821,7 +8885,8 @@ function enterCar(p, c) {
     }
     if (p.isPlayer) addFloat(c.x, c.y - 40, T.name, '#fff7ec');
     else { p.driveUntil = p.tanker ? Infinity : G.time + rand(30000, 75000); p.driveGoal = null; p.stuckFor = 0; }
-    Sound.tone(T.fly ? 70 : 110, 0.4, 'sawtooth', 0.08, T.fly ? 90 : 160);
+    if (T.animal) Sound.tone(620, 0.3, 'triangle', 0.08, 420);  // a whinny, not an engine
+    else Sound.tone(T.fly ? 70 : 110, 0.4, 'sawtooth', 0.08, T.fly ? 90 : 160);
 }
 
 function exitCar(p) {
@@ -8871,14 +8936,26 @@ function updateCars(dt) {
         // The jet bike's boost (hold Shift)
         const boost = T.boost && p.isPlayer && (keys.has('ShiftLeft') || keys.has('ShiftRight'));
         const top = T.max * terrainDrag(c) * (boost ? 1.45 : 1);
-        if (boost && up && inView(c.x, c.y, 60)) G.particles.push({ type: 'glow', x: c.x - Math.cos(c.a) * T.len / 2, y: c.y - Math.sin(c.a) * T.len / 2, vx: -Math.cos(c.a) * 200, vy: -Math.sin(c.a) * 200, life: 0.3, max: 0.3, size: 6, color: TECH_DROP.neon });
+        if (boost && (up || down || left || right) && inView(c.x, c.y, 60)) G.particles.push({ type: 'glow', x: c.x - Math.cos(c.a) * T.len / 2, y: c.y - Math.sin(c.a) * T.len / 2, vx: -Math.cos(c.a) * 200, vy: -Math.sin(c.a) * 200, life: 0.3, max: 0.3, size: 6, color: TECH_DROP.neon });
         c.braking = false;
-        if (drive && up) c.speed = Math.min(top, c.speed + (c.speed < 0 ? T.brake : T.accel * (boost ? 1.6 : 1)) * dt);
-        else if (drive && down) { if (c.speed > 0) { c.speed = Math.max(0, c.speed - T.brake * dt); c.braking = true; } else c.speed = Math.max(-T.reverse, c.speed - T.accel * 0.6 * dt); }
-        else c.speed -= Math.sign(c.speed) * Math.min(Math.abs(c.speed), (T.fly ? 200 : 300) * dt);
-        if (c.speed > top) c.speed = Math.max(top, c.speed - T.brake * dt);
-        const steer = drive ? (right ? 1 : 0) - (left ? 1 : 0) : 0;
-        c.a += steer * T.turn * dt * (T.fly ? 1 : clamp(c.speed / 260, -1, 1));
+        const dirX = (right ? 1 : 0) - (left ? 1 : 0), dirY = (down ? 1 : 0) - (up ? 1 : 0);
+        if (p.isPlayer && !T.fixed) {
+            // You drive the way you press, like walking: the vehicle swings round to face that way and goes
+            if (drive && (dirX || dirY)) {
+                const want = Math.atan2(dirY, dirX);
+                c.a += clamp(angleDiff(c.a, want), -10 * dt, 10 * dt);
+                const facing = Math.cos(angleDiff(c.a, want));  // full throttle once it's pointing the right way
+                c.speed = Math.min(top, c.speed + (c.speed < 0 ? T.brake : T.accel * (boost ? 1.6 : 1) * Math.max(0.25, facing)) * dt);
+            } else c.speed -= Math.sign(c.speed) * Math.min(Math.abs(c.speed), (T.fly ? 200 : 300) * dt);
+            if (c.speed > top) c.speed = Math.max(top, c.speed - T.brake * dt);
+        } else {
+            if (drive && up) c.speed = Math.min(top, c.speed + (c.speed < 0 ? T.brake : T.accel * (boost ? 1.6 : 1)) * dt);
+            else if (drive && down) { if (c.speed > 0) { c.speed = Math.max(0, c.speed - T.brake * dt); c.braking = true; } else c.speed = Math.max(-T.reverse, c.speed - T.accel * 0.6 * dt); }
+            else c.speed -= Math.sign(c.speed) * Math.min(Math.abs(c.speed), (T.fly ? 200 : 300) * dt);
+            if (c.speed > top) c.speed = Math.max(top, c.speed - T.brake * dt);
+            const steer = drive ? (right ? 1 : 0) - (left ? 1 : 0) : 0;
+            c.a += steer * T.turn * dt * (T.fly ? 1 : clamp(c.speed / 260, -1, 1));
+        }
         const nx = c.x + Math.cos(c.a) * c.speed * dt, ny = c.y + Math.sin(c.a) * c.speed * dt;
         const ca = Math.cos(c.a), sa = Math.sin(c.a), W = CONFIG.WORLD_SIZE;
         const probes = [[T.len / 2, 0], [T.len / 2, T.wid / 2 - 4], [T.len / 2, -T.wid / 2 + 4], [-T.len / 2, T.wid / 2 - 4], [-T.len / 2, -T.wid / 2 + 4]];
@@ -8933,7 +9010,7 @@ function updateCars(dt) {
         for (const f of c.riders) { f.x = c.x; f.y = c.y; f.vx = f.vy = 0; }
         if (T.fly && inView(c.x, c.y, 200) && Math.random() < dt * 20) G.particles.push({ type: 'smoke', x: c.x + rand(-60, 60), y: c.y + rand(-60, 60), vx: rand(-60, 60), vy: rand(-60, 60), life: 0.6, max: 0.6, size: rand(8, 14), color: '200,190,170' });
         if (T.water && Math.abs(c.speed) > 100 && Math.random() < dt * 25) G.particles.push({ type: 'glow', x: c.x - ca * T.len / 2, y: c.y - sa * T.len / 2, vx: -ca * 80 + rand(-40, 40), vy: -sa * 80 + rand(-40, 40), life: 0.5, max: 0.5, size: rand(3, 6), color: '#d8f1ff' });
-        if (c.hp < T.hp * 0.4 && inView(c.x, c.y, 60) && Math.random() < dt * 12) G.particles.push({ type: 'smoke', x: c.x + ca * 30, y: c.y + sa * 30, vx: rand(-15, 15), vy: rand(-50, -25), life: 1.6, max: 1.6, size: rand(8, 14), color: c.hp < T.hp * 0.2 ? '40,36,40' : '160,160,160' });
+        if (c.hp < T.hp * 0.4 && !T.animal && inView(c.x, c.y, 60) && Math.random() < dt * 12) G.particles.push({ type: 'smoke', x: c.x + ca * 30, y: c.y + sa * 30, vx: rand(-15, 15), vy: rand(-50, -25), life: 1.6, max: 1.6, size: rand(8, 14), color: c.hp < T.hp * 0.2 ? '40,36,40' : '160,160,160' });
     }
 }
 
@@ -9023,6 +9100,7 @@ function explodeCar(c, by) {
     const p = c.driver, T = vt(c);
     if (p) exitCar(p);
     unparkCar(c);
+    if (T.animal) { animalDown(c); return; }
     // The blast goes off before the burnt shell is there to soak it up (it was shielding everyone from it)
     const big = T.hp > 900 ? 1.5 : 1;
     blast(c.x, c.y, by, 200 * big, 110 * big, `${T.name} explosion`);
@@ -9030,12 +9108,62 @@ function explodeCar(c, by) {
         const side = Math.abs(Math.sin(c.a)) > 0.7;
         // The wreck keeps the shape of what it was, lying square to its box
         const wa = side ? (Math.sin(c.a) > 0 ? Math.PI / 2 : -Math.PI / 2) : (Math.cos(c.a) > 0 ? 0 : Math.PI);
-        const wreck = { type: 'crate', car: true, wreck: true, x: c.x, y: c.y, hw: (side ? T.wid : T.len) / 2, hh: (side ? T.len : T.wid) / 2, color: c.color, horiz: !side, burnUntil: G.time + 20000, driven: c.type, wa };
+        const wreck = { type: 'crate', car: true, wreck: true, x: c.x, y: c.y, hw: (side ? T.wid : T.len) / 2, hh: (side ? T.len : T.wid) / 2, color: c.color, horiz: !side, burnUntil: Infinity, driven: c.type, wa };
         G.world.obstacles.push(wreck);
         G.world.grid.insertBox(wreck);
         addFire(c.x, c.y, Math.min(70, T.len * 0.35), 12000);
     }
     for (let i = 0; i < 14; i++) { const a = rand(0, TAU), sp = rand(150, 420); G.particles.push({ type: 'chunk', x: c.x, y: c.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.6, 1.1), max: 1.1, size: rand(5, 10), color: pick([c.color, '#2a2a2a', '#555']), rot: rand(0, TAU), spin: rand(-14, 14) }); }
+}
+
+// A horse that's killed falls where it was; a wagon that's smashed breaks apart into a heap of planks
+function animalDown(c) {
+    const T = vt(c);
+    if (c.type === 'horse') {
+        addDecal({ kind: 'deadhorse', x: c.x, y: c.y, a: c.a, color: c.color, life: 1e12 });
+        burst(c.x, c.y, 24, '#a3121e', 220, 'blood');
+        bloodSplat(c.x, c.y, c.a, 1.4);
+        Sound.thud(Sound.volAt(c.x, c.y));
+        return;
+    }
+    const side = Math.abs(Math.sin(c.a)) > 0.7, wa = side ? (Math.sin(c.a) > 0 ? Math.PI / 2 : -Math.PI / 2) : (Math.cos(c.a) > 0 ? 0 : Math.PI);
+    const wreck = { type: 'crate', car: true, wreck: true, x: c.x, y: c.y, hw: (side ? T.wid : T.len) / 2, hh: (side ? T.len : T.wid) / 2, color: c.color, horiz: !side, burnUntil: 0, driven: c.type, wa };
+    G.world.obstacles.push(wreck);
+    G.world.grid.insertBox(wreck);
+    for (let i = 0; i < 18; i++) { const a = rand(0, TAU), sp = rand(120, 360); G.particles.push({ type: 'chunk', x: c.x, y: c.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.6, 1.1), max: 1.1, size: rand(5, 11), color: pick(['#8a5a2e', '#6b4423', '#a07040', c.color]), rot: rand(0, TAU), spin: rand(-14, 14) }); }
+    Sound.crunch(Sound.volAt(c.x, c.y));
+}
+
+// A horse from above, facing +x: legs that move with its gait, the body, neck, head and mane, a swishing tail, a saddle
+function drawHorse(L, Wd, color, speed, saddle = true) {
+    const now = G ? G.time / 1000 : 0, moving = Math.abs(speed) > 20, ph = now * (6 + Math.abs(speed) / 60);
+    const dark = shade(color, -0.45), light = shade(color, 0.2);
+    ctx.fillStyle = dark;
+    for (const [lx, ly, o] of [[L * 0.24, -Wd * 0.38, 0], [L * 0.24, Wd * 0.38, Math.PI], [-L * 0.24, -Wd * 0.38, Math.PI], [-L * 0.24, Wd * 0.38, 0]]) {
+        const d = moving ? Math.sin(ph + o) * 7 : 0;
+        roundRect(ctx, lx + d - 5, ly - 3.5, 10, 7, 3); ctx.fill();
+    }
+    // Tail
+    const sw = Math.sin(now * 3) * 0.35;
+    ctx.save(); ctx.translate(-L * 0.38, 0); ctx.rotate(Math.PI + sw);
+    ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(L * 0.1, 0, L * 0.13, Wd * 0.13, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+    // Body
+    ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(-L * 0.04, 0, L * 0.34 + 2, Wd * 0.46 + 2, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(-L * 0.04, 0, L * 0.34, Wd * 0.46, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.beginPath(); ctx.ellipse(-L * 0.08, -Wd * 0.14, L * 0.22, Wd * 0.18, 0, 0, TAU); ctx.fill();
+    // Neck and head
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(L * 0.3, 0, L * 0.14, Wd * 0.24, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = light; ctx.beginPath(); ctx.ellipse(L * 0.44, 0, L * 0.1, Wd * 0.19, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(L * 0.52, 0, L * 0.035, Wd * 0.13, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(L * 0.38, -Wd * 0.14); ctx.lineTo(L * 0.34, -Wd * 0.3); ctx.lineTo(L * 0.41, -Wd * 0.18); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(L * 0.38, Wd * 0.14); ctx.lineTo(L * 0.34, Wd * 0.3); ctx.lineTo(L * 0.41, Wd * 0.18); ctx.fill();
+    // Mane down the neck
+    ctx.strokeStyle = dark; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(L * 0.16, 0); ctx.lineTo(L * 0.38, 0); ctx.stroke(); ctx.lineCap = 'butt';
+    if (saddle) {
+        ctx.fillStyle = '#6b2a1e'; roundRect(ctx, -L * 0.16, -Wd * 0.42, L * 0.26, Wd * 0.84, 5); ctx.fill();
+        ctx.fillStyle = '#3a1810'; ctx.fillRect(-L * 0.02, -Wd * 0.5, 3, Wd);
+    }
 }
 
 // Electricity reaching a vehicle shorts it out: the fuel goes up, whoever's inside is electrocuted, and the charge
@@ -9095,6 +9223,26 @@ function bulletHitsDrivenCar(b) {
 function drawVehicleBody(c) {
     const T = vt(c), L = T.len, Wd = T.wid, now = G.time / 1000;
     switch (c.type) {
+        case 'horse':
+            drawHorse(L, Wd, c.color, c.speed || 0);
+            break;
+        case 'wagon': {
+            // The cart behind, a horse in the shafts in front (a smashed wagon has lost its horse)
+            const HL = 60, cart = L - HL;
+            if (!c.wreck) {
+                ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(-L / 2 + cart, -9); ctx.lineTo(L / 2 - 14, -9); ctx.moveTo(-L / 2 + cart, 9); ctx.lineTo(L / 2 - 14, 9); ctx.stroke();
+                ctx.save(); ctx.translate(L / 2 - HL / 2, 0); drawHorse(HL, 24, '#5a3a22', c.speed || 0, false); ctx.restore();
+            }
+            ctx.fillStyle = '#1e1a16';
+            for (const x of [-L / 2 + 12, -L / 2 + cart - 18]) { ctx.fillRect(x, -Wd / 2 - 4, 16, 6); ctx.fillRect(x, Wd / 2 - 2, 16, 6); }
+            ctx.fillStyle = '#6b4423'; ctx.fillRect(-L / 2, -Wd / 2 + 2, cart, Wd - 4);
+            ctx.fillStyle = '#7d5230'; for (let x = -L / 2 + 3; x < -L / 2 + cart - 3; x += 9) ctx.fillRect(x, -Wd / 2 + 4, 6, Wd - 8);
+            ctx.fillStyle = c.color; roundRect(ctx, -L / 2 + 6, -Wd / 2 + 1, cart - 16, Wd - 2, 10); ctx.fill();
+            ctx.strokeStyle = 'rgba(90,70,40,0.45)'; ctx.lineWidth = 2;
+            for (let x = -L / 2 + 16; x < -L / 2 + cart - 12; x += 13) { ctx.beginPath(); ctx.moveTo(x, -Wd / 2 + 2); ctx.lineTo(x, Wd / 2 - 2); ctx.stroke(); }
+            break;
+        }
         case 'bike':
             ctx.fillStyle = '#151515'; ctx.fillRect(-L / 2, -3, 12, 6); ctx.fillRect(L / 2 - 12, -3, 12, 6);
             ctx.fillStyle = c.color; roundRect(ctx, -L / 2 + 8, -Wd / 2 + 2, L - 16, Wd - 4, 6); ctx.fill();
@@ -9214,7 +9362,7 @@ function wreckSprite(type, color) {
     ctx = cv.getContext('2d');
     try {
         ctx.translate(cv.width / 2, cv.height / 2);
-        drawVehicleBody({ type, color, speed: 0, driver: null, riders: [] });
+        drawVehicleBody({ type, color, speed: 0, driver: null, riders: [], wreck: true });
         if (T.cannon) { ctx.fillStyle = '#3d4a28'; ctx.beginPath(); ctx.arc(0, 0, T.wid * 0.34, 0, TAU); ctx.fill(); ctx.save(); ctx.rotate(0.5); ctx.fillStyle = '#2b3420'; ctx.fillRect(0, -5, T.len * 0.55, 10); ctx.restore(); }
         // Char it: blacken everything that was drawn, leave patches of scorched paint and bare metal showing
         const rnd = seededRand(type.length * 977 + color.charCodeAt(1));
@@ -9244,9 +9392,10 @@ function drawCars() {
         ctx.translate(c.x, c.y);
         ctx.rotate(c.a);
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fillRect(-L / 2 + 5, -Wd / 2 + 7, L, Wd);
+        if (T.animal) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(5, 7, L * 0.48, Wd * 0.55, 0, 0, TAU); ctx.fill(); }  // a soft shadow, not a car's box
+        else ctx.fillRect(-L / 2 + 5, -Wd / 2 + 7, L, Wd);
         drawVehicleBody(c);
-        if (!['heli', 'boat', 'tank', 'dozer', 'mech', 'gunship', 'hovertank'].includes(c.type)) {
+        if (!['heli', 'boat', 'tank', 'dozer', 'mech', 'gunship', 'hovertank', 'horse', 'wagon'].includes(c.type)) {
             ctx.fillStyle = c.driver ? '#fff6c2' : '#d8d2b0';
             ctx.fillRect(L / 2 - 4, -Wd / 2 + 4, 4, 6); ctx.fillRect(L / 2 - 4, Wd / 2 - 10, 4, 6);
             ctx.fillStyle = c.braking ? '#ff3030' : '#8a1a1a';
@@ -9254,7 +9403,9 @@ function drawCars() {
         }
         if (c.driver && c.type !== 'heli' && c.type !== 'gunship' && !(c.type === 'stealth' && c.driver.hidden)) {
             ctx.fillStyle = c.driver.color;
-            ctx.beginPath(); ctx.arc(c.type === 'bike' || c.type === 'quad' ? -4 : 2, c.type === 'bike' || c.type === 'quad' ? 0 : -Wd * 0.18, 9, 0, TAU); ctx.fill();
+            const rx = c.type === 'horse' ? -L * 0.04 : c.type === 'wagon' ? -L / 2 + (L - 60) - 14 : c.type === 'bike' || c.type === 'quad' ? -4 : 2;
+            const ry = c.type === 'bike' || c.type === 'quad' || c.type === 'horse' || c.type === 'wagon' ? 0 : -Wd * 0.18;
+            ctx.beginPath(); ctx.arc(rx, ry, 9, 0, TAU); ctx.fill();
             ctx.strokeStyle = '#fff7ec'; ctx.lineWidth = 2; ctx.stroke();
         }
         ctx.restore();
@@ -9288,7 +9439,7 @@ const TECH_DROP = { first: [60000, 90000], every: [180000, 300000], neon: '#ff3d
 
 function spawnVehicle(type, x, y, a = rand(0, TAU)) {
     const T = VTYPES[type];
-    const c = { type, x, y, a, speed: 0, hp: T.hp, color: T.tech ? '#1b1f2a' : pick(DRIVE_COLORS), driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: a, firedAt: -1e9 };
+    const c = { type, x, y, a, speed: 0, hp: T.hp, color: T.tech ? '#1b1f2a' : T.animal ? animalColor(type) : pick(DRIVE_COLORS), driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: a, firedAt: -1e9 };
     parkCar(c);
     (G.world.cars || (G.world.cars = [])).push(c);
     return c;
@@ -10143,7 +10294,7 @@ function updateBullets(dt) {
                     burst(b.x - sx, b.y - sy, 3, '#ffe08a', 260, 'glow');
                     G.particles.push({ type: 'smoke', x: b.x - sx, y: b.y - sy, vx: -sx * 2, vy: -sy * 2, life: 0.6, max: 0.6, size: rand(4, 7), color: '190,180,165' });
                 }
-                if (b.weapon === 'Crossbow') addDecal({ kind: 'bolt', x: b.x - sx * 0.5, y: b.y - sy * 0.5, a: Math.atan2(b.vy, b.vx), life: 60000 });
+                if (b.weapon === 'Crossbow' || b.weapon === 'Bow') addDecal({ kind: 'bolt', x: b.x - sx * 0.5, y: b.y - sy * 0.5, a: Math.atan2(b.vy, b.vx), life: 60000 });
                 else if (wall.type === 'wall' || (wall.type === 'crate' && !wall.car)) addDecal({ kind: 'hole', x: b.x - sx * 0.3, y: b.y - sy * 0.3, life: 60000 });
                 break;
             }
@@ -10558,15 +10709,15 @@ function render() {
         ctx.fillText(G.player.reviveT > 0 ? `${G.player.helper ? G.player.helper.name : 'A teammate'} is reviving you...` : 'Crawl toward a teammate: they can get you back up', viewW / 2, viewH * 0.5);
         ctx.restore();
     }
-    // Revolution: a big countdown while you wait to respawn
+    // Revolution: you're dead for good; spectating your side
     if (G.revolution && G.mode === 'playing' && G.player && G.player.dead && !G.result) {
         const q = G.revolution.queue.find(q => q.f === G.player);
         ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(10,6,20,0.45)'; ctx.fillRect(0, viewH * 0.36, viewW, viewH * 0.2);
         ctx.font = '900 54px "Black Ops One", sans-serif'; ctx.fillStyle = q ? '#ffd166' : '#ff6b6b';
-        ctx.fillText(q ? `RESPAWNING IN ${Math.max(1, Math.ceil((q.at - G.time) / 1000))}` : 'OUT OF RESPAWNS', viewW / 2, viewH * 0.44);
+        ctx.fillText(q ? `RESPAWNING IN ${Math.max(1, Math.ceil((q.at - G.time) / 1000))}` : 'YOU ARE DEAD', viewW / 2, viewH * 0.44);
         ctx.font = '600 20px Rajdhani, sans-serif'; ctx.fillStyle = '#fff7ec';
-        ctx.fillText(q ? 'You will come back in your barracks' : 'Your side has no respawns left: spectating', viewW / 2, viewH * 0.51);
+        ctx.fillText(q ? 'You will come back in your barracks' : 'No respawns: spectating your side', viewW / 2, viewH * 0.51);
         ctx.restore();
     }
     for (const c of G.confetti) {
@@ -10769,7 +10920,7 @@ function drawBox(o) {
     ctx.fillRect(x + 5, y + 7, w, h);
     if (o.type === 'box') { o.chest ? drawChest(o) : drawLootBox(o); return; }
     if (o.car && o.wreck) {
-        // Burnt-out shell, still burning for a while
+        // Burnt-out shell, burning for good
         if (o.driven) { ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.wa); ctx.drawImage(wreckSprite(o.driven, o.color), -wreckSprite(o.driven, o.color).width / 2, -wreckSprite(o.driven, o.color).height / 2); ctx.restore(); }
         else if (o.vtype) { ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot); drawVehicleShape(o.vtype, o.color, o.seed, true); ctx.restore(); }
         else drawCar({ color: shade(o.color, -0.7), horiz: o.horiz }, x, y, w, h);
@@ -11563,9 +11714,41 @@ function drawFighter(f) {
         // Arms stretched out in front, swiping
         const ext = Math.sin(f.punch * Math.PI) * 14;
         hands = [[r * 1.15 + (f.punchHand === 0 ? ext : 0), -r * 0.5], [r * 1.05 + (f.punchHand === 1 ? ext : 0), r * 0.55]];
+    } else if (w.blade === 'sword') {
+        // At rest it's held out to the side; a swing sweeps it across the front
+        const a = f.punch > 0 ? 1.1 - (1 - f.punch) * 2.3 : 0.6;
+        const gx = r * 0.55, gy = r * 0.6;
+        ctx.save(); ctx.translate(gx, gy); ctx.rotate(a - 0.6);
+        ctx.fillStyle = '#5a3a1e'; ctx.fillRect(-7, -2.5, 10, 5);
+        ctx.fillStyle = '#c9a24a'; ctx.fillRect(3, -7, 4, 14);
+        ctx.fillStyle = '#dfe4ec'; ctx.beginPath(); ctx.moveTo(7, -3); ctx.lineTo(7 + w.len, -2.4); ctx.lineTo(14 + w.len, 0); ctx.lineTo(7 + w.len, 2.4); ctx.lineTo(7, 3); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(110,120,140,0.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(6 + w.len, 0); ctx.stroke();
+        ctx.restore();
+        if (f.punch > 0.15) { ctx.strokeStyle = `rgba(255,255,255,${f.punch * 0.35})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(gx, gy, w.len + 10, -1.5, a - 0.6); ctx.stroke(); }
+        hands = [[gx, gy], [r * 0.45, -r * 0.75]];
+    } else if (w.blade === 'spear') {
+        // Held level in both hands; an attack is a straight thrust
+        const ext = Math.sin(f.punch * Math.PI) * 30, y = r * 0.42;
+        ctx.fillStyle = '#8a5a2e'; ctx.fillRect(-r * 0.6 + ext, y - 2, w.len, 4);
+        const tip = -r * 0.6 + w.len + ext;
+        ctx.fillStyle = '#c9a24a'; ctx.fillRect(tip - 3, y - 3, 3, 6);
+        ctx.fillStyle = '#dfe4ec'; ctx.beginPath(); ctx.moveTo(tip, y - 5.5); ctx.lineTo(tip + 16, y); ctx.lineTo(tip, y + 5.5); ctx.closePath(); ctx.fill();
+        hands = [[r * 0.25 + ext, y], [r * 0.95 + ext, y]];
     } else if (w.melee) {
         const ext = Math.sin(f.punch * Math.PI) * 18;
         hands = [[r * 0.72 + (f.punchHand === 0 ? ext : 0), -r * 0.68], [r * 0.72 + (f.punchHand === 1 ? ext : 0), r * 0.68]];
+    } else if (w.shape === 'bow') {
+        // The bow out in front; the string drawn back with an arrow on it when one's nocked
+        const bx = r * 1.25 + 18, R0 = 20, A = 1.1, ex = bx + Math.cos(A) * R0 - R0, ey = Math.sin(A) * R0;
+        const nocked = f.mag[held(f)] > 0 && !f.reload, pull = nocked ? 14 : 0;
+        ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(bx - R0, 0, R0, -A, A); ctx.stroke();
+        ctx.strokeStyle = '#8a5a2e'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(bx - R0, 0, R0, -A, A); ctx.stroke();
+        ctx.strokeStyle = '#efe6d0'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(ex, -ey); ctx.lineTo(ex - pull, 0); ctx.lineTo(ex, ey); ctx.stroke();
+        if (nocked) {
+            ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ex - pull, 0); ctx.lineTo(bx + 10, 0); ctx.stroke();
+            ctx.fillStyle = '#d8dde6'; ctx.beginPath(); ctx.moveTo(bx + 15, 0); ctx.lineTo(bx + 9, -3); ctx.lineTo(bx + 9, 3); ctx.closePath(); ctx.fill();
+        }
+        hands = [[bx - 2, 0], [ex - pull, 0]];
     } else {
         // Gun body, barrel and a rarity-colored stripe
         const gx = r * 0.35 + kick;
@@ -11714,12 +11897,12 @@ function drawBullets(L, T, R, B) {
     for (const b of G.bullets) {
         if (b.x < L - 60 || b.x > R + 60 || b.y < T - 60 || b.y > B + 60) continue;
         if (b.rocket) { drawRocket(b); continue; }
-        if (b.weapon === 'Crossbow') {
-            const a = Math.atan2(b.vy, b.vx);
+        if (b.weapon === 'Crossbow' || b.weapon === 'Bow') {
+            const a = Math.atan2(b.vy, b.vx), L = b.weapon === 'Bow' ? 36 : 26;
             ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
-            ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-26, 0); ctx.lineTo(0, 0); ctx.stroke();
+            ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = b.weapon === 'Bow' ? 2.2 : 3; ctx.beginPath(); ctx.moveTo(-L, 0); ctx.lineTo(0, 0); ctx.stroke();
             ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-3, -3.5); ctx.lineTo(-3, 3.5); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#e8e3d0'; ctx.beginPath(); ctx.moveTo(-26, 0); ctx.lineTo(-32, -5); ctx.lineTo(-29, 0); ctx.lineTo(-32, 5); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = b.weapon === 'Bow' ? '#d64545' : '#e8e3d0'; ctx.beginPath(); ctx.moveTo(-L, 0); ctx.lineTo(-L - 6, -5); ctx.lineTo(-L - 3, 0); ctx.lineTo(-L - 6, 5); ctx.closePath(); ctx.fill();
             ctx.restore();
             continue;
         }
@@ -12012,7 +12195,7 @@ function updateHUD() {
     setText(hud.scope, 'scope', p.scope === 1 ? '1x' : `${p.scope}x`);
     if (G.revolution) {
         const Rv = G.revolution;
-        setHTML(hud.teamScore, 'teams', [0, 1].map(t => `<div class="ts${t === p.team ? ' mine' : ''}${revoLeft(t) === 0 ? ' out' : ''}"><i style="background:${REVO.sides[t].flag}"></i><b>${G.teamAlive[t]}</b><span>${revoName(t)} · ${Rv.bases[t].fallen ? 'base fallen' : `base ${Math.round(baseHealth(Rv.bases[t]) * 100)}% · ${Rv.tickets[t]} respawns`}</span></div>`).join('<em>vs</em>'));
+        setHTML(hud.teamScore, 'teams', [0, 1].map(t => `<div class="ts${t === p.team ? ' mine' : ''}${revoLeft(t) === 0 ? ' out' : ''}"><i style="background:${REVO.sides[t].flag}"></i><b>${G.teamAlive[t]}</b><span>${revoName(t)} · ${Rv.bases[t].fallen ? 'base fallen' : `base ${Math.round(baseHealth(Rv.bases[t]) * 100)}%`}</span></div>`).join('<em>vs</em>'));
     } else if (G.war) {
         setHTML(hud.teamScore, 'teams', G.teamAlive.map((n, t) =>
             `<div class="ts${t === p.team ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${n}</b><span>${t === p.team ? 'Your team' : TEAMS[t].name}</span></div>`).join('<em>vs</em>'));
@@ -12033,7 +12216,7 @@ function updateHUD() {
         else if (F.roof) zt = 'Get to the helicopter!';
         else zt = `${F.b.hq ? 'HQ' : F.b.kind} floor ${F.level}/${F.b.floors}${F.b.hq ? ': find the stairs up' : ''}`;
     }
-    else if (G.revolution) zt = p.dead ? (G.revolution.queue.some(q => q.f === p) ? `Respawning in ${Math.ceil((G.revolution.queue.find(q => q.f === p).at - G.time) / 1000)}s` : 'Out of respawns') : `Wipe out the ${revoName(1 - p.team)} · ${fmtTime(Math.max(0, (REVO.timeLimit - G.time) / 1000))} left`;
+    else if (G.revolution) zt = p.dead ? (G.revolution.queue.some(q => q.f === p) ? `Respawning in ${Math.ceil((G.revolution.queue.find(q => q.f === p).at - G.time) / 1000)}s` : 'Dead: spectating') : `Wipe out the ${revoName(1 - p.team)} · ${fmtTime(Math.max(0, (REVO.timeLimit - G.time) / 1000))} left`;
     else if (z.state === 'wait') zt = `Zone shrinks in ${fmtTime(z.timer)}`;
     else if (z.state === 'shrink') zt = `Zone closing ${fmtTime(z.timer)}`;
     else zt = 'Final zone';
@@ -12081,7 +12264,7 @@ function updateHUD() {
         }
         const w = WEAPONS[n];
         const col = RARITY[w.rarity].color;
-        const sub = `${p.mag[n]} / ${p.ammo[n] === Infinity ? '∞' : p.ammo[n]}`;
+        const sub = w.melee ? (w.blade === 'spear' ? 'Long reach' : 'Melee') : `${p.mag[n]} / ${p.ammo[n] === Infinity ? '∞' : p.ammo[n]}`;
         html += `<div class="slot${active ? ' active' : ''}" style="border-color:${active ? col : col + '44'}"><span class="key">${i + 1}</span><span class="name" style="color:${col}">${n}</span><span class="sub">${sub}</span></div>`;
     }
     setHTML(hud.hotbar, 'hotbar', html);
@@ -12121,7 +12304,7 @@ function updateHUD() {
             const T = vt(p.car);
             prompt = `${T.name}: <kbd>W</kbd><kbd>S</kbd> ${T.fly ? 'Fly' : 'Drive'} · <kbd>A</kbd><kbd>D</kbd> Steer${T.gun || T.cannon ? ' · Click to fire' : ''} · <kbd>F</kbd> Get out · ${Math.round(Math.abs(p.car.speed) / 6)} km/h`;
         } else if (car) {
-            prompt = `<kbd>F</kbd> Get in the ${vt(car).name}`;
+            prompt = `<kbd>F</kbd> ${vt(car).animal ? 'Get on the' : 'Get in the'} ${vt(car).name}`;
         } else if (st) {
             const where = st.to === 1 ? 'the street' : `floor ${st.to}`;
             prompt = p.stairLock ? 'Step off the stairs and back on to use them again' : `Stand on the stairs to go ${st.dir} to ${where} (your group comes too)`;
@@ -12344,14 +12527,15 @@ const MODES = [
     { id: 'war', name: 'TEAMS', desc: 'Teams battle it out. Arm your squad from big supply crates and wipe out the other teams.' },
     { id: 'ffa', name: 'FREE FOR ALL', desc: 'Every player for themselves. Last one standing wins.' },
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
-    { id: 'revolution', name: 'REVOLUTION', desc: 'Rebels against the Regime: fortified bases with healing rooms and an armory, chests everywhere, tanks and cannons. Everyone is tougher and comes back at their barracks while their side has respawns left. A long war: 15 to 30 minutes.' },
+    { id: 'revolution', name: 'REVOLUTION', desc: 'Rebels against the Regime: fortified bases with healing rooms and an armory, chests everywhere, tanks and cannons. Everyone is tougher, and there are no respawns or revives: when you die, you stay dead.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' }
 ];
 // After the mode and its settings, you pick how the fight is armed
 const WARFARE = {
     normal: { name: 'NORMAL WARFARE', desc: 'Ordinary guns to find in boxes, ordinary cars and trucks.' },
     heavy: { name: 'HEAVY WARFARE', desc: 'Heavy guns to find, supply crates of heavy weapons everywhere, and lots of tanks and gun jeeps.' },
-    hightech: { name: 'HIGH TECH WARFARE', desc: 'Only quantum guns and tech vehicles, and quantum drops keep falling.' }
+    hightech: { name: 'HIGH TECH WARFARE', desc: 'Only quantum guns and tech vehicles, and quantum drops keep falling.' },
+    early: { name: 'EARLY WARFARE', desc: 'No guns and no engines: swords, spears, bows and crossbows, and horses and wagons to ride.' }
 };
 let lastWarfare = 'normal';
 let menuMode = 0;
@@ -12650,17 +12834,17 @@ function openTypeSelect() {
 // Little pictures of each warfare type: the guns (and a vehicle) you'll be fighting with
 function drawWarfarePreview(cv, type) {
     const g = cv.getContext('2d'), W = cv.width, H = cv.height;
-    const bg = type === 'hightech' ? ['#0a0620', '#1a0d40'] : type === 'heavy' ? ['#2a2a1e', '#3d3a26'] : ['#23402a', '#2f5a36'];
+    const bg = type === 'hightech' ? ['#0a0620', '#1a0d40'] : type === 'heavy' ? ['#2a2a1e', '#3d3a26'] : type === 'early' ? ['#4a3620', '#6b4f2c'] : ['#23402a', '#2f5a36'];
     const grad = g.createLinearGradient(0, 0, W, H); grad.addColorStop(0, bg[0]); grad.addColorStop(1, bg[1]);
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
     if (type === 'hightech') { g.strokeStyle = 'rgba(0,229,255,0.15)'; g.lineWidth = 1; for (let x = 0; x < W; x += 20) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); } for (let y = 0; y < H; y += 20) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); } }
-    const guns = type === 'hightech' ? ['Plasma Rifle', 'Laser Beam', 'Railgun'] : type === 'heavy' ? ['Minigun', 'Rocket Launcher', 'Heavy MG'] : ['Pistol', 'Shotgun', 'Mac10'];
+    const guns = type === 'hightech' ? ['Plasma Rifle', 'Laser Beam', 'Railgun'] : type === 'heavy' ? ['Minigun', 'Rocket Launcher', 'Heavy MG'] : type === 'early' ? ['Sword', 'Spear', 'Bow'] : ['Pistol', 'Shotgun', 'Mac10'];
     guns.forEach((k, i) => { const img = SPR.loot[k]; if (img) g.drawImage(img, 20 + i * 92, 18, 84, 84); });
     g.save(); g.translate(W / 2, 140);
-    const veh = { hightech: 'hovertank', heavy: 'tank', normal: 'car' }[type];
+    const veh = { hightech: 'hovertank', heavy: 'tank', normal: 'car', early: 'wagon' }[type];
     const T = VTYPES[veh], prev = ctx;
     ctx = g;  // borrow the in-game vehicle drawing for the card
-    try { drawVehicleBody({ type: veh, color: type === 'normal' ? '#d63031' : type === 'heavy' ? '#4f5d33' : '#1b1f2a', a: 0, turret: 0 }); } finally { ctx = prev; }
+    try { drawVehicleBody({ type: veh, color: type === 'normal' ? '#d63031' : type === 'heavy' ? '#4f5d33' : type === 'early' ? '#efe6d0' : '#1b1f2a', a: 0, turret: 0 }); } finally { ctx = prev; }
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
@@ -12788,12 +12972,16 @@ function startGame(map = lastMap) {
     hud.teamScore.classList.toggle('hidden', !war && !G.noZone);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
+    // Early Warfare: nothing to throw and no scopes, so no grenade panel or scope readout
+    $('grenade-panel').classList.toggle('hidden', !!G.early);
+    hud.scope.parentElement.classList.toggle('hidden', !!G.early);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
     hud.cells.water.classList.toggle('hidden', !G.survival);
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
-    if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side, ${G.revolution.tickets[0]} respawns each. Arm up from the chests in your armory!`);
+    if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
+    else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
     else if (G.hightech && war) showBanner(`HIGH TECH TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Find quantum guns in the crates and grab a mech!');
     else if (war) showBanner(`TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, false, 'Grab guns from the supply crates near your base');
     else if (G.zombies) { const z = G.fighters.filter(f => f.zombie).length; showBanner('ZOMBIES', true, `${z} zombies are out there. Survive with ${G.fighters.length - z - 1} other survivors.`); }
@@ -12801,6 +12989,7 @@ function startGame(map = lastMap) {
         : G.world.terrain === 'mountain' ? 'Climb the mountains with your group to the helicopter on the snowy summit!'
         : `Lead your group across the city to the HQ tower and climb ${G.hq.floors} floors to the helicopter!`);
     else if (G.survival) showBanner('SURVIVAL', true, 'Hunt for meat (C to eat), find water (V to drink), rest when tired (B). Everyone moves when the countdown ends!');
+    else if (G.early) showBanner('EARLY WARFARE', true, `${G.alive} players. Swords, spears, bows and crossbows only!`);
     else if (G.hightech) showBanner('HIGH TECH WARFARE', true, `${G.alive} players. Find a quantum gun, grab a tech vehicle!`);
     else if (G.heavy && !war) showBanner('HEAVY WARFARE', true, `${G.alive} players. Find the heavy guns: supply crates everywhere!`);
     else if (G.epic) showBanner(`EPIC FREE FOR ALL: ${G.alive} PLAYERS`, false, 'Supply crates everywhere. Grab the heavy guns!');
