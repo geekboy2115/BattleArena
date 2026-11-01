@@ -6395,7 +6395,9 @@ function updatePlayer(p, dt) {
     if (keys.has('KeyS') || keys.has('ArrowDown')) my += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
     if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
-    const len = Math.hypot(mx, my) || 1;
+    let len = Math.hypot(mx, my) || 1;
+    // (the touch joystick: as fast as you push it)
+    if (I === LOCAL_INPUT && TOUCH.move.on) { mx = TOUCH.move.x; my = TOUCH.move.y; len = 1; }
     // Driving: the car handles the controls (see updateCars)
     if (p.car) return;
     // Survival: frozen on the platform until the countdown ends; resting until you move
@@ -13871,6 +13873,7 @@ function frame(now) {
     last = now;
     // (playing on a friend's game: their computer runs it and you watch their picture of your view)
     if (NET.viewing) { requestAnimationFrame(frame); return; }
+    if (TOUCH.enabled) touchFrame();
     if (G && G.mode !== 'paused') {
         // Slow-mo eases back to normal speed (slower recovery during the victory moment)
         G.timeScale = Math.min(1, G.timeScale + dt * (G.victory ? 0.35 : 2.2));
@@ -14255,3 +14258,157 @@ $('fr-back').addEventListener('click', () => {
 });
 $('nl-leave').addEventListener('click', () => { netStop(); $('friends').classList.add('hidden'); toMenu(); });
 $('nl-back').addEventListener('click', () => $('net-leave').classList.add('hidden'));
+
+// ---------- Touch controls (phones and iPads) ----------
+// Left thumb: a joystick that walks you (as fast as you push it). Right thumb: a joystick that aims, and fires
+// once you push it out past the middle. Buttons for F, reload, heal, throw, switch gun and sprint
+const TOUCH = {
+    enabled: false,
+    move: { on: false, id: null, x: 0, y: 0, ox: 0, oy: 0 },
+    aim: { on: false, id: null, x: 1, y: 0, mag: 0, ox: 0, oy: 0 },
+    radius: 60, fireAt: 0.35, keysDown: new Set()
+};
+function enableTouch() {
+    if (TOUCH.enabled) return;
+    TOUCH.enabled = true;
+    document.body.classList.add('touch');
+}
+if (window.matchMedia && matchMedia('(pointer: coarse)').matches) enableTouch();
+window.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') enableTouch(); }, true);
+
+// A key from the touch controls: pressed here, or sent to the host when playing on a friend's game
+function touchKey(code, down) {
+    if (NET.viewing) { netSend({ t: 'k', code, down }); return; }
+    if (down) { if (!keys.has(code)) { keys.add(code); onKeyPress(code); } }
+    else { keys.delete(code); if (code === 'KeyG') playerRelease(); }
+}
+// The movement stick drives the arrow keys too (cars and horses steer with those)
+function stickKeys(x, y) {
+    const want = new Set();
+    if (y < -0.38) want.add('KeyW'); if (y > 0.38) want.add('KeyS');
+    if (x < -0.38) want.add('KeyA'); if (x > 0.38) want.add('KeyD');
+    for (const k of ['KeyW', 'KeyA', 'KeyS', 'KeyD']) {
+        if (want.has(k) && !TOUCH.keysDown.has(k)) { TOUCH.keysDown.add(k); NET.viewing ? netSend({ t: 'k', code: k, down: true }) : keys.add(k); }
+        if (!want.has(k) && TOUCH.keysDown.has(k)) { TOUCH.keysDown.delete(k); NET.viewing ? netSend({ t: 'k', code: k, down: false }) : keys.delete(k); }
+    }
+}
+function stickAt(st, e) {
+    let dx = e.clientX - st.ox, dy = e.clientY - st.oy;
+    const d = Math.hypot(dx, dy), R = TOUCH.radius;
+    if (d > R) { dx *= R / d; dy *= R / d; }
+    return { x: dx / R, y: dy / R, mag: Math.min(1, d / R) };
+}
+function drawStick(el, st, v) {
+    el.classList.toggle('on', st.on);
+    el.firstElementChild.style.transform = `translate(${v.x * TOUCH.radius}px, ${v.y * TOUCH.radius}px)`;
+}
+// Each frame: the aim stick points the crosshair (and fires) for you, or for your view on a friend's game
+function touchFrame() {
+    const a = TOUCH.aim, firing = a.on && a.mag > TOUCH.fireAt;
+    if (NET.viewing) {
+        const v = $('net-video'), vw = v.videoWidth || 1280, vh = v.videoHeight || 720;
+        if (a.on) netSend({ t: 'm', x: vw / 2 + a.x * 220, y: vh / 2 + a.y * 220 });
+        if (firing !== !!TOUCH.netFiring) { TOUCH.netFiring = firing; netSend({ t: 'b', button: 0, down: firing }); }
+        return;
+    }
+    const p = G && G.player;
+    if (!p || G.mode === 'demo') return;
+    // (the crosshair sits out along the way you're aiming; further the harder you push)
+    const reach = 140 + 260 * (a.on ? a.mag : 0.6);
+    mouse.x = viewW / 2 + (p.x - G.cam.x) * G.zoom + a.x * reach;
+    mouse.y = viewH / 2 + (p.y - G.cam.y) * G.zoom + a.y * reach;
+    if (a.on || TOUCH.wasFiring) mouse.down = firing;
+    TOUCH.wasFiring = firing;
+}
+(function setUpTouch() {
+    const layer = $('touch'), moveEl = $('stick-move'), aimEl = $('stick-aim');
+    layer.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        enableTouch();
+        Sound.init();
+        // (the sticks stay put, next to the supplies: a thumb anywhere on that side works the stick on that side)
+        const left = e.clientX < window.innerWidth * 0.5;
+        const st = left ? TOUCH.move : TOUCH.aim, el = left ? moveEl : aimEl;
+        if (st.on) return;
+        const r = el.getBoundingClientRect();
+        st.on = true; st.id = e.pointerId; st.ox = r.left + r.width / 2; st.oy = r.top + r.height / 2;
+        const v = stickAt(st, e);
+        if (left) { st.x = v.x; st.y = v.y; stickKeys(v.x, v.y); }
+        else { if (v.mag > 0.15) { st.x = v.x / v.mag; st.y = v.y / v.mag; } st.mag = v.mag; }
+        drawStick(el, st, v);
+        layer.setPointerCapture(e.pointerId);
+    });
+    layer.addEventListener('pointermove', e => {
+        for (const [st, el, isMove] of [[TOUCH.move, moveEl, true], [TOUCH.aim, aimEl, false]]) {
+            if (!st.on || st.id !== e.pointerId) continue;
+            const v = stickAt(st, e);
+            if (isMove) { st.x = v.x; st.y = v.y; stickKeys(v.x, v.y); }
+            else if (v.mag > 0.15) { st.x = v.x / v.mag; st.y = v.y / v.mag; st.mag = v.mag; }
+            else st.mag = v.mag;
+            drawStick(el, st, v);
+        }
+    });
+    const end = e => {
+        for (const [st, el, isMove] of [[TOUCH.move, moveEl, true], [TOUCH.aim, aimEl, false]]) {
+            if (!st.on || st.id !== e.pointerId) continue;
+            st.on = false; st.id = null;
+            if (isMove) { st.x = st.y = 0; stickKeys(0, 0); } else st.mag = 0;
+            drawStick(el, st, { x: 0, y: 0 });
+        }
+    };
+    layer.addEventListener('pointerup', end);
+    layer.addEventListener('pointercancel', end);
+    // Buttons: held down like keys
+    for (const b of document.querySelectorAll('#touch-buttons [data-key]')) {
+        const code = b.dataset.key;
+        b.addEventListener('pointerdown', e => {
+            e.preventDefault(); e.stopPropagation();
+            enableTouch(); Sound.init();
+            if (b.dataset.toggle) { const on = !b.classList.contains('on'); b.classList.toggle('on', on); touchKey(code, on); return; }
+            b.classList.add('down'); b.setPointerCapture(e.pointerId); touchKey(code, true);
+        });
+        const up = e => { if (b.dataset.toggle || !b.classList.contains('down')) return; b.classList.remove('down'); touchKey(code, false); };
+        b.addEventListener('pointerup', up);
+        b.addEventListener('pointercancel', up);
+    }
+    // Tap the bandages, medkit, meat or water to use them
+    for (const [id, code] of [['cell-bandage', 'KeyQ'], ['cell-medkit', 'KeyE'], ['cell-meat', 'KeyC'], ['cell-water', 'KeyV']]) {
+        $(id).addEventListener('pointerdown', e => { if (!TOUCH.enabled) return; e.preventDefault(); e.stopPropagation(); touchKey(code, true); touchKey(code, false); });
+    }
+    // Keep the sticks beside the supply panels (medical on the left, grenades on the right) as the HUD changes size
+    const place = () => {
+        if (!TOUCH.enabled) return;
+        const heal = $('heal-panel').getBoundingClientRect(), nade = $('grenade-panel').getBoundingClientRect(), H = window.innerHeight;
+        const s = moveEl.offsetWidth || 130;
+        moveEl.style.left = `${Math.max(12, (heal.width ? heal.right : 12) + 14)}px`;
+        moveEl.style.top = `${H - s - 18}px`;
+        // (never off the right half of the screen, however many kinds of grenade you're carrying)
+        const ax = clamp((nade.width ? nade.left : window.innerWidth - 12) - s - 14, window.innerWidth * 0.55, window.innerWidth - s - 12);
+        aimEl.style.left = `${ax}px`;
+        aimEl.style.top = `${H - s - 18}px`;
+        const bt = $('touch-buttons');
+        bt.style.left = `${Math.min(ax - 6, window.innerWidth - bt.offsetWidth - 8)}px`;
+        bt.style.top = `${H - s - 18 - bt.offsetHeight - 10}px`;
+    };
+    setInterval(place, 400);
+    window.addEventListener('resize', place);
+    // Next gun
+    $('tb-swap').addEventListener('pointerdown', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (NET.viewing) { netSend({ t: 'w', dy: 1 }); return; }
+        const p = G && G.player;
+        if (p && G.mode === 'playing' && !p.dead) switchSlot(p, (p.slot + 1) % p.inv.length);
+    });
+    $('tb-pause').addEventListener('pointerdown', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (NET.viewing) { $('net-leave').classList.toggle('hidden'); return; }
+        onKeyPress('Escape');
+    });
+    // Tap a slot on the hotbar to switch to it, or a grenade to pick it
+    $('hotbar').addEventListener('pointerdown', e => {
+        const slot = e.target.closest('.slot'), p = G && G.player;
+        if (!slot || !p || G.mode !== 'playing' || p.dead) return;
+        const i = [...$('hotbar').children].indexOf(slot);
+        if (i >= 0 && i < p.inv.length) switchSlot(p, i);
+    });
+})();

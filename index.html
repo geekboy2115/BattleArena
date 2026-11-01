@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Battle Arena</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -93,6 +94,22 @@
             <div id="reload-bar"><div></div></div>
         </div>
     </div>
+
+    <!-- Touch controls (phones and iPads): two sticks beside the supplies, and buttons above the aiming stick -->
+    <div id="touch">
+        <div id="stick-move" class="stick"><div class="knob"></div><span class="stick-label">MOVE</span></div>
+        <div id="stick-aim" class="stick"><div class="knob"></div><span class="stick-label">AIM · FIRE</span></div>
+        <div id="touch-buttons">
+            <button class="tbtn" data-key="KeyF">USE</button>
+            <button class="tbtn" data-key="KeyR">RELOAD</button>
+            <button class="tbtn" data-key="KeyG">THROW</button>
+            <button class="tbtn" id="tb-swap">SWAP</button>
+            <button class="tbtn" data-key="ShiftLeft" data-toggle="1">SPRINT</button>
+            <button class="tbtn" data-key="KeyZ">SCOPE</button>
+        </div>
+        <button class="tbtn" id="tb-pause">II</button>
+    </div>
+    <div id="rotate-hint"><div>↻</div>Turn your phone sideways to play</div>
 
     <!-- Title screen -->
     <div id="menu" class="overlay menu-overlay">

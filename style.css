@@ -795,3 +795,36 @@ kbd {
 #fr-choose { display: flex; flex-direction: column; gap: 10px; }
 #net-video { position: fixed; inset: 0; width: 100vw; height: 100vh; object-fit: contain; background: #000; z-index: 50; cursor: crosshair; }
 #net-leave { z-index: 60; }
+
+/* ---------- Touch controls ---------- */
+#touch, #rotate-hint { display: none; }
+body.touch.playing #touch { display: block; position: fixed; inset: 0; z-index: 9; touch-action: none; -webkit-user-select: none; user-select: none; }
+body.touch.net-viewing #touch { z-index: 55; }
+body.touch #game { touch-action: none; }
+.stick { position: fixed; width: 130px; height: 130px; border-radius: 50%; background: rgba(14, 10, 28, 0.35); border: 2px solid rgba(255, 255, 255, 0.28); pointer-events: none; }
+.stick .knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); border: 2px solid rgba(255, 255, 255, 0.6); }
+.stick.on .knob { background: rgba(255, 209, 102, 0.65); }
+.stick-label { position: absolute; left: 0; right: 0; bottom: -2px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 1px; color: rgba(255, 255, 255, 0.55); }
+#touch-buttons { position: fixed; display: grid; grid-template-columns: repeat(3, 56px); gap: 8px; }
+.tbtn { width: 56px; height: 56px; border-radius: 50%; background: rgba(14, 10, 28, 0.62); border: 2px solid rgba(255, 255, 255, 0.32); color: #fff7ec; font: 700 11px Rajdhani, sans-serif; letter-spacing: 0.5px; padding: 0; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.tbtn.down, .tbtn.on { background: rgba(255, 209, 102, 0.55); color: #1a1030; }
+#tb-pause { position: fixed; top: 10px; left: 50%; margin-left: -22px; width: 44px; height: 44px; font-size: 16px; }
+/* the HUD shrinks to fit a phone, with the medical supplies bottom-left and the grenades bottom-right */
+body.touch #hud { zoom: 0.62; }
+@media (min-height: 600px) { body.touch #hud { zoom: 0.8; } }
+body.touch #grenade-panel { bottom: 16px; }
+body.touch #ammo-panel { bottom: 150px; }
+body.touch .throw-hint, body.touch .supply kbd, body.touch .stat-label kbd { display: none; }
+body.touch #heal-panel { pointer-events: auto; }
+body.touch #hotbar .slot { pointer-events: auto; }
+@media (orientation: portrait) and (max-width: 600px) {
+    body.touch.playing #rotate-hint { display: flex; position: fixed; inset: 0; z-index: 70; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: rgba(14, 10, 28, 0.94); color: #fff7ec; font: 700 20px Rajdhani, sans-serif; }
+    #rotate-hint div { font-size: 64px; color: #ffd166; }
+}
+body.touch #grenade-panel .supply-row { flex-wrap: wrap-reverse; justify-content: flex-end; max-width: 270px; }
+/* (on a touch screen the hotbar already shows your ammo, so the ammo box goes; a smaller minimap leaves room for the buttons) */
+body.touch #ammo-panel { display: none; }
+body.touch #minimap { width: 120px; height: 120px; }
+body.touch .tbtn { width: 50px; height: 50px; }
+body.touch #touch-buttons { grid-template-columns: repeat(3, 50px); }
+@media (max-height: 500px) { body.touch #killfeed { display: none; } }
