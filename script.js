@@ -390,7 +390,7 @@ function segHitsCircle(x0, y0, x1, y1, cx, cy, r) {
 function lineOfSight(a, b) {
     // Up on a base's deck: you can't see whoever's in the rooms under you (or they you), but you see over the walls
     const up = a.up || b.up;
-    if (up && (a.up || null) !== (b.up || null) && (isMid(a.up) || isMid(b.up) || onDeck(up, a.up ? b : a))) return false;
+    if (up && (a.up || null) !== (b.up || null) && (isMid(a.up) || isMid(b.up) || underRing(up, a.up ? b : a))) return false;
     const half = Math.hypot(a.x - b.x, a.y - b.y) / 2;
     let blocked = false;
     G.world.grid.query((a.x + b.x) / 2, (a.y + b.y) / 2, half, o => {
@@ -2667,7 +2667,7 @@ function houseFloorArt(b) {
 const REVO = {
     hp: 250, ticketsPer: 9, respawn: 7000, protect: 3000, heal: 30, ammoEvery: 2000,
     timeLimit: 30 * 60000, chests: 230, chestRefill: 75000, armoryRefill: 15000,
-    base: { court: 760, depth: 760 + 2 * (44 + 400 + 110 + 18), width: 760 + 2 * (44 + 400 + 110 + 18), rooms: 400, corridor: 110, wall: 44, gate: 220, edge: 260 }, cannons: 8, tanks: 24, tankers: 0.35, bayEvery: 60000,
+    base: { court: 760, depth: 760 + 2 * (44 + 400 + 110 + 18), width: 760 + 2 * (44 + 400 + 110 + 18), rooms: 400, corridor: 110, wall: 44, balcony: 260, gate: 220, edge: 260 }, cannons: 8, tanks: 24, tankers: 0.35, bayEvery: 60000,
     shellEvery: [4000, 9000],
     sides: [{ name: 'Rebels', flag: '#3d8bff', wall: '#66789a' }, { name: 'Regime', flag: '#ff4b4b', wall: '#a2675f' }],
     // Every section of base wall takes 3000 damage; lose 75% of them and the whole base comes down
@@ -2705,6 +2705,8 @@ function levelSkips(o, up) {
 const isMid = up => !!(up && up.midFloor);
 // The castle's walkway is a ring of four strips: which ones a point is on
 const onDeck = (base, p) => base.decks.some(r => inRect(p, r));
+// Under the castle's upper floors: anywhere over the ring of rooms (whichever floor `up` is)
+const underRing = (up, p) => (up.midFloor ? up.base : up).ring.some(r => inRect(p, r));
 const deckStrips = (base, p) => base.decks.map((r, i) => inRect(p, r) ? i : -1).filter(i => i >= 0);
 // Walking the walkway: round the corners rather than straight across the courtyard
 function deckWaypoint(base, from, goal) {
@@ -3076,12 +3078,16 @@ function buildBase(team, c, fwd) {
     base.spawn = base.spawns[0];
 
     // The walkway on top of the ring: four strips (the long ones run right across, the short ones meet them at the corners)
-    base.decks = [rectS(SIDES.back, -Wd, 0, Wd, RW), rectS(SIDES.front, -Wd, 0, Wd, RW), rectS(SIDES.left, -D, 0, D, RW), rectS(SIDES.right, -D, 0, D, RW)];
+    // (the ring: the whole footprint of the rooms; the middle floor covers all of it, the balcony on top only its outer edge)
+    const ringStrips = w => [rectS(SIDES.back, -Wd, 0, Wd, w), rectS(SIDES.front, -Wd, 0, Wd, w), rectS(SIDES.left, -D, 0, D, w), rectS(SIDES.right, -D, 0, D, w)];
+    const ringCorners = w => { const out = []; for (const su of [-1, 1]) for (const sv of [-1, 1]) out.push({ ...P(su * (D - w / 2), sv * (Wd - w / 2)), strips: [su < 0 ? 0 : 1, sv < 0 ? 2 : 3] }); return out; };
+    const BW = B.balcony;
+    base.ring = ringStrips(RW);
+    base.decks = ringStrips(BW);
     base.deckSides = ['back', 'front', 'left', 'right'];
-    base.deckCorners = [];
-    for (const su of [-1, 1]) for (const sv of [-1, 1]) base.deckCorners.push({ ...P(su * (D - RW + 90), sv * (Wd - RW + 90)), strips: [su < 0 ? 0 : 1, sv < 0 ? 2 : 3] });
-    // The middle floor: indoors, over the ground-floor rooms and under the balcony, with the same footprint
-    const mid = base.mid = { midFloor: true, base, team, fwd, c, decks: base.decks, deckCorners: base.deckCorners, deckSides: base.deckSides, stairs: [], deckHeal: [], lower: null, chests: [] };
+    base.deckCorners = ringCorners(BW);
+    // The middle floor: indoors, over the ground-floor rooms and under the balcony, with the ring's whole footprint
+    const mid = base.mid = { midFloor: true, base, team, fwd, c, decks: base.ring, deckCorners: ringCorners(RW - 90), deckSides: base.deckSides, stairs: [], deckHeal: [], lower: null, chests: [] };
     base.lower = mid;
     for (const k of base.deckSides) {
         const S = SIDES[k], H = S.half - 330;
@@ -3110,7 +3116,7 @@ function buildBase(team, c, fwd) {
         }
         // ...and one flight on each side from the middle floor up to the balcony (both ends in the same spot, a floor apart)
         const along = Math.atan2(at(S, 1, 0).y - at(S, 0, 0).y, at(S, 1, 0).x - at(S, 0, 0).x);
-        base.stairs.push({ b: at(S, 0, RW - 80), t: at(S, 0, RW - 80), up: at(S, 90, RW - 80), down: at(S, -90, RW - 80), face: along });
+        base.stairs.push({ b: at(S, 260, BW - 70), t: at(S, 260, BW - 70), up: at(S, 350, BW - 70), down: at(S, 170, BW - 70), face: along });  // (clear of the medical station)
     }
 
     // ---- Outside the main gate the vehicle bay; in the courtyard sandbags by the gate, the flag and the boss strike pad ----
@@ -3133,7 +3139,7 @@ function buildBase(team, c, fwd) {
     if (!G.early) for (const vv of [-gate - 70, gate + 70]) tower('tower', D - T / 2, vv, 'cannon');
 
     // Everything in the ring sits under the walkway: people up there walk (and shoot) over it
-    const onDeckR = o => base.decks.some(r => inRect(o, r));
+    const onDeckR = o => base.ring.some(r => inRect(o, r));
     for (const o of G.world.obstacles) if (!o.parapet && o.hw !== undefined && (o.house === base || o.base === base) && onDeckR(o)) o.under = base;
     for (const o of G.revolution.chests) if (!o.on && (onDeckR(o) || base.towerRooms.some(t => Math.hypot(o.x - t.x, o.y - t.y) < t.R))) o.under = base;
 
@@ -3161,7 +3167,15 @@ function buildBase(team, c, fwd) {
     // The walkway's art: concrete slabs, battlements along the outside, medical stations, ammo crates and nests
     const [dc, dg] = makeCanvas(Math.ceil(bw * AS), Math.ceil(bh * AS));
     dg.scale(AS, AS); dg.translate(-base.rect.x0, -base.rect.y0);
+    // (the roof over the inner part of the ring: slate, not for walking on; the balcony runs along the outside)
+    dg.fillStyle = shade(wallCol, -0.35);
+    for (const r of base.ring) dg.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    dg.strokeStyle = 'rgba(0,0,0,0.25)'; dg.lineWidth = 3;
+    for (const r of base.ring) { const hz = r.x1 - r.x0 > r.y1 - r.y0; for (let q = (hz ? r.x0 : r.y0); q < (hz ? r.x1 : r.y1); q += 36) { dg.beginPath(); hz ? (dg.moveTo(q, r.y0), dg.lineTo(q, r.y1)) : (dg.moveTo(r.x0, q), dg.lineTo(r.x1, q)); dg.stroke(); } }
     for (const r of base.decks) paintFinish(dg, r, 'roof', rnd);
+    // a railing along the balcony's inner edge
+    dg.fillStyle = shade(wallCol, 0.25);
+    for (const k of base.deckSides) { const S = SIDES[k], ins = k === 'back' || k === 'front' ? 0 : BW, rr = rectS(S, -S.half + ins, BW - 10, S.half - ins, BW); dg.fillRect(rr.x0, rr.y0, rr.x1 - rr.x0, rr.y1 - rr.y0); }
     dg.fillStyle = shade(wallCol, 0.15);
     const R0 = base.rect;
     for (let x = R0.x0; x < R0.x1; x += 40) { dg.fillRect(x, R0.y0, 22, 16); dg.fillRect(x, R0.y1 - 16, 22, 16); }
@@ -3174,7 +3188,7 @@ function buildBase(team, c, fwd) {
     // The middle floor's art: floorboards, thick walls round it with windows in the outer one, medical stations, stairs
     const [mc, mg] = makeCanvas(Math.ceil(bw * AS), Math.ceil(bh * AS));
     mg.scale(AS, AS); mg.translate(-base.rect.x0, -base.rect.y0);
-    for (const r of base.decks) paintFinish(mg, r, 'wood', rnd);
+    for (const r of base.ring) paintFinish(mg, r, 'wood', rnd);
     mg.fillStyle = shade(wallCol, -0.25);
     for (const k of base.deckSides) {
         const S = SIDES[k];
@@ -3377,11 +3391,12 @@ function launchStrike(base) {
     }
     const p = G.player;
     // Everyone gets to watch: the camera pulls back over the castle that's being hit (Space or getting hurt brings it back)
-    // (only if you're in a castle when it goes off: out in the field you keep your own view)
-    if (p && !p.dead && G.mode === 'playing' && (p.up || G.revolution.bases.some(b => inRect(p, b.rect, 300)))) G.strikeCam = { x: enemy.c.x, y: enemy.c.y, until: G.time + S.fall + S.over + 1500, base: enemy };
+    // (only your own team's strike, and only if you're in your castle when it goes off; a strike on your castle
+    // is just a warning banner)
+    if (p && !p.dead && G.mode === 'playing' && p.team === base.team && (p.up || p.towerUp || inRect(p, base.rect, 100))) G.strikeCam = { x: enemy.c.x, y: enemy.c.y, until: G.time + S.fall + S.over + 1500, base: enemy };
     if (p && G.mode === 'playing') {
-        if (p.team === base.team) showBanner('BOSS STRIKE LAUNCHED', false, `${S.shots} ${K.name} raining down on the ${revoName(enemy.team)} castle · Space to stop watching`);
-        else showBanner('INCOMING BOSS STRIKE!', true, `${S.shots} ${K.name} are about to hit your castle. Take cover! · Space to stop watching`);
+        if (p.team === base.team) showBanner('BOSS STRIKE LAUNCHED', false, `${S.shots} ${K.name} raining down on the ${revoName(enemy.team)} castle${G.strikeCam ? ' · Space to stop watching' : ''}`);
+        else showBanner('INCOMING BOSS STRIKE!', true, `${S.shots} ${K.name} are about to hit your castle. Take cover!`);
     }
     Sound.tone(90, 1.6, 'sawtooth', 0.14, 40);
 }
@@ -3549,10 +3564,10 @@ function drawDecks(L, T, R, B) {
         const r0 = base.rect, mid = base.mid;
         if (r0.x1 < L || r0.x0 > R || r0.y1 < T || r0.y0 > B) continue;
         const gunner = p && !p.dead && p.car && p.car.type === 'bigtower' && p.car.tower === base;
-        const me = gunner ? 0 : p && !p.dead ? (p.up === base ? 2 : p.up === mid ? 1 : !p.up && onDeck(base, p) ? 0 : -1) : -1;
+        const me = gunner ? 0 : p && !p.dead ? (p.up === base ? 2 : p.up === mid ? 1 : !p.up && underRing(base, p) ? 0 : -1) : -1;
         // Middle floor: solid unless you're underneath it
         mid.alpha = lerp(mid.alpha ?? 1, me === 0 ? 0 : 1, 0.15);
-        if (me === 0) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; for (const d of base.decks) ctx.fillRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0); }
+        if (me === 0) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; for (const d of base.ring) ctx.fillRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0); }
         if (mid.alpha > 0.02 && me !== 2) {
             ctx.globalAlpha = mid.alpha;
             ctx.drawImage(mid.art, r0.x0, r0.y0, r0.x1 - r0.x0, r0.y1 - r0.y0);
@@ -3569,7 +3584,7 @@ function drawDecks(L, T, R, B) {
         ctx.globalAlpha = base.deckAlpha;
         // (a long shadow into the courtyard: the ring stands three floors tall)
         ctx.fillStyle = 'rgba(0,0,0,0.32)';
-        for (const d of base.decks) ctx.fillRect(d.x0 + 44, d.y0 + 58, d.x1 - d.x0, d.y1 - d.y0);
+        for (const d of base.ring) ctx.fillRect(d.x0 + 44, d.y0 + 58, d.x1 - d.x0, d.y1 - d.y0);
         ctx.drawImage(base.deckArt, r0.x0, r0.y0, r0.x1 - r0.x0, r0.y1 - r0.y0);
         ctx.fillStyle = `rgba(94,224,138,${0.1 + Math.sin(G.time / 400) * 0.04})`;
         for (const h of base.deckHeal) ctx.fillRect(h.x0, h.y0, h.x1 - h.x0, h.y1 - h.y0);
@@ -11013,7 +11028,7 @@ function updateBullets(dt) {
             G.fgrid.query(b.x, b.y, 24, f => {
                 if (hit || f.dead || f.car || !foe(b.owner, f) || (b.pierced && b.pierced.has(f))) return;
                 // Different levels: the deck shields whoever's under it, and only shots that came up over the parapet reach the deck
-                if ((f.up || null) !== (b.up || null) && (f.up || isMid(b.up) || onDeck(b.up, f))) return;
+                if ((f.up || null) !== (b.up || null) && (f.up || isMid(b.up) || underRing(b.up, f))) return;
                 const rr = f.r + 3;
                 if ((b.x - f.x) ** 2 + (b.y - f.y) ** 2 < rr * rr) hit = f;
             });
