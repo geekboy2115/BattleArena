@@ -134,6 +134,9 @@ const GROUND_TABLE = [
 const BASE_ZOOM = 1.35;
 // How far out the camera sits (Early Warfare's a little closer in)
 const viewScale = () => (G && G.early ? 1 : 1.3);
+// Revolution: you always see as much as the boss strike shows, a whole castle across the short side of the screen
+const wideZoom = (w = viewW, h = viewH) => Math.min(w, h) / (REVO.base.width + 700);
+const normalZoom = (w = viewW, h = viewH) => (G && G.revolution ? wideZoom(w, h) : BASE_ZOOM * Math.hypot(w, h) / Math.hypot(1400, 850) / viewScale());
 const AIRDROP_GUNS = ['Vector', 'Heavy MG'];
 // Early Warfare: every gun anywhere is swapped for one of these
 const EARLY_TABLE = [['Sword', 10], ['Spear', 8], ['Bow', 8], ['Crossbow', 4], ['Dagger', 9], ['Axe', 7], ['Mace', 5], ['Halberd', 4], ['War Hammer', 2.5], ['Longbow', 2.5]];
@@ -11079,7 +11082,7 @@ function update(dt) {
     G.hitMarker = Math.max(0, G.hitMarker - dt * 6);
     G.zoomKick = Math.max(0, G.zoomKick - dt * 0.5);
     // How far out the camera sits; it eases between views
-    const target = G.mode === 'demo' ? 1 : strikeCamOn() ? Math.min(viewW, viewH) / (REVO.base.width + 700) : gunCam() ? gunCam().zoom : baseZoom() / viewScale();
+    const target = G.mode === 'demo' ? 1 : strikeCamOn() ? wideZoom() : normalZoom();
     G.viewZoom = G.viewZoom ? lerp(G.viewZoom, target, Math.min(1, dt * 4)) : target;
     G.zoom = G.viewZoom * (1 + G.zoomKick + G.winZoom);
 
@@ -11102,27 +11105,11 @@ function askSpectate() {
     mouse.down = false;
 }
 
-// Scaled to the screen so every window size sees the same amount of the world
-function baseZoom() {
-    return BASE_ZOOM * Math.hypot(viewW, viewH) / Math.hypot(1400, 850);
-}
-
 const strikeCamOn = () => !!(G.strikeCam && G.mode !== 'demo' && G.time < G.strikeCam.until);
-// Manning a corner gun: the camera pulls back a little (the gun reaches a long way) and stays on you
-const GUN_VIEW = 0.7;  // how far in, against the normal view
-function gunCam() {
-    const p = G.player, c = p && !p.dead && p.car;
-    if (!c || c.type !== 'bigtower' || G.mode === 'demo') return null;
-    return { x: c.x, y: c.y, zoom: baseZoom() / viewScale() * GUN_VIEW };
-}
 function updateCamera(dt) {
     let tx = G.cam.x, ty = G.cam.y;
     if (G.strikeCam && !strikeCamOn()) G.strikeCam = null;
-    const gc = !strikeCamOn() && gunCam();
-    if (gc) {
-        G.cam.x += (gc.x - G.cam.x) * Math.min(1, dt * 3);
-        G.cam.y += (gc.y - G.cam.y) * Math.min(1, dt * 3);
-    } else if (strikeCamOn()) {
+    if (strikeCamOn()) {
         G.cam.x += (G.strikeCam.x - G.cam.x) * Math.min(1, dt * 3);
         G.cam.y += (G.strikeCam.y - G.cam.y) * Math.min(1, dt * 3);
     } else if (G.mode === 'demo') {
@@ -13983,8 +13970,7 @@ function updateGuestCam(g, dt) {
     }
     const k = Math.min(1, dt * 12);
     g.cam.x += (f.x - g.cam.x) * k; g.cam.y += (f.y - g.cam.y) * k;
-    const gun = g.f.car && g.f.car.type === 'bigtower' ? GUN_VIEW : 1;
-    const target = BASE_ZOOM * Math.hypot(g.w, g.h) / Math.hypot(1400, 850) / viewScale() * gun;
+    const target = normalZoom(g.w, g.h);
     g.zoom = g.zoom ? lerp(g.zoom, target, Math.min(1, dt * 4)) : target;
     const W = CONFIG.WORLD_SIZE, hw = g.w / 2 / g.zoom, hh = g.h / 2 / g.zoom;
     g.cam.x = hw * 2 < W ? clamp(g.cam.x, hw, W - hw) : W / 2;
