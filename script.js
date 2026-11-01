@@ -3460,17 +3460,130 @@ function tryLaunchStrike(p) {
     return true;
 }
 
+const CASTLE_AUTO = { range: 2600, miss: 180, slower: 2 };
 // The big guns on the castle's corners fire on their own at any enemy in range when nobody's manning them
 function updateCastleGuns() {
     for (const c of G.world.cars) {
         if (c.dead || c.type !== 'bigtower' || c.driver || !c.tower || c.tower.fallen || G.time < (c.fireAt || 0)) continue;
-        const A = TOWER_ARMS[c.arm], range = c.reach || (A ? A.range : vt(c).cannon.range) * 0.85, crew = c.tower.crew;
+        // (left to themselves they're slower, shorter-ranged and rougher than with someone manning them)
+        const range = Math.min(c.reach || 2400, CASTLE_AUTO.range), crew = c.tower.crew;
         let best = null, bd = range;
         G.fgrid.query(c.x, c.y, range, f => { if (f.dead || f.hidden || !foe(crew, f)) return; const d = Math.hypot(f.x - c.x, f.y - c.y); if (d < bd) { bd = d; best = f; } });
         if (!best) { c.fireAt = G.time + 600; continue; }
-        const speed = A ? A.speed : (vt(c).cannon.speed || 1100), lead = bd / speed;
-        c.turret = Math.atan2(best.y + (best.vy || 0) * lead - c.y, best.x + (best.vx || 0) * lead - c.x);
+        // (aimed where they'll be when the shell comes down)
+        const lead = lobTime(c, bd) / 1000, miss = CASTLE_AUTO.miss * bd / range;
+        c.aimAt = { x: best.x + (best.vx || 0) * lead + rand(-miss, miss), y: best.y + (best.vy || 0) * lead + rand(-miss, miss) };
+        c.turret = Math.atan2(c.aimAt.y - c.y, c.aimAt.x - c.x);
         vehicleFire(c, crew);
+        c.fireAt = G.time + lobArm(c).rate * CASTLE_AUTO.slower;
+    }
+}
+
+// ----- Castle cannon shots: fired up into the sky, they arc over and come down where you aimed -----
+// (a quick, heavy thump at the muzzle, a smoking shell climbing and falling over its shadow, then a big impact)
+function lobArm(c) {
+    const A = TOWER_ARMS[c.arm], C = vt(c).cannon;
+    if (c.arm === 'catapult') return { kind: 'boulder', name: A.name, dmg: A.dmg, R: A.blastR, blast: A.blastDmg, rate: A.rate, muzzle: 100, slow: 1.35 };
+    if (c.arm === 'boom') return { kind: 'boom', name: A.name, dmg: A.dmg, R: A.blastR, blast: A.blastDmg, rate: A.rate, muzzle: 372, slow: 1 };
+    if (c.arm === 'tesla') return { kind: 'tesla', name: A.name, dmg: A.dmg, R: A.blastR, blast: A.blastDmg, rate: A.rate, muzzle: 124, slow: 0.8, zap: A.zap };
+    return { kind: 'ball', name: 'Cannon', dmg: C.dmg, R: C.blastR, blast: C.blastDmg, rate: C.rate, muzzle: 395, slow: 1 };
+}
+const lobTime = (c, d) => (280 + d * 0.08) * lobArm(c).slow;
+function lobShot(c, p) {
+    const A = lobArm(c), T = vt(c);
+    let tx, ty;
+    if (c.aimAt) { tx = c.aimAt.x; ty = c.aimAt.y; c.aimAt = null; }
+    else if (isHuman(p)) { const m = inputOf(p).world(); tx = m.x; ty = m.y; }
+    else { tx = c.x + Math.cos(c.turret) * 1500; ty = c.y + Math.sin(c.turret) * 1500; }
+    // (no further than the gun reaches, and not right on top of itself)
+    let d = Math.hypot(tx - c.x, ty - c.y);
+    const reach = c.reach || 3000, near = T.len * 0.8, a = Math.atan2(ty - c.y, tx - c.x);
+    if (d > reach || d < near) { d = clamp(d, near, reach); tx = c.x + Math.cos(a) * d; ty = c.y + Math.sin(a) * d; }
+    c.turret = a;
+    const mx = c.x + Math.cos(a) * A.muzzle, my = c.y + Math.sin(a) * A.muzzle;
+    c.fireAt = G.time + A.rate; c.firedAt = G.time;
+    (G.lobs || (G.lobs = [])).push({ sx: mx, sy: my, tx, ty, t0: G.time, dur: lobTime(c, d), peak: clamp(d * 0.2, 140, 900), A, owner: p, base: c.tower, smokeAt: 0 });
+    // The shot: a blinding flash, a ring of smoke blown out of the muzzle, and the whole gun kicks back
+    const vol = Sound.volAt(c.x, c.y);
+    if (inView(mx, my, 500)) {
+        if (A.kind === 'tesla') { burst(mx, my, 18, '#7fe9ff', 420, 'glow'); G.particles.push({ type: 'ring', x: mx, y: my, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 90, color: '#7fe9ff' }); }
+        else {
+            G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.16, max: 0.16, size: A.kind === 'boulder' ? 40 : 150, angle: a });
+            if (A.kind !== 'boulder') G.particles.push({ type: 'boom', x: mx + Math.cos(a) * 30, y: my + Math.sin(a) * 30, vx: 0, vy: 0, life: 0.22, max: 0.22, size: 90 });
+            for (let i = 0; i < (A.kind === 'boulder' ? 6 : 20); i++) {
+                const s = a + rand(-0.9, 0.9), sp = rand(80, 420) * (1 - Math.abs(s - a) * 0.6);
+                G.particles.push({ type: 'smoke', x: mx, y: my, vx: Math.cos(s) * sp + Math.cos(a) * 120, vy: Math.sin(s) * sp + Math.sin(a) * 120, life: rand(0.9, 1.8), max: 1.8, size: rand(14, 26), color: '200,195,185' });
+            }
+            G.particles.push({ type: 'ring', x: mx, y: my, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 110, color: '#fff7ec' });
+        }
+    }
+    if (A.kind === 'tesla') Sound.tone(160, 0.3, 'sawtooth', 0.14 * vol, 1600);
+    else if (A.kind === 'boulder') { Sound.thud(vol); Sound.tone(90, 0.25, 'triangle', 0.1 * vol, 60); }
+    else { Sound.boom(vol * 0.9, 0.7); Sound.shot('heavy', vol); }
+    if (p === G.player) G.shake = Math.max(G.shake, A.kind === 'boulder' ? 4 : 9);
+}
+function updateLobs() {
+    if (!G.lobs || !G.lobs.length) return;
+    const keep = [];
+    for (const q of G.lobs) {
+        const k = (G.time - q.t0) / q.dur;
+        if (k < 1) {
+            keep.push(q);
+            // a trail of smoke behind the shell as it flies (sparks behind a tesla bolt)
+            if (G.time >= q.smokeAt) {
+                q.smokeAt = G.time + 35;
+                const x = lerp(q.sx, q.tx, k), y = lerp(q.sy, q.ty, k) - q.peak * 4 * k * (1 - k);
+                if (inView(x, y, 200)) G.particles.push(q.A.kind === 'tesla'
+                    ? { type: 'glow', x, y, vx: rand(-30, 30), vy: rand(-30, 30), life: 0.3, max: 0.3, size: 10, color: '#7fe9ff' }
+                    : { type: 'smoke', x, y, vx: rand(-15, 15), vy: rand(-15, 15), life: 0.7, max: 0.7, size: q.A.kind === 'boulder' ? 6 : 9, color: q.A.kind === 'boom' ? '255,170,90' : '170,165,160' });
+            }
+            continue;
+        }
+        lobImpact(q);
+    }
+    G.lobs = keep;
+}
+function lobImpact(q) {
+    const A = q.A, x = q.tx, y = q.ty;
+    blast(x, y, q.owner, A.R, A.blast, A.name);
+    // a direct hit hurts most
+    G.fgrid.query(x, y, 60, f => { if (!f.dead && Math.hypot(f.x - x, f.y - y) < 50 + f.r && (!q.owner || foe(q.owner, f))) damage(f, A.dmg, q.owner, A.name); });
+    if (A.zap) { let near = null, nd = 260; G.fgrid.query(x, y, 260, f => { const d = Math.hypot(f.x - x, f.y - y); if (!f.dead && (!q.owner || foe(q.owner, f)) && d < nd) { nd = d; near = f; } }); if (near) chainLightning(near, q.owner, A.zap, 45, A.name); }
+    if (!inView(x, y, 400)) return;
+    // Dirt and stones thrown up, a wave of dust rolling out, and the ground shakes
+    const dirt = A.kind === 'tesla' ? 0 : A.kind === 'boulder' ? 14 : 26;
+    for (let i = 0; i < dirt; i++) { const a = rand(0, TAU), sp = rand(180, 620); G.particles.push({ type: 'chunk', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.5, 1.1), max: 1.1, size: rand(4, 11), color: pick(['#6b5a3a', '#4a3f2a', '#8a7a5a', '#5b5f66']), rot: rand(0, TAU), spin: rand(-14, 14) }); }
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU + rand(-0.2, 0.2), sp = rand(260, 380); G.particles.push({ type: 'smoke', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.7, 1.2), max: 1.2, size: rand(16, 26), color: A.kind === 'tesla' ? '150,220,255' : '150,135,115' }); }
+    if (A.kind === 'tesla') { burst(x, y, 26, '#7fe9ff', 460, 'glow'); G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: A.R * 1.4, color: '#7fe9ff' }); }
+    G.flash = Math.max(G.flash, A.kind === 'boulder' ? 0.05 : 0.12); G.flashColor = A.kind === 'tesla' ? '127,233,255' : '255,200,120';
+    const close = 1 - clamp(Math.hypot(x - G.cam.x, y - G.cam.y) / 2500, 0, 1);
+    G.shake = Math.max(G.shake, (A.kind === 'boulder' ? 8 : A.kind === 'boom' ? 18 : 13) * (0.4 + 0.6 * close));
+}
+// The shells in the air: each one's shadow on the ground, and the shell itself up above it, bigger the higher it is
+function drawLobs() {
+    if (!G.lobs || !G.lobs.length) return;
+    for (const q of G.lobs) {
+        const k = clamp((G.time - q.t0) / q.dur, 0, 1), gx = lerp(q.sx, q.tx, k), gy = lerp(q.sy, q.ty, k), h = q.peak * 4 * k * (1 - k);
+        if (!inView(gx, gy - h, 120)) continue;
+        const s = 1 + h / 500;
+        ctx.fillStyle = `rgba(0,0,0,${0.18 + 0.2 * (1 - h / q.peak)})`; ctx.beginPath(); ctx.ellipse(gx + h * 0.15, gy, 12 * s, 7 * s, 0, 0, TAU); ctx.fill();
+        // (and a ring on the ground where it's going to land, tightening as it comes down)
+        if (k > 0.45) { ctx.strokeStyle = `rgba(255,90,60,${(k - 0.45) * 1.2})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(q.tx, q.ty, q.A.R * (1.25 - k * 0.5), 0, TAU); ctx.stroke(); }
+        const x = gx, y = gy - h;
+        if (q.A.kind === 'tesla') {
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = 'rgba(127,233,255,0.45)'; ctx.beginPath(); ctx.arc(x, y, 22 * s, 0, TAU); ctx.fill();
+            ctx.fillStyle = '#e8fbff'; ctx.beginPath(); ctx.arc(x, y, 9 * s, 0, TAU); ctx.fill();
+            ctx.restore();
+        } else if (q.A.kind === 'boulder') {
+            ctx.fillStyle = '#7d7468'; ctx.beginPath(); ctx.arc(x, y, 15 * s, 0, TAU); ctx.fill();
+            ctx.fillStyle = '#9a9083'; ctx.beginPath(); ctx.arc(x - 5 * s, y - 5 * s, 6 * s, 0, TAU); ctx.fill();
+        } else {
+            const r = (q.A.kind === 'boom' ? 13 : 10) * s;
+            ctx.fillStyle = '#16181c'; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+            ctx.fillStyle = '#4a4f58'; ctx.beginPath(); ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.4, 0, TAU); ctx.fill();
+            if (q.A.kind === 'boom') { ctx.fillStyle = `rgba(255,${150 + Math.sin(G.time / 40) * 60},60,0.95)`; ctx.beginPath(); ctx.arc(x + r * 0.6, y - r * 0.6, 4 * s, 0, TAU); ctx.fill(); }
+        }
     }
 }
 
@@ -9574,6 +9687,7 @@ function crushAhead(c, pts) {
 }
 
 function vehicleFire(c, p) {
+    if (c.type === 'bigtower') { lobShot(c, p); return; }
     const T = vt(c), a = c.turret, mx = c.x + Math.cos(a) * (T.len * 0.55), my = c.y + Math.sin(a) * (T.len * 0.55);
     c.firedAt = G.time;
     if (T.rockets && (!T.gun || (c.rocketAt || 0) <= G.time)) {
@@ -9601,7 +9715,6 @@ function vehicleFire(c, p) {
         Sound.shot('mid', Sound.volAt(c.x, c.y) * 0.7);
         return;
     }
-    if (c.arm && TOWER_ARMS[c.arm]) { towerShot(c, p, a, mx, my, TOWER_ARMS[c.arm]); return; }
     if (T.cannon) {
         const C = T.cannon;
         c.fireAt = G.time + C.rate;
@@ -9620,16 +9733,6 @@ function vehicleFire(c, p) {
     }
 }
 
-// A castle tower's own weapon: a catapult's boulder, an exploding cannon's shell or a tesla bolt
-function towerShot(c, p, a, mx, my, A) {
-    c.fireAt = G.time + A.rate;
-    G.bullets.push({ x: mx, y: my, vx: Math.cos(a) * A.speed, vy: Math.sin(a) * A.speed, dmg: A.dmg, owner: p, left: c.reach || A.range, weapon: A.name, heavy: true, rocket: true, over: c.base || null, blastR: A.blastR, blastDmg: A.blastDmg, boulder: !!A.boulder, zap: A.zap || 0 });
-    if (A.zap) { burst(mx, my, 10, '#7fe9ff', 260, 'glow'); Sound.tone(180, 0.2, 'sawtooth', 0.12 * Sound.volAt(c.x, c.y), 1400); return; }
-    if (A.boulder) { Sound.thud(Sound.volAt(c.x, c.y)); return; }
-    G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.14, max: 0.14, size: 90, angle: a });
-    if (inView(mx, my, 100)) for (let i = 0; i < 10; i++) G.particles.push({ type: 'smoke', x: mx, y: my, vx: Math.cos(a) * rand(40, 160) + rand(-40, 40), vy: Math.sin(a) * rand(40, 160) + rand(-40, 40), life: rand(0.8, 1.6), max: 1.6, size: rand(12, 22), color: '190,185,175' });
-    Sound.shot('heavy', Sound.volAt(c.x, c.y));
-}
 
 function damageCar(c, dmg, by) {
     if (c.dead) return;
@@ -10048,6 +10151,8 @@ function drawCars(only) {
         // Turrets turn to where the driver aims
         if ((T.gun || T.cannon) && !T.fly) {
             ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.turret);
+            // (a castle cannon kicks back when it fires, then rolls forward again)
+            if (c.type === 'bigtower') ctx.translate(-clamp(1 - (G.time - (c.firedAt ?? -1e9)) / 260, 0, 1) * 34, 0);
             if ((c.arm === 'catapult' || c.arm === 'tesla') && T.round) ctx.scale(T.len / 200, T.len / 200);
             if (c.arm === 'catapult') {
                 // A catapult: a timber frame with a throwing arm and a stone in its cup
@@ -11064,6 +11169,7 @@ function update(dt) {
     separateFighters();
     if (G.world.cars) updateCars(dt);
     updateBullets(dt);
+    updateLobs();
     updateGrenades(dt);
     updateGadgets(dt);
     updateStrikes(dt);
@@ -11340,6 +11446,7 @@ function render() {
         ctx.beginPath(); ctx.arc(p.x, p.y, 5 / G.zoom, 0, TAU); ctx.fill();
     }
 
+    drawLobs();
     drawNukeClouds();
     drawNukeMarkers(now);
     drawSmoke(p, now);
