@@ -4613,7 +4613,7 @@ function newState(mode, setup) {
     const W = CONFIG.WORLD_SIZE;
     const zombies = setup.type === 'zombies', escape = setup.type === 'escape', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
-    const revolution = setup.type === 'revolution';
+    const revolution = setup.type === 'revolution', assassin = setup.type === 'assassin';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4623,7 +4623,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape, sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin, assassin, sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4710,10 +4710,10 @@ function newState(mode, setup) {
     } else {
         if (mode === 'playing') addPlayer(findSpawn(null, 0), null);
         const avoid = G.player ? [G.player] : null;
-        if (G.player && zombies) G.player.team = 0;
+        if (G.player && (zombies || assassin)) G.player.team = 0;
         for (let i = 0; i < cpuCount; i++) {
             const s = findSpawn(avoid, 600);
-            const b = createFighter(s.x, s.y, { name: botName(i), color: zombies ? SURVIVOR_COLOR : pick(BOT_COLORS), team: zombies ? 0 : null });
+            const b = createFighter(s.x, s.y, { name: botName(i), color: zombies || assassin ? SURVIVOR_COLOR : pick(BOT_COLORS), team: zombies || assassin ? 0 : null });
             if (G.epic) b.chasesDrops = Math.random() < 0.8;
             G.fighters.push(b);
         }
@@ -4724,7 +4724,36 @@ function newState(mode, setup) {
     }
     if (hightech) gearUpHighTech();
     if (revolution) for (const f of G.fighters) f.hp = f.maxHp = REVO.hp;
+    if (assassin && mode === 'playing') pickAssassin(setup.role === 'assassin' ? G.player : null);
     G.alive = G.fighters.length;
+}
+
+// ---------- Assassin ----------
+// One fighter is the assassin: a Barrett with 2000 rounds (a Railgun in High Tech) and a medkit.
+// He looks just like everyone else in the dark. Any survivor that touches him catches him.
+const ASSASSIN = { ammo: 2000, catchGap: 10 };
+function pickAssassin(who) {
+    const a = who || pick(G.fighters.filter(f => !f.isPlayer));
+    if (!a) return;
+    a.assassin = true;
+    a.team = 1;
+    const gun = G.hightech ? 'Railgun' : 'Barrett';
+    a.inv[0] = gun; a.slot = 0;
+    a.ammo[gun] = ASSASSIN.ammo;
+    a.items.medkit = 1;
+    G.assassinF = a;
+}
+// A survivor right up against the assassin catches him
+function checkAssassinCaught() {
+    const a = G.assassinF;
+    if (!a || a.dead) return;
+    let by = null;
+    G.fgrid.query(a.x, a.y, a.r * 2 + ASSASSIN.catchGap + 10, f => { if (!by && f !== a && !f.dead && f.team === 0 && Math.hypot(f.x - a.x, f.y - a.y) < f.r + a.r + ASSASSIN.catchGap) by = f; });
+    if (!by) return;
+    a.caughtBy = by;
+    addFloat(a.x, a.y - 40, 'CAUGHT!', '#ffd166', true);
+    burst(a.x, a.y, 24, '#ffd166', 240, 'glow');
+    killFighter(a, by, 'Caught');
 }
 
 // Drops n supply crates (already landed) at open outdoor spots within r of c
@@ -5081,7 +5110,7 @@ function updateOutbreak(dt) {
         if (f.dead) continue;
         if (G.zombies) {
             if (f.zombie) { b++; f.hp = Math.min(f.maxHp, f.hp + ZOMBIE.regen * dt); } else a++;
-        } else if (f.soldier) b++;
+        } else if (f.soldier || f.assassin) b++;
         else {
             a++;
             // Out of the fight for a while, the group patches itself up
@@ -5097,6 +5126,19 @@ function updateOutbreak(dt) {
         const heli = G.world.floor ? G.world.floor.heli : G.extract;
         if (heli && !p.dead && dist(p, heli) < ESCAPE.heliR) boardHelicopter();
         else if (!G.world.floor && G.time >= G.nextReinf) { reinforce(); G.nextReinf = G.time + rand(...(G.world.maze ? ESCAPE.maze.reinforce : ESCAPE.reinforceEvery)); }
+    } else if (G.assassin) {
+        checkAssassinCaught();
+        const p2 = G.player, caught = !G.assassinF || G.assassinF.dead;
+        if (!caught && a > 0) return;
+        if (p2.dead && !p2.assassin) return;  // (you already lost)
+        const won = p2.assassin ? !caught : caught;
+        const how = G.assassinF && G.assassinF.caughtBy ? `${G.assassinF.caughtBy === p2 ? 'You' : G.assassinF.caughtBy.name} caught the assassin.` : 'The assassin is down.';
+        G.result = won
+            ? { won: true, place: 1, title: p2.assassin ? 'MISSION COMPLETE' : 'ASSASSIN CAUGHT!', sub: p2.assassin ? 'Nobody is left. Nobody saw you.' : how }
+            : { won: false, place: 2, title: p2.assassin ? 'CAUGHT!' : 'THE ASSASSIN WINS', sub: p2.assassin ? how : 'Every survivor has been taken out.' };
+        G.overAt = G.time + 2200;
+        if (won) startVictory(G.result.sub);
+        else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
     } else if (G.zombies && (a === 0 || b === 0)) {
         // You're on whichever side you're on now: the horde can win with you in it
         const zombieWin = a === 0;
@@ -6265,6 +6307,7 @@ function killFighter(t, killer, weapon) {
     if (killer && killer.isPlayer && killer !== t) playerKillFx(t);
     if (G.war) { warDeath(t, killer, weapon); return; }
     if (t.isPlayer && G.result) return;
+    if (t.isPlayer && t.assassin) return;  // (Assassin: caught or taken down, it's reported as a catch)
     if (t.isPlayer) {
         G.result = { won: false, place: G.escape ? G.sides.a + G.escaped : G.alive + 1, sub: G.escape ? `The army got you. ${G.escaped} of ${ESCAPE.people} people escaped.` : null, killer: killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null) };
         G.overAt = G.time + 1800;
@@ -8075,9 +8118,10 @@ function drawGroundDetail(L, T, R, B) {
 // ----- Day and night -----
 function dayT() { return (G.time / DAY.length + (G.dayPhase || 0)) % 1; }
 // 0 in daylight, DAY.dark at the dead of night
-const ZOMBIE_DARK = 0.985;  // Zombies is played in pitch dark: your flashlight is all you've got
+const ZOMBIE_DARK = 1;
+const pitchDark = () => !!G && (G.zombies || G.assassin) && G.mode !== 'demo';  // Zombies is played in pitch dark: your flashlight is all you've got
 function darkness() {
-    if (G.zombies && G.mode !== 'demo') return ZOMBIE_DARK;
+    if ((G.zombies || G.assassin) && G.mode !== 'demo') return ZOMBIE_DARK;
     if (!G.dayCycle || G.world.floor) return 0;
     const t = dayT();
     if (t < 0.45) return 0;
@@ -8118,7 +8162,7 @@ function drawLighting(camX, camY, zoom) {
     const g = lightG, s = zoom * k;
     g.globalCompositeOperation = 'source-over';
     g.clearRect(0, 0, w, h);
-    g.fillStyle = `rgba(6,10,28,${dark})`;
+    g.fillStyle = pitchDark() ? `rgba(1,2,6,${dark})` : `rgba(6,10,28,${dark})`;
     g.fillRect(0, 0, w, h);
     g.globalCompositeOperation = 'destination-out';
     const light = (x, y, r, a = 1) => {
@@ -8130,16 +8174,19 @@ function drawLighting(camX, camY, zoom) {
         g.fillRect(sx - sr, sy - sr, sr * 2, sr * 2);
     };
     const p = G.player && !G.player.dead ? G.player : null;
+    const pitch = pitchDark();
     if (p) {
-        light(p.x, p.y, 260, 0.9);
+        // (pitch dark: just enough glow to see yourself, then only the flashlight)
+        light(p.x, p.y, pitch ? 75 : 260, pitch ? 0.75 : 0.9);
         // Flashlight beam where you're aiming
         const sx = (p.x - camX) * s, sy = (p.y - camY) * s, len = 900 * s;
         const grad = g.createRadialGradient(sx, sy, 0, sx, sy, len);
         grad.addColorStop(0, 'rgba(0,0,0,0.85)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = grad;
         g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, len, p.angle - 0.35, p.angle + 0.35); g.closePath(); g.fill();
-        for (const f of G.fighters) if (f !== p && !f.dead && f.team !== null && f.team === p.team && Math.abs(f.x - p.x) < 1400 && Math.abs(f.y - p.y) < 1000) light(f.x, f.y, 120, 0.5);
+        if (!pitch) for (const f of G.fighters) if (f !== p && !f.dead && f.team !== null && f.team === p.team && Math.abs(f.x - p.x) < 1400 && Math.abs(f.y - p.y) < 1000) light(f.x, f.y, 120, 0.5);
     }
+    if (pitch) { ctx.drawImage(lightCv, 0, 0, viewW, viewH); if (G.zombies) drawZombieEyes(camX, camY, zoom); return; }
     if (G.world.lampGrid) G.world.lampGrid.query(G.cam.x, G.cam.y, viewW / zoom, l => light(l.x, l.y, 240, 0.85));
     for (const q of G.particles) {
         if (q.type === 'flash') light(q.x, q.y, 170, 0.9);
@@ -13179,13 +13226,16 @@ function updateHUD() {
     } else if (G.noZone) {
         const { a, b } = G.sides;
         const chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
-        setHTML(hud.teamScore, 'teams', G.zombies
+        setHTML(hud.teamScore, 'teams', G.assassin
+            ? chip(a, SURVIVOR_COLOR, 'Survivors', !p.assassin) + '<em>vs</em>' + chip(b, '#e0303a', b ? 'Assassin' : 'Caught', !!p.assassin)
+            : G.zombies
             ? chip(a, SURVIVOR_COLOR, 'Survivors', !p.zombie) + '<em>vs</em>' + chip(b, ZOMBIE.color, 'Zombies', p.zombie)
             : chip(a, '#fff7ec', 'Running', true) + chip(G.escaped, '#7dffb0', 'Escaped', false) + '<em>vs</em>' + chip(b, '#9aa86a', 'Soldiers', false));
     }
 
     let zt;
     if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
+    else if (G.assassin) zt = p.assassin ? "Take them all out · don't get caught" : 'Find the assassin and catch him';
     else if (G.escape) {
         const F = G.world.floor;
         if (!F && G.extract) zt = `Reach the extraction helicopter · ${Math.round(dist(p, G.extract) / 10)}m`;
@@ -13511,12 +13561,14 @@ showAiLevel();
 const teamSlider = $('team-slider');
 
 // ---------- Game modes (title screen carousel) ----------
+let assassinRole = 'survivor';
 const MODES = [
     { id: 'zombies', name: 'ZOMBIES', desc: 'Pitch dark: all you have is your flashlight, and the zombies\' glowing eyes. Pick how many survivors and zombies. Anyone the horde takes down turns into a zombie. Zombies that die stay dead.' },
     { id: 'war', name: 'TEAMS', desc: 'Teams battle it out. Arm your squad from big supply crates and wipe out the other teams.' },
     { id: 'ffa', name: 'FREE FOR ALL', desc: 'Every player for themselves. Last one standing wins.' },
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'revolution', name: 'REVOLUTION', desc: 'Rebels against the Regime: fortified bases with healing rooms and an armory, chests everywhere, tanks and cannons. Everyone is tougher, and there are no respawns or revives: when you die, you stay dead.' },
+    { id: 'assassin', name: 'ASSASSIN', desc: 'Pitch dark. One assassin with a Barrett hides among the survivors and picks them off. Survivors win if they catch him (touch him or take him down); he wins if nobody is left. Play as either side.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' }
 ];
 // After the mode and its settings, you pick how the fight is armed
@@ -13537,7 +13589,8 @@ function setMenuMode(i, dir) {
     $('mode-desc').textContent = m.desc;
     $('settings-ffa').classList.toggle('hidden', m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
-    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : 'Opponents';
+    $('settings-assassin').classList.toggle('hidden', m.id !== 'assassin');
+    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'assassin' ? 'Survivors' : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
     // Revolution is always two sides
     $('team-count').closest('.cpu-row').classList.toggle('hidden', m.id === 'revolution');
@@ -13936,6 +13989,10 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
+for (const b of document.querySelectorAll('#assassin-role button')) b.addEventListener('click', () => {
+    assassinRole = b.dataset.r;
+    for (const o of document.querySelectorAll('#assassin-role button')) o.classList.toggle('on', o === b);
+});
 $('sl-ok').addEventListener('click', () => closeStrikeLoad(true));
 $('sl-cancel').addEventListener('click', () => closeStrikeLoad(false));
 $('spectate-btn').addEventListener('click', () => {
@@ -13958,6 +14015,7 @@ function startGame(map = lastMap) {
     lastMap = map;
     const setup = war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
+        : id === 'assassin' ? { type: id, count: sliderToCount(+slider.value), role: assassinRole }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
     setup.warfare = lastWarfare;
@@ -13987,6 +14045,7 @@ function startGame(map = lastMap) {
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
     else if (G.hightech && war) showBanner(`HIGH TECH TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Find quantum guns in the crates and grab a mech!');
     else if (war) showBanner(`TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, false, 'Grab guns from the supply crates near your base');
+    else if (G.assassin) showBanner('ASSASSIN', true, G.player.assassin ? `You're the assassin. ${G.alive - 1} survivors in the dark. If one of them touches you, you're caught!` : `An assassin with a ${G.hightech ? 'Railgun' : 'Barrett'} is hiding among ${G.alive - 1} of you. Find him and catch him!`);
     else if (G.zombies) { const z = G.fighters.filter(f => f.zombie).length; showBanner('ZOMBIES', true, `${z} zombies are out there. Survive with ${G.fighters.length - z - 1} other survivors.`); }
     else if (G.escape) showBanner('ESCAPE', true, G.world.terrain === 'maze' ? 'Find a way through the maze to the helicopter. Machine-gun nests, minefields, and the map only shows where you\'ve been!'
         : G.world.terrain === 'mountain' ? 'Climb the mountains with your group to the helicopter on the snowy summit!'
