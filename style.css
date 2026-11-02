@@ -917,3 +917,13 @@ body.fs #fs-btn { opacity: 0.55; }
     body.touch #heal-panel .supply-row, body.touch #grenade-panel .supply-row { flex-direction: column-reverse; flex-wrap: nowrap; max-width: none; }
     body.touch #hotbar.hb-bottom { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); }
 }
+
+/* Sideways on a short screen: the title goes on one line ("BATTLE ARENA") so it takes far less height
+   and the menu under it can stay bigger */
+@media (orientation: landscape) and (max-height: 520px) {
+    .title { flex-direction: row; align-items: baseline; justify-content: center; gap: 14px; line-height: 1; }
+    .title-top { font-size: 34px; letter-spacing: 6px; }
+    .title-bottom { font-size: 48px; letter-spacing: 3px; }
+    .credit { margin: 4px 0 12px; font-size: 13px; }
+    #menu .menu-card { padding-top: 16px; }
+}
