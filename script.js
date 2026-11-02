@@ -4734,7 +4734,7 @@ function newState(mode, setup) {
 // ---------- Assassin ----------
 // One fighter is the assassin: a Barrett with 2000 rounds (a Railgun in High Tech) and a medkit.
 // He looks just like everyone else in the dark. Any survivor that touches him catches him.
-const ASSASSIN = { ammo: 2000, catchGap: 10 };
+const ASSASSIN = { ammo: 2000, catchGap: 10, glow: 150 };
 function pickAssassin(who) {
     const a = who || pick(G.fighters.filter(f => !f.isPlayer));
     if (!a) return;
@@ -8213,13 +8213,17 @@ function drawLighting(camX, camY, zoom) {
     const pitch = pitchDark();
     if (p) {
         // (pitch dark: just enough glow to see yourself, then only the flashlight)
-        light(p.x, p.y, pitch ? 75 : 260, pitch ? 0.75 : 0.9);
+        // (the assassin carries no flashlight: just a little light around himself)
+        if (p.assassin) light(p.x, p.y, ASSASSIN.glow, 0.85);
+        else light(p.x, p.y, pitch ? 75 : 260, pitch ? 0.75 : 0.9);
         // Flashlight beam where you're aiming
+        if (!p.assassin) {
         const sx = (p.x - camX) * s, sy = (p.y - camY) * s, len = 900 * s;
         const grad = g.createRadialGradient(sx, sy, 0, sx, sy, len);
         grad.addColorStop(0, 'rgba(0,0,0,0.85)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = grad;
         g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, len, p.angle - 0.35, p.angle + 0.35); g.closePath(); g.fill();
+        }
         if (!pitch) for (const f of G.fighters) if (f !== p && !f.dead && f.team !== null && f.team === p.team && Math.abs(f.x - p.x) < 1400 && Math.abs(f.y - p.y) < 1000) light(f.x, f.y, 120, 0.5);
     }
     if (pitch) {
@@ -8232,7 +8236,7 @@ function drawLighting(camX, camY, zoom) {
             g.fillStyle = grad;
             g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, L, f.angle - 0.32, f.angle + 0.32); g.closePath(); g.fill();
         };
-        for (const f of G.fighters) if (f !== p && !f.dead && !f.zombie && !f.downed && !f.car) { cone(f, 650, 0.7); light(f.x, f.y, 55, 0.55); }
+        for (const f of G.fighters) if (f !== p && !f.dead && !f.zombie && !f.downed && !f.car) { if (f.assassin) light(f.x, f.y, ASSASSIN.glow, 0.7); else { cone(f, 650, 0.7); light(f.x, f.y, 55, 0.55); } }
         if (p && p.scopeAt) light(p.scopeAt.x, p.scopeAt.y, Math.min(viewW, viewH) * 0.6 / zoom, 1);
         ctx.drawImage(lightCv, 0, 0, viewW, viewH);
         if (G.zombies) drawZombieEyes(camX, camY, zoom);
