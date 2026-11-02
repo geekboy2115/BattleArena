@@ -4626,7 +4626,7 @@ function newState(mode, setup) {
     const W = CONFIG.WORLD_SIZE;
     const zombies = setup.type === 'zombies', escape = setup.type === 'escape', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
-    const revolution = setup.type === 'revolution', assassin = setup.type === 'assassin';
+    const revolution = setup.type === 'revolution', assassin = setup.type === 'assassin', bossFight = setup.type === 'boss';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4636,7 +4636,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin, assassin, sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin || bossFight, assassin, bossFight, bossF: null, sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4724,10 +4724,10 @@ function newState(mode, setup) {
     } else {
         if (mode === 'playing') addPlayer(findSpawn(null, 0), null);
         const avoid = G.player ? [G.player] : null;
-        if (G.player && (zombies || assassin)) G.player.team = 0;
+        if (G.player && (zombies || assassin || bossFight)) G.player.team = 0;
         for (let i = 0; i < cpuCount; i++) {
             const s = findSpawn(avoid, 600);
-            const b = createFighter(s.x, s.y, { name: botName(i), color: zombies || assassin ? SURVIVOR_COLOR : pick(BOT_COLORS), team: zombies || assassin ? 0 : null });
+            const b = createFighter(s.x, s.y, { name: botName(i), color: zombies || assassin || bossFight ? SURVIVOR_COLOR : pick(BOT_COLORS), team: zombies || assassin || bossFight ? 0 : null });
             if (G.epic) b.chasesDrops = Math.random() < 0.8;
             G.fighters.push(b);
         }
@@ -4739,6 +4739,7 @@ function newState(mode, setup) {
     if (hightech && setup.map !== 'wasteland') gearUpHighTech();
     if (revolution) for (const f of G.fighters) f.hp = f.maxHp = REVO.hp;
     if (assassin && mode === 'playing') { spreadOut(); pickAssassin(setup.role === 'assassin' ? G.player : null); }
+    if (bossFight) setupBossFight();
     G.alive = G.fighters.length;
 }
 
@@ -4787,6 +4788,132 @@ function checkAssassinCaught() {
     addFloat(a.x, a.y - 40, 'CAUGHT!', '#ffd166', true);
     burst(a.x, a.y, 24, '#ffd166', 240, 'glow');
     killFighter(a, by, 'Caught');
+}
+
+// ---------- Boss Fight ----------
+// Everyone against one giant: a minigun and a rocket launcher, a stomp that throws you back, and lots of health.
+// At half health he calls in helpers and gets angry; at a quarter he calls in more.
+const BOSS = {
+    r: 46, hpBase: 3000, hpPer: 600, armor: 400, takes: 0.35, dmgMul: 0.25, speed: 0.95, rageSpeed: 1.2, color: '#5a1620',
+    guns: { normal: ['Minigun', 'Rocket Launcher'], heavy: ['Minigun', 'Rocket Launcher'], hightech: ['Minigun of Doom', 'Homing Launcher'], early: ['War Hammer', 'Longbow'] },
+    spray: 4500, rockets: 2600,  // how long he sprays the minigun, then how long he fires rockets
+    stomp: { every: 5000, reach: 190, dmg: 22, push: 900 },
+    waves: [{ at: 0.5, n: 4, title: 'HE CALLED FOR HELP!', sub: 'Guards are coming, and he\'s angry now!' },
+            { at: 0.25, n: 5, title: 'LAST STAND!', sub: 'More guards! Finish him off!' }],
+    allyGuns: ['Assault Rifle', 'Machine Gun', 'Shotgun', 'Sniper', 'Vector', 'Heavy MG', 'Mac10'],
+    allyHigh: ['Plasma Rifle', 'Tesla Cannon', 'Laser Beam', 'Railgun'], allyEarly: ['Longbow', 'Crossbow', 'Spear', 'Sword', 'Bow'],
+    ring: [700, 1300]
+};
+const ALLY_COLOR = '#3d8bff';
+function setupBossFight() {
+    const W = CONFIG.WORLD_SIZE, c = spawnNear({ x: W / 2, y: W / 2 }, 400, BOSS.r + 30, true);
+    const allies = G.fighters.filter(f => !f.isPlayer);
+    const b = createFighter(c.x, c.y, { name: 'THE BOSS', color: BOSS.color, team: 1 });
+    const hp = BOSS.hpBase + BOSS.hpPer * (allies.length + 1);
+    Object.assign(b, { boss: true, giant: true, r: BOSS.r, hp, maxHp: hp, armor: BOSS.armor, dmgMul: BOSS.dmgMul, rage: 0, nextStomp: 0, chasesDrops: false, likesCars: false });
+    b.dark = shade(b.color, -0.45); b.light = shade(b.color, 0.35);
+    const guns = BOSS.guns[G.warfare] || BOSS.guns.normal;
+    b.inv = guns.slice(); b.maxSlots = 2; b.slot = 0;
+    for (const g of guns) equipNew(b, g);
+    b.items.grenade = G.early ? 0 : 3;
+    G.fighters.push(b);
+    G.bossF = b;
+    // You and your team start in a ring round him, armed and ready
+    const team = G.fighters.filter(f => f.team === 0);
+    const pool = G.hightech ? BOSS.allyHigh : G.early ? BOSS.allyEarly : BOSS.allyGuns;
+    team.forEach((f, i) => {
+        const a = (i / team.length) * TAU + rand(-0.15, 0.15), d = rand(...BOSS.ring);
+        const s = spawnNear({ x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d }, 150, 30, true);
+        f.x = s.x; f.y = s.y; f.vx = f.vy = 0;
+        f.angle = Math.atan2(c.y - s.y, c.x - s.x);
+        if (f.inv.length < 3) { f.maxSlots = Math.max(f.maxSlots, 3); while (f.inv.length < 3) f.inv.push(null); }
+        applyLoot(f, f.isPlayer ? (G.hightech ? 'Plasma Rifle' : G.early ? 'Longbow' : 'Assault Rifle') : pick(pool), -1);
+        f.armor = Math.max(f.armor, 50);
+        if (!f.isPlayer) f.likesCars = false;  // (bots on bikes just ride into him and blow up)
+        f.items.bandage = Math.max(f.items.bandage, 3);
+        f.items.medkit = Math.max(f.items.medkit, 1);
+        if (!G.early) f.items.grenade = Math.max(f.items.grenade, 2);
+    });
+    // Ammo and medkits lying round the arena (outside his reach at the start)
+    for (let i = 0; i < 26 + team.length; i++) {
+        const a = rand(0, TAU), d = rand(500, 1600);
+        const s = spawnNear({ x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d }, 120, 30, true);
+        spawnLoot(s.x, s.y, pick(['ammo', 'ammo', 'ammo', 'bandage', 'medkit', 'armor', G.early ? 'ammo' : 'grenade']));
+    }
+    if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
+}
+// The boss picks his gun: minigun bursts, then a run of rockets (and the hammer when you're right on him)
+function bossWeapon(b, d) {
+    const cyc = BOSS.spray + BOSS.rockets, t = (G.time + (b.cycOff || 0)) % cyc;
+    let i = t < BOSS.spray ? 0 : 1;
+    if (G.early) i = d < 140 ? 0 : 1;
+    else if (i === 1 && d < ROCKET.radius + 60) i = 0;  // (no rockets in his own face)
+    switchSlot(b, i);
+}
+// Who the boss goes after with nobody in sight: the nearest of the team. His team goes after him
+function bossHunt(b) {
+    const boss = G.bossF;
+    if (!boss || boss.dead) return false;
+    let t = null;
+    if (b === boss) {
+        let bd = Infinity;
+        for (const f of G.fighters) if (!f.dead && f.team === 0 && !f.downed) { const d = dist(b, f); if (d < bd) { bd = d; t = f; } }
+    } else if (b.team === 0) t = boss;
+    else return false;
+    if (!t || dist(b, t) < 380) return false;
+    b.mode = 'zone';
+    if (!b.goal || b.goal.huntOf !== t) b.goal = { x: t.x, y: t.y, huntOf: t };
+    else { b.goal.x = t.x; b.goal.y = t.y; }
+    return true;
+}
+function updateBossFight(dt) {
+    const b = G.bossF;
+    if (!b) return;
+    if (b.dead) {
+        if (G.mode === 'demo' && G.time - b.diedAt > 4000) newDemo();
+        return;
+    }
+    for (const g of b.inv) if (g && !WEAPONS[g].melee) b.ammo[g] = 999;  // (he never runs out)
+    if (!G.early) b.items.grenade = Math.max(b.items.grenade, 1);
+    // The stomp: anyone right up against him is hurt and thrown back
+    if (G.time >= b.nextStomp) {
+        let hit = 0;
+        G.fgrid.query(b.x, b.y, BOSS.stomp.reach + 30, f => {
+            if (f.dead || f === b || !foe(b, f)) return;
+            const d = Math.hypot(f.x - b.x, f.y - b.y);
+            if (d > BOSS.stomp.reach + f.r) return;
+            hit++;
+            const k = (d || 1);
+            f.vx += ((f.x - b.x) / k) * BOSS.stomp.push; f.vy += ((f.y - b.y) / k) * BOSS.stomp.push;
+            damage(f, BOSS.stomp.dmg * (b.rage ? 1.3 : 1), b, 'Stomp');
+        });
+        if (hit) {
+            b.nextStomp = G.time + BOSS.stomp.every * (b.rage ? 0.65 : 1);
+            G.particles.push({ type: 'ring', x: b.x, y: b.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: BOSS.stomp.reach, color: '#ffb347' });
+            burst(b.x, b.y, 26, '#c9a46a', 260);
+            if (inView(b.x, b.y, 200)) G.shake = Math.max(G.shake, 14);
+            Sound.tone(55, 0.5, 'sawtooth', 0.09, 30);
+        } else b.nextStomp = G.time + 400;
+    }
+    // Hurt enough, he calls in his soldiers
+    const frac = b.hp / b.maxHp;
+    while (b.rage < BOSS.waves.length && frac <= BOSS.waves[b.rage].at) {
+        const w = BOSS.waves[b.rage];
+        b.rage++;
+        const n = Math.min(w.n + Math.floor(G.fighters.filter(f => f.team === 0 && !f.dead).length / 6), 12);
+        for (let i = 0; i < n; i++) {
+            const s = spawnNear(b, 320, 30, true);
+            addSoldier(s, i);
+            const f = G.fighters[G.fighters.length - 1];
+            f.name = `Guard ${i + 1}`; f.dmgMul = 0.45; f.helper = true;
+            burst(s.x, s.y, 12, '#ff4f6d', 200, 'glow');
+        }
+        G.alive += n;
+        b.cycOff = rand(0, 3000);
+        burst(b.x, b.y, 40, '#ff4f6d', 320, 'glow');
+        G.particles.push({ type: 'ring', x: b.x, y: b.y, vx: 0, vy: 0, life: 0.8, max: 0.8, size: 260, color: '#ff4f6d' });
+        if (G.mode === 'playing') { showBanner(w.title, true, w.sub); Sound.tone(70, 1.4, 'sawtooth', 0.08, 40); G.flash = 0.35; G.flashColor = '255,60,60'; }
+    }
 }
 
 // Drops n supply crates (already landed) at open outdoor spots within r of c
@@ -5143,7 +5270,7 @@ function updateOutbreak(dt) {
         if (f.dead) continue;
         if (G.zombies) {
             if (f.zombie) { b++; f.hp = Math.min(f.maxHp, f.hp + ZOMBIE.regen * dt); } else a++;
-        } else if (f.soldier || f.assassin) b++;
+        } else if (f.soldier || f.assassin || f.giant) b++;
         else {
             a++;
             // Out of the fight for a while, the group patches itself up
@@ -5153,9 +5280,15 @@ function updateOutbreak(dt) {
     // People left behind on other floors still count as alive
     for (const k in G.layers) if (k !== G.layerKey) for (const f of G.layers[k].fighters) if (!f.dead) { if (G.zombies ? !f.zombie : !f.soldier) a++; else b++; }
     G.sides = { a, b };
+    if (G.bossFight) updateBossFight(dt);
     if (G.mode !== 'playing' || G.result) return;
     const p = G.player;
-    if (G.escape) {
+    if (G.bossFight) {
+        if (!G.bossF || !G.bossF.dead || p.dead) return;
+        G.result = { won: true, place: 1, title: 'BOSS DEFEATED!', sub: G.bossF.killedBy === p ? 'You landed the final blow!' : 'Your team brought the giant down.' };
+        G.overAt = G.time + 2600;
+        startVictory(G.result.sub);
+    } else if (G.escape) {
         const heli = G.world.floor ? G.world.floor.heli : G.extract;
         if (heli && !p.dead && dist(p, heli) < ESCAPE.heliR) boardHelicopter();
         else if (!G.world.floor && G.time >= G.nextReinf) { reinforce(); G.nextReinf = G.time + rand(...(G.world.maze ? ESCAPE.maze.reinforce : ESCAPE.reinforceEvery)); }
@@ -5198,6 +5331,12 @@ function newDemo() {
         return;
     }
     const epic = id === 'epic', zombies = id === 'zombies';
+    if (id === 'boss') {
+        newState('demo', { type: 'boss', count: 24 });
+        G.alive = G.fighters.length;
+        G.cam.x = G.bossF.x; G.cam.y = G.bossF.y;
+        return;
+    }
     if (id === 'escape') {
         // A small breakout: the people in the middle, soldiers around them, pads at the arena edge
         newState('demo', { type: 'escape', count: 0 });
@@ -5747,6 +5886,7 @@ function playerPickup(p = G.player) {
 }
 
 function botWants(b, key) {
+    if (b.giant) return false;  // (the boss doesn't go shopping)
     const w = WEAPONS[key];
     if (w) {
         if (b.inv.includes(key)) return key !== 'Pistol' && b.ammo[key] < w.mag;
@@ -6281,6 +6421,7 @@ function damage(t, amount, attacker, weapon) {
     if (G.escape && !attacker && !t.soldier) dmg *= ESCAPE.ambient;
     if (G.time < (t.frozenUntil || 0)) dmg *= 1.5;  // frozen solid: hits shatter
     dmg *= edgeOf(t).takes;
+    if (t.giant) dmg *= BOSS.takes;  // (his hide is thick)
     if (attacker !== t) dmg *= edgeOf(attacker).hits;
     dmg = shieldAbsorb(t, dmg, attacker, weapon);
     if (t.armor > 0) {
@@ -6343,6 +6484,7 @@ function killFighter(t, killer, weapon) {
     t.hp = 0;
     t.dead = true;
     t.diedAt = G.time;
+    t.killedBy = killer;
     G.alive--;
     if (killer && killer !== t) killer.kills++;
 
@@ -6361,7 +6503,7 @@ function killFighter(t, killer, weapon) {
     if (t.isPlayer && G.result) return;
     if (t.isPlayer && t.assassin) return;  // (Assassin: caught or taken down, it's reported as a catch)
     if (t.isPlayer) {
-        G.result = { won: false, place: G.escape ? G.sides.a + G.escaped : G.alive + 1, sub: G.escape ? `The army got you. ${G.escaped} of ${ESCAPE.people} people escaped.` : null, killer: killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null) };
+        G.result = { won: false, place: G.escape ? G.sides.a + G.escaped : G.alive + 1, sub: G.escape ? `The army got you. ${G.escaped} of ${ESCAPE.people} people escaped.` : G.bossFight && G.bossF && !G.bossF.dead ? `The boss still has ${Math.ceil(G.bossF.hp / G.bossF.maxHp * 100)}% of his health left.` : null, killer: killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null) };
         G.overAt = G.time + 1800;
         G.timeScale = 0.25;
         G.flash = 0.5;
@@ -6833,6 +6975,8 @@ function botThink(b) {
         b.goal = goal;
         return;
     }
+    // Boss Fight: the giant tracks down the team, and the team goes after him
+    if (G.bossFight && (b.giant || b.team === 0) && (b.giant || b.inv.some(Boolean)) && bossHunt(b)) return;
     // Assassin: survivors can't stay together. Anyone too close to another survivor heads off on their own
     if (G.assassin && b.team === 0 && G.mode === 'playing') {
         let near = null, nd = ASSASSIN.apart;
@@ -6952,6 +7096,7 @@ function findBoxFor(b) {
 }
 
 function chooseBotWeapon(b, d) {
+    if (b.giant) { bossWeapon(b, d); return; }
     let best = 0, score = -1;
     b.inv.forEach((slot, i) => {
         const n = slot || 'Fist', w = WEAPONS[n];
@@ -7128,7 +7273,7 @@ function updateBot(b, dt) {
     if (b.downed) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
-    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.zombie ? ZOMBIE.speed : 1), faceMove = true;
+    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.zombie ? ZOMBIE.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1), faceMove = true;
 
     switch (b.mode) {
         case 'fight': {
@@ -12829,10 +12974,16 @@ function playerGlow(x, y, r) {
 
 function drawFighter(f) {
     if (f.downed) { drawDowned(f); return; }
-    const r = f.r;
+    // (the boss is drawn as a normal fighter blown up to giant size, gun and all)
+    const gk = f.giant ? f.r / CONFIG.RADIUS : 1, r = f.giant ? CONFIG.RADIUS : f.r;
     const w = WEAPONS[held(f)];
     ctx.save();
     ctx.translate(f.x, f.y);
+    if (f.giant) {
+        // An angry red glow round him once he's raging
+        if (f.rage) { const pu = 0.5 + Math.sin(G.time / 140) * 0.2; ctx.fillStyle = `rgba(255,60,60,${0.18 * pu + 0.08})`; ctx.beginPath(); ctx.arc(0, 0, f.r * 1.45, 0, TAU); ctx.fill(); }
+        ctx.scale(gk, gk);
+    }
 
     if (!lowDetail) {
         ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -12926,6 +13077,21 @@ function drawFighter(f) {
         ctx.fillStyle = 'rgba(120,30,30,0.6)';
         ctx.beginPath(); ctx.arc(-r * 0.5, -r * 0.1, r * 0.16, 0, TAU); ctx.fill();
     }
+    if (f.giant) {
+        // Armor plates, two horns and glowing eyes, all facing where he looks
+        ctx.save(); ctx.rotate(f.angle);
+        ctx.fillStyle = 'rgba(20,6,10,0.55)';
+        ctx.beginPath(); ctx.arc(-r * 0.15, 0, r * 0.62, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#e8dcc0'; ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1;
+        for (const sy of [-1, 1]) {
+            ctx.beginPath(); ctx.moveTo(r * 0.05, sy * r * 0.55); ctx.quadraticCurveTo(-r * 0.2, sy * r * 1.35, -r * 0.85, sy * r * 1.25); ctx.quadraticCurveTo(-r * 0.25, sy * r * 0.95, -r * 0.3, sy * r * 0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        const glow = f.rage ? '#ff3030' : '#ffb000';
+        ctx.fillStyle = glow; ctx.shadowColor = glow; ctx.shadowBlur = 8;
+        for (const sy of [-1, 1]) { ctx.beginPath(); ctx.ellipse(r * 0.55, sy * r * 0.28, r * 0.16, r * 0.1, 0, 0, TAU); ctx.fill(); }
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
     if (f.soldier) {
         // Camo blotches and a helmet
         ctx.fillStyle = 'rgba(40,46,24,0.7)';
@@ -13014,13 +13180,13 @@ function drawOverhead(f) {
     }
     if (f.boss) {
         // The Commander's health and armor are always shown, with his title
-        const w = 70, x = f.x - w / 2, y = f.y - f.r - 20;
-        ctx.font = '700 14px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.lineWidth = 3; ctx.strokeStyle = '#160e28'; ctx.strokeText('COMMANDER', f.x, y - 4);
-        ctx.fillStyle = '#ffd166'; ctx.fillText('COMMANDER', f.x, y - 4);
+        const w = f.giant ? 130 : 70, x = f.x - w / 2, y = f.y - f.r - 20, title = f.giant ? 'THE BOSS' : 'COMMANDER';
+        ctx.font = `700 ${f.giant ? 18 : 14}px Rajdhani, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.lineWidth = 3; ctx.strokeStyle = '#160e28'; ctx.strokeText(title, f.x, y - 4);
+        ctx.fillStyle = f.rage ? '#ff4f6d' : '#ffd166'; ctx.fillText(title, f.x, y - 4);
         ctx.fillStyle = 'rgba(18,10,38,0.8)'; roundRect(ctx, x - 2, y - 2, w + 4, 11, 3); ctx.fill();
         ctx.fillStyle = '#ff4f6d'; ctx.fillRect(x, y, w * clamp(f.hp / f.maxHp, 0, 1), 5);
-        ctx.fillStyle = '#4cc3ff'; ctx.fillRect(x, y + 5, w * clamp(f.armor / COMMANDER.armor, 0, 1), 3);
+        ctx.fillStyle = '#4cc3ff'; ctx.fillRect(x, y + 5, w * clamp(f.armor / (f.giant ? BOSS.armor : COMMANDER.armor), 0, 1), 3);
         return;
     }
     if (G.time - f.lastHurt > 2500) return;
@@ -13343,7 +13509,10 @@ function updateHUD() {
     } else if (G.noZone) {
         const { a, b } = G.sides;
         const chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
-        setHTML(hud.teamScore, 'teams', G.assassin
+        const B = G.bossF, pct = B ? Math.max(0, Math.ceil(B.hp / B.maxHp * 100)) : 0;
+        if (G.bossFight) setHTML(hud.teamScore, 'teams', chip(a, SURVIVOR_COLOR, 'Your team', true) + '<em>vs</em>'
+            + `<div class="boss-hp${B && B.rage ? ' rage' : ''}"><span>THE BOSS${b > 1 ? ` + ${b - 1} guard${b === 2 ? '' : 's'}` : ''}</span><div><i style="width:${pct}%"></i><s style="width:${B ? clamp(B.armor / BOSS.armor, 0, 1) * 100 : 0}%"></s></div><b>${pct}%</b></div>`);
+        else setHTML(hud.teamScore, 'teams', G.assassin
             ? chip(a, SURVIVOR_COLOR, 'Survivors', !p.assassin) + '<em>vs</em>' + chip(b, '#e0303a', b ? 'Assassin' : 'Caught', !!p.assassin)
             : G.zombies
             ? chip(a, SURVIVOR_COLOR, 'Survivors', !p.zombie) + '<em>vs</em>' + chip(b, ZOMBIE.color, 'Zombies', p.zombie)
@@ -13352,6 +13521,7 @@ function updateHUD() {
 
     let zt;
     if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
+    else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
     else if (G.assassin) zt = p.assassin ? "Take them all out · don't get caught" : 'Find the assassin and catch him';
     else if (G.escape) {
         const F = G.world.floor;
@@ -13686,6 +13856,7 @@ const MODES = [
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'revolution', name: 'REVOLUTION', desc: 'Rebels against the Regime: fortified bases with healing rooms and an armory, chests everywhere, tanks and cannons. Everyone is tougher, and there are no respawns or revives: when you die, you stay dead.' },
     { id: 'assassin', name: 'ASSASSIN', desc: 'Pitch dark. One assassin with a Barrett hides among the survivors and picks them off. Survivors win if they catch him (touch him or take him down); he wins if nobody is left. Play as either side.' },
+    { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' }
 ];
 // After the mode and its settings, you pick how the fight is armed
@@ -13707,7 +13878,7 @@ function setMenuMode(i, dir) {
     $('settings-ffa').classList.toggle('hidden', m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-assassin').classList.toggle('hidden', m.id !== 'assassin');
-    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'assassin' ? 'Survivors' : 'Opponents';
+    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'assassin' ? 'Survivors' : m.id === 'boss' ? 'Teammates' : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
     // Revolution is always two sides
     $('team-count').closest('.cpu-row').classList.toggle('hidden', m.id === 'revolution');
@@ -14025,6 +14196,7 @@ const BRIEF = {
     survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat, and drink at ponds.'], ['😴', 'Rest when you are tired.'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
     revolution: [['🎯', '<b>Goal:</b> wipe out the other side or bring down their castle.'], ['🏰', 'Each side has a castle with healing rooms, an armory, guard towers and cannons on the walls.'], ['💥', 'Load ammo into your boss strike pad and launch it at the enemy castle.'], ['☠️', 'No revives: when you die, you stay dead.']],
     assassin: [['🎯', '<b>Survivors:</b> find the assassin and touch him (or take him down) to win.'], ['🔫', '<b>Assassin:</b> a Barrett with 2000 rounds and a medkit (a Railgun in High Tech). Take everyone out without getting caught.'], ['🌑', 'Pitch dark. Everyone has a flashlight.'], ['🔭', 'Sniper rifles have an 8x night-vision scope.'], ['🚶', 'Survivors spread out: they can\'t stay together.']],
+    boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
@@ -14075,7 +14247,7 @@ function openMapSelect() {
     const id = MODES[menuMode].id, escape = id === 'escape';
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
-        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin'));
+        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution' || id === 'boss') && m === 'maze') || (m === 'wasteland' && id !== 'assassin'));
         card.disabled = false;
         card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
     }
@@ -14192,7 +14364,7 @@ function startGame(map = lastMap) {
     // Escape has no open countryside to cross, and Survival has no maze
     if (id === 'escape' && map === 'ordinary') map = 'city';
     if (id !== 'assassin' && map === 'wasteland') map = 'ordinary';
-    if (id === 'survival' && map === 'maze') map = 'ordinary';
+    if ((id === 'survival' || id === 'boss') && map === 'maze') map = 'ordinary';
     lastMap = map;
     const setup = war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
@@ -14226,6 +14398,7 @@ function startGame(map = lastMap) {
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
     else if (G.hightech && war) showBanner(`HIGH TECH TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Find quantum guns in the crates and grab a mech!');
     else if (war) showBanner(`TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, false, 'Grab guns from the supply crates near your base');
+    else if (G.bossFight) showBanner('BOSS FIGHT', true, `You + ${G.fighters.filter(f => f.team === 0).length - 1} vs THE BOSS. Don't get close!`);
     else if (G.assassin) showBanner('ASSASSIN', true, G.player.assassin ? `You're the assassin. ${G.alive - 1} survivors in the dark. If one of them touches you, you're caught!` : `An assassin with a ${G.hightech ? 'Railgun' : 'Barrett'} is hiding among ${G.alive - 1} of you. Find him and catch him!`);
     else if (G.zombies) { const z = G.fighters.filter(f => f.zombie).length; showBanner('ZOMBIES', true, `${z} zombies are out there. Survive with ${G.fighters.length - z - 1} other survivors.`); }
     else if (G.escape) showBanner('ESCAPE', true, G.world.terrain === 'maze' ? 'Find a way through the maze to the helicopter. Machine-gun nests, minefields, and the map only shows where you\'ve been!'

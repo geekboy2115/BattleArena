@@ -927,3 +927,13 @@ body.fs #fs-btn { opacity: 0.55; }
     .credit { margin: 4px 0 12px; font-size: 13px; }
     #menu .menu-card { padding-top: 16px; }
 }
+
+/* ---------- Boss Fight: the boss's health bar in the scoreboard ---------- */
+.boss-hp { display: flex; align-items: center; gap: 8px; }
+.boss-hp span { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #ffd166; white-space: nowrap; }
+.boss-hp div { position: relative; width: 180px; height: 12px; border-radius: 6px; background: rgba(0, 0, 0, 0.5); overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.15); }
+.boss-hp i { position: absolute; left: 0; top: 0; bottom: 3px; background: linear-gradient(90deg, #b3262e, #ff4f6d); transition: width 0.2s; }
+.boss-hp s { position: absolute; left: 0; bottom: 0; height: 3px; background: #4cc3ff; }
+.boss-hp b { font-size: 18px; line-height: 1; }
+.boss-hp.rage span, .boss-hp.rage b { color: #ff4f6d; }
+@media (max-width: 760px), (max-height: 500px) { .boss-hp div { width: 90px; } .boss-hp span { display: none; } .boss-hp b { font-size: 15px; } }
