@@ -3,7 +3,7 @@
   "short_name": "Battle Arena",
   "start_url": "./",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "orientation": "any",
   "background_color": "#1a1030",
   "theme_color": "#1a1030",
   "icons": [

@@ -14700,8 +14700,6 @@ if (window.matchMedia && matchMedia('(pointer: coarse)').matches) enableTouch();
 // screen sideways where the phone allows it). The ⛶ button switches it off and back on.
 // iPhones can't make a web page full screen, so there the button explains Add to Home Screen instead.
 const FS = { off: false };
-// Whichever way the phone was held when the game was opened (upright or sideways) is the way it stays
-const START_ORIENT = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
 
 // Every menu box is shrunk just enough to fit on the screen, so nothing ever has to scroll
 function fitMenus() {
@@ -14728,7 +14726,8 @@ function enterFullscreen() {
     const el = document.documentElement;
     try {
         const r = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen();
-        if (r && r.then) r.then(() => { try { screen.orientation && screen.orientation.lock && screen.orientation.lock(START_ORIENT).catch(() => {}); } catch (_) {} }).catch(() => {});
+        // (no orientation lock: upright or sideways, the game turns with the phone)
+        if (r && r.then) r.then(() => { try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch (_) {} }).catch(() => {});
     } catch (_) {}
 }
 function exitFullscreen() {
