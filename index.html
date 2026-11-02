@@ -5,6 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Battle Arena">
+    <meta name="theme-color" content="#1a1030">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <title>Battle Arena</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,6 +20,9 @@
 
 <body>
     <canvas id="game"></canvas>
+    <!-- Phones and iPads: full screen (on by default; this switches it) -->
+    <button id="fs-btn" type="button" aria-label="Full screen">⛶</button>
+    <div id="fs-hint" class="hidden">To play full screen on iPhone: tap <b>Share</b> <span>⎋</span> then <b>Add to Home Screen</b>, and open Battle Arena from your home screen.<button id="fs-hint-ok" class="btn primary">OK</button></div>
 
     <!-- In-game HUD -->
     <div id="hud" class="hidden">

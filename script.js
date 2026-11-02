@@ -14593,6 +14593,42 @@ function enableTouch() {
     document.body.classList.add('touch');
 }
 if (window.matchMedia && matchMedia('(pointer: coarse)').matches) enableTouch();
+
+// ---------- Full screen on phones and iPads ----------
+// On by default: browsers only allow it after a tap, so the first tap anywhere goes full screen (and turns the
+// screen sideways where the phone allows it). The ⛶ button switches it off and back on.
+// iPhones can't make a web page full screen, so there the button explains Add to Home Screen instead.
+const FS = { off: false };
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+const fsCan = () => !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+const standalone = () => (window.matchMedia && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) || navigator.standalone;
+function enterFullscreen() {
+    if (fsEl() || !fsCan()) return;
+    const el = document.documentElement;
+    try {
+        const r = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen();
+        if (r && r.then) r.then(() => { try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); } catch (_) {} }).catch(() => {});
+    } catch (_) {}
+}
+function exitFullscreen() {
+    try { if (document.exitFullscreen) document.exitFullscreen().catch(() => {}); else if (document.webkitExitFullscreen) document.webkitExitFullscreen(); } catch (_) {}
+}
+// (any tap, while it's on and we're not already full screen)
+const fsAuto = e => { if (TOUCH.enabled && !FS.off && !fsEl() && e.target && e.target.id !== 'fs-btn') enterFullscreen(); };
+window.addEventListener('pointerup', fsAuto, true);
+window.addEventListener('touchend', fsAuto, true);
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { document.body.classList.toggle('fs', !!fsEl()); setTimeout(() => window.dispatchEvent(new Event('resize')), 120); });
+(function setUpFullscreenButton() {
+    const btn = document.getElementById('fs-btn'), hint = document.getElementById('fs-hint');
+    if (standalone()) { btn.style.display = 'none'; return; }
+    btn.addEventListener('pointerdown', e => e.stopPropagation());
+    btn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        if (!fsCan()) { hint.classList.remove('hidden'); return; }
+        if (fsEl()) { FS.off = true; exitFullscreen(); } else { FS.off = false; enterFullscreen(); }
+    });
+    document.getElementById('fs-hint-ok').addEventListener('click', () => hint.classList.add('hidden'));
+})();
 window.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') enableTouch(); }, true);
 
 // A key from the touch controls: pressed here, or sent to the host when playing on a friend's game
@@ -14703,6 +14739,9 @@ function touchFrame() {
         // (pause: just under your stats, top left)
         const tl = $('hud-topleft').getBoundingClientRect();
         $('tb-pause').style.top = `${(tl.height ? tl.bottom : 60) + 8}px`;
+        const pr = $('tb-pause').getBoundingClientRect(), fb = $('fs-btn');
+        if (document.body.classList.contains('playing')) { fb.style.left = `${pr.width ? pr.right + 10 : 70}px`; fb.style.top = `${pr.width ? pr.top + (pr.height - 40) / 2 : (tl.bottom || 60) + 8}px`; }
+        else { fb.style.left = ''; fb.style.top = ''; }
         // The pick-up button sits at the bottom, between the two sticks
         const pk = $('tb-pick'), mr = moveEl.getBoundingClientRect(), gapW = ax - mr.right - 12;
         pk.style.maxWidth = `${Math.max(120, gapW)}px`;
