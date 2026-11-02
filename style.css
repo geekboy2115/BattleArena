@@ -830,3 +830,27 @@ body.touch #grenade-panel { pointer-events: auto; }
 body.touch #tb-pause { top: auto; left: 12px; margin-left: 0; bottom: auto; }
 body.touch .slot .key { display: none; }
 .supply.armed { border-color: #ffb347; box-shadow: 0 0 18px rgba(255, 179, 71, 0.75); background: rgba(255, 179, 71, 0.22); }
+
+/* Doomsday Nuke: the use button and the targeting map */
+.nuke-use {
+    display: block; width: 100%; margin: 0 0 6px; padding: 7px 10px; border: 2px solid #ff3b3b; border-radius: 9px;
+    background: linear-gradient(180deg, #b31212, #6e0808); color: #fff; font: 800 15px Rajdhani, sans-serif; letter-spacing: 1.5px;
+    cursor: pointer; box-shadow: 0 0 14px rgba(255, 50, 50, 0.55); animation: nukePulse 1.1s ease-in-out infinite;
+}
+.nuke-use.hidden { display: none; }
+.nuke-use:hover { filter: brightness(1.2); }
+@keyframes nukePulse { 50% { box-shadow: 0 0 26px rgba(255, 70, 70, 0.95); } }
+#nuke-map { z-index: 60; background: rgba(10, 0, 0, 0.72); }
+.nm-card {
+    display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 16px 16px; max-width: calc(100vw - 24px);
+    background: rgba(20, 12, 12, 0.94); border: 2px solid #ff3b3b; border-radius: 16px; box-shadow: 0 0 40px rgba(255, 40, 40, 0.4);
+}
+.nm-title { color: #ff5a5a; margin: 0; }
+#nm-sub { margin: 0; text-align: center; }
+#nm-canvas { display: block; border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.25); cursor: crosshair; touch-action: none; }
+@media (max-height: 520px) {
+    #nm-sub { display: none; }
+    .nm-card { padding: 6px 10px 8px; gap: 4px; }
+    .nm-title { font-size: 18px; }
+    #nm-cancel { padding: 4px 12px; }
+}

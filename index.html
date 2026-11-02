@@ -61,6 +61,7 @@
 
         <div id="grenade-panel" class="panel">
             <div class="throw-hint">Click a grenade (or <kbd>T</kbd>) to hold it · then shoot to throw</div>
+            <button id="nuke-use" class="nuke-use hidden" type="button">☢ USE NUKE</button>
             <div class="supply-row">
                 <div class="supply throwable" id="cell-grenade" title="Frag grenade"><img alt=""><span class="count" id="count-grenade"></span></div>
                 <div class="supply throwable" id="cell-smoke" title="Smoke grenade"><img alt=""><span class="count" id="count-smoke"></span></div>
@@ -265,6 +266,16 @@
             <input id="sl-amount" class="sl-input" type="number" min="0" step="1" inputmode="numeric">
             <button id="sl-ok" class="btn primary">LOAD AMMO</button>
             <button id="sl-cancel" class="btn ghost">CANCEL</button>
+        </div>
+    </div>
+
+    <!-- Doomsday Nuke: pick where on the map it hits -->
+    <div id="nuke-map" class="overlay hidden">
+        <div class="nm-card">
+            <h2 class="card-title nm-title">☢ PICK A TARGET</h2>
+            <p class="go-sub" id="nm-sub">Click anywhere on the map. The red circle is everything the nuke wipes out.</p>
+            <canvas id="nm-canvas"></canvas>
+            <button id="nm-cancel" class="btn ghost">CANCEL</button>
         </div>
     </div>
 

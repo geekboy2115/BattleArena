@@ -492,6 +492,7 @@ window.addEventListener('mouseup', e => {
 
 function playerCook(p = G && G.player) {
     if (!G || G.mode !== 'playing' || !p || p.dead || p.downed || p.cook) return;
+    if (p.throwSel === 'nuke' && p.items.nuke > 0 && openNukeMap(p)) return;
     // Fall back to whatever throwable you actually have
     if (!(p.items[p.throwSel] > 0)) {
         const next = THROWABLES.find(k => p.items[k] > 0);
@@ -531,6 +532,7 @@ function onKeyPress(code, caps = false, who = null) {
     if (!G) return;
     // (a friend's key presses: only the ones that act in the game)
     if (who) { if (G.mode === 'playing' && !who.dead) playerAction(who, code); return; }
+    if (nukeMap.open) { if (code === 'Escape') closeNukeMap(null); return; }
     if (code === 'Escape') {
         if (G.mode === 'playing') setPaused(true);
         else if (G.mode === 'paused') setPaused(false);
@@ -8152,11 +8154,111 @@ function drawLighting(camX, camY, zoom) {
 const NUKE = { radius: 3000 * MAP_SCALE, shock: 4300 * MAP_SCALE, delay: 24, fuse: 2.6, cloud: 2.4 * MAP_SCALE };
 const nukes = () => G.world.nukes || (G.world.nukes = []);
 
-function armNuke(x, y, owner) {
+function armNuke(x, y, owner, aimed) {
     nukes().push({ x, y, owner, t: 0 });
     // Everyone hears this one coming
-    if (G.mode === 'playing') showBanner('NUKE INCOMING', true, owner && owner.isPlayer ? `You have ${NUKE.delay} seconds. RUN!` : `Get out of the red circle in ${NUKE.delay} seconds!`);
+    const youIn = G.player && Math.hypot(G.player.x - x, G.player.y - y) < NUKE.radius;
+    if (G.mode === 'playing') showBanner(aimed && owner === G.player ? 'NUKE LAUNCHED' : 'NUKE INCOMING', true,
+        owner && owner.isPlayer ? (aimed && !youIn ? `It hits your target in ${NUKE.delay} seconds` : `You have ${NUKE.delay} seconds. RUN!`) : `Get out of the red circle in ${NUKE.delay} seconds!`);
     Sound.siren(1);
+}
+
+// You don't throw a Doomsday Nuke: USE brings up the whole map and you pick where it comes down
+const nukeMap = { open: false, hover: null, S: 0, held: false };
+const canMapNuke = p => !!(G && G.mode === 'playing' && p && p.isPlayer && !p.remote && !p.dead && !p.downed && !p.zombie && p.items.nuke > 0 && !G.world.floor);
+function openNukeMap(p = G && G.player) {
+    if (!canMapNuke(p)) return false;
+    nukeMap.open = true; nukeMap.hover = null; nukeMap.held = false;
+    $('nuke-map').classList.remove('hidden');
+    document.body.classList.remove('playing');
+    keys.clear(); mouse.down = false; p.cookByTrigger = false;
+    G.mode = 'paused';
+    drawNukeMap();
+    Sound.tone(220, 0.25, 'square', 0.06, 440);
+    return true;
+}
+function closeNukeMap(target) {
+    if (!nukeMap.open) return;
+    nukeMap.open = false;
+    $('nuke-map').classList.add('hidden');
+    mouse.down = false;
+    if (G && G.mode === 'paused') { G.mode = 'playing'; document.body.classList.add('playing'); }
+    const p = G && G.player;
+    if (!p) return;
+    p.nadeReady = false;  // (the trigger goes back to your gun)
+    if (!target || p.dead || !(p.items.nuke > 0)) return;
+    p.items.nuke--;
+    armNuke(clamp(target.x, 0, CONFIG.WORLD_SIZE), clamp(target.y, 0, CONFIG.WORLD_SIZE), p, true);
+    G.shake = Math.max(G.shake || 0, 6);
+}
+// The map picture: the whole battlefield, the bases, the zone, you and your team, and where the nuke would land
+function drawNukeMap() {
+    const cv = $('nm-canvas'), W = CONFIG.WORLD_SIZE;
+    const S = Math.max(160, Math.floor(Math.min(window.innerWidth - 60, window.innerHeight - (window.innerHeight < 520 ? 100 : 240), 780)));
+    const d = window.devicePixelRatio || 1;
+    if (nukeMap.S !== S || cv.width !== Math.round(S * d)) { cv.width = Math.round(S * d); cv.height = Math.round(S * d); cv.style.width = cv.style.height = S + 'px'; nukeMap.S = S; }
+    const g = cv.getContext('2d'), k = S / W, p = G.player;
+    g.setTransform(d, 0, 0, d, 0, 0);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(G.world.minimap, 0, 0, S, S);
+    // crisp buildings over the picture
+    for (const b of G.world.buildings || []) { g.fillStyle = b.roof || '#777'; g.fillRect(b.x0 * k, b.y0 * k, Math.max(1, b.w * k), Math.max(1, b.h * k)); }
+    // a light grid, like a war-room map
+    g.strokeStyle = 'rgba(255,255,255,0.12)'; g.lineWidth = 1;
+    for (let i = 1; i < 8; i++) { const v = Math.round((S * i) / 8) + 0.5; g.beginPath(); g.moveTo(v, 0); g.lineTo(v, S); g.moveTo(0, v); g.lineTo(S, v); g.stroke(); }
+    const z = G.zone;
+    if (z && !G.noZone) {
+        g.beginPath(); g.rect(0, 0, S, S); g.arc(z.cx * k, z.cy * k, Math.max(0.5, z.r * k), 0, TAU);
+        g.fillStyle = 'rgba(150,30,90,0.35)'; g.fill('evenodd');
+        g.strokeStyle = '#ff4f6d'; g.lineWidth = 2; g.beginPath(); g.arc(z.cx * k, z.cy * k, Math.max(0.5, z.r * k), 0, TAU); g.stroke();
+    }
+    g.font = `800 ${Math.max(11, Math.round(S / 50))}px Rajdhani, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'bottom';
+    const label = (t, x, y) => { g.strokeStyle = 'rgba(0,0,0,0.85)'; g.lineWidth = 3; g.strokeText(t, x, y); g.fillStyle = '#fff'; g.fillText(t, x, y); };
+    if (G.revolution) for (const base of G.revolution.bases) {
+        const r = base.rect, mine = base.team === p.team;
+        g.fillStyle = base.fallen ? 'rgba(60,55,50,0.8)' : REVO.sides[base.team].flag;
+        g.globalAlpha = 0.85; g.fillRect(r.x0 * k, r.y0 * k, (r.x1 - r.x0) * k, (r.y1 - r.y0) * k); g.globalAlpha = 1;
+        g.strokeStyle = '#fff'; g.lineWidth = 2; g.strokeRect(r.x0 * k, r.y0 * k, (r.x1 - r.x0) * k, (r.y1 - r.y0) * k);
+        label(base.fallen ? 'FALLEN' : mine ? 'YOUR BASE' : 'ENEMY BASE', ((r.x0 + r.x1) / 2) * k, r.y0 * k - 2);
+    }
+    for (const n of G.world.nukes || []) {
+        g.fillStyle = 'rgba(255,40,40,0.3)'; g.strokeStyle = '#ff3b3b'; g.lineWidth = 2;
+        g.beginPath(); g.arc(n.x * k, n.y * k, NUKE.radius * k, 0, TAU); g.fill(); g.stroke();
+    }
+    if (G.war) { g.fillStyle = (TEAMS[p.team] || {}).color || '#5ee08a'; for (const f of G.fighters) if (!f.dead && f.team === p.team && f !== p) g.fillRect(f.x * k - 2, f.y * k - 2, 4, 4); }
+    // you
+    g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2;
+    g.beginPath(); g.arc(p.x * k, p.y * k, 5, 0, TAU); g.fill(); g.stroke();
+    label('YOU', p.x * k, p.y * k - 7);
+    // where it would come down
+    const h = nukeMap.hover;
+    if (h) {
+        const x = h.x * k, y = h.y * k;
+        g.setLineDash([6, 5]); g.strokeStyle = 'rgba(255,190,80,0.9)'; g.lineWidth = 1.5;
+        g.beginPath(); g.arc(x, y, NUKE.shock * k, 0, TAU); g.stroke(); g.setLineDash([]);
+        g.fillStyle = 'rgba(255,30,30,0.35)'; g.strokeStyle = '#ff2b2b'; g.lineWidth = 3;
+        g.beginPath(); g.arc(x, y, NUKE.radius * k, 0, TAU); g.fill(); g.stroke();
+        g.strokeStyle = '#fff'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(x - 14, y); g.lineTo(x + 14, y); g.moveTo(x, y - 14); g.lineTo(x, y + 14); g.stroke();
+        g.beginPath(); g.arc(x, y, 6, 0, TAU); g.stroke();
+        if (Math.hypot(p.x - h.x, p.y - h.y) < NUKE.radius) { g.font = `800 ${Math.max(13, Math.round(S / 34))}px Rajdhani, sans-serif`; g.fillStyle = '#ffd166'; g.textBaseline = 'top'; g.fillText("YOU'RE INSIDE THE BLAST!", S / 2, 8); }
+    }
+}
+function nukeMapPoint(e) {
+    const r = $('nm-canvas').getBoundingClientRect(), W = CONFIG.WORLD_SIZE;
+    return { x: clamp((e.clientX - r.left) / r.width, 0, 1) * W, y: clamp((e.clientY - r.top) / r.height, 0, 1) * W };
+}
+function wireNukeMap() {
+    const cv = $('nm-canvas');
+    // (press to see where it lands, drag to move it, let go to fire; a mouse shows the circle as you hover)
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); nukeMap.held = true; nukeMap.hover = nukeMapPoint(e); try { cv.setPointerCapture(e.pointerId); } catch (_) {} drawNukeMap(); });
+    cv.addEventListener('pointermove', e => { if (!nukeMap.open || (e.pointerType !== 'mouse' && !nukeMap.held)) return; nukeMap.hover = nukeMapPoint(e); drawNukeMap(); });
+    cv.addEventListener('pointerup', e => { if (!nukeMap.held) return; nukeMap.held = false; closeNukeMap(nukeMapPoint(e)); });
+    cv.addEventListener('pointercancel', () => { nukeMap.held = false; });
+    cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !nukeMap.held) { nukeMap.hover = null; drawNukeMap(); } });
+    $('nm-cancel').addEventListener('click', () => closeNukeMap(null));
+    $('nuke-use').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); openNukeMap(); });
+    window.addEventListener('resize', () => { if (nukeMap.open) drawNukeMap(); });
 }
 
 function updateNukes(dt) {
@@ -13020,7 +13122,7 @@ const hud = {
     banner: $('banner'), prompt: $('prompt'), hpBar: $('hp-bar'), armorBar: $('armor-bar'), shieldBar: $('shield-bar'), hungerBar: $('hunger-bar'), thirstBar: $('thirst-bar'), energyBar: $('energy-bar'), hotbar: $('hotbar'),
     weapon: $('weapon-name'), mag: $('mag'),
     minimap: $('minimap').getContext('2d'), cache: {},
-    cells: Object.fromEntries(STACKABLE.map(k => [k, $('cell-' + k)])),
+    cells: Object.fromEntries(STACKABLE.map(k => [k, $('cell-' + k)])), nukeUse: $('nuke-use'),
     counts: Object.fromEntries(STACKABLE.map(k => [k, $('count-' + k)])),
     healBar: $('heal-bar'), healLabel: $('heal-label'), teamScore: $('team-score')
 };
@@ -13127,6 +13229,7 @@ function updateHUD() {
         hud.cells[k].classList.toggle('selected', p.throwSel === k);
         hud.cells[k].classList.toggle('armed', p.throwSel === k && !!p.nadeReady);
     }
+    hud.nukeUse.classList.toggle('hidden', !canMapNuke(p));
     hud.healBar.classList.toggle('on', !!p.healing);
     if (p.healing) {
         hud.healBar.firstChild.style.width = `${((G.time - p.healing.start) / (p.healing.end - p.healing.start)) * 100}%`;
@@ -13807,6 +13910,7 @@ function drawMapPreview(cv, map) {
 }
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
+wireNukeMap();
 $('sl-ok').addEventListener('click', () => closeStrikeLoad(true));
 $('sl-cancel').addEventListener('click', () => closeStrikeLoad(false));
 $('spectate-btn').addEventListener('click', () => {
