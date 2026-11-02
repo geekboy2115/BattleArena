@@ -8075,7 +8075,9 @@ function drawGroundDetail(L, T, R, B) {
 // ----- Day and night -----
 function dayT() { return (G.time / DAY.length + (G.dayPhase || 0)) % 1; }
 // 0 in daylight, DAY.dark at the dead of night
+const ZOMBIE_DARK = 0.985;  // Zombies is played in pitch dark: your flashlight is all you've got
 function darkness() {
+    if (G.zombies && G.mode !== 'demo') return ZOMBIE_DARK;
     if (!G.dayCycle || G.world.floor) return 0;
     const t = dayT();
     if (t < 0.45) return 0;
@@ -8146,6 +8148,29 @@ function drawLighting(camX, camY, zoom) {
     }
     if (G.fires) for (const f of G.fires) light(f.x, f.y, (f.r || 60) * 3, 0.9);
     ctx.drawImage(lightCv, 0, 0, viewW, viewH);
+    if (G.zombies && dark > 0.9) drawZombieEyes(camX, camY, zoom);
+}
+// In the dark, the zombies close by give themselves away: two glowing eyes
+function drawZombieEyes(camX, camY, zoom) {
+    const p = G.player;
+    if (!p || p.zombie) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const f of G.fighters) {
+        if (!f.zombie || f.dead || f === p || Math.hypot(f.x - p.x, f.y - p.y) > 900) continue;
+        const sx = (f.x - camX) * zoom, sy = (f.y - camY) * zoom;
+        if (sx < -20 || sy < -20 || sx > viewW + 20 || sy > viewH + 20) continue;
+        const a = f.angle, fx = Math.cos(a), fy = Math.sin(a), r = f.r * zoom;
+        const flick = 0.6 + 0.4 * Math.sin(G.time / 180 + f.x);
+        for (const side of [-1, 1]) {
+            const ex = sx + fx * r * 0.55 - fy * r * 0.35 * side, ey = sy + fy * r * 0.55 + fx * r * 0.35 * side;
+            ctx.fillStyle = `rgba(150,255,60,${0.25 * flick})`;
+            ctx.beginPath(); ctx.arc(ex, ey, Math.max(3, r * 0.3), 0, TAU); ctx.fill();
+            ctx.fillStyle = `rgba(220,255,140,${0.9 * flick})`;
+            ctx.beginPath(); ctx.arc(ex, ey, Math.max(1.2, r * 0.11), 0, TAU); ctx.fill();
+        }
+    }
+    ctx.restore();
 }
 
 // ---------- Doomsday: a pocket nuke ----------
@@ -13487,7 +13512,7 @@ const teamSlider = $('team-slider');
 
 // ---------- Game modes (title screen carousel) ----------
 const MODES = [
-    { id: 'zombies', name: 'ZOMBIES', desc: 'Pick how many survivors and zombies. Anyone the horde takes down turns into a zombie. Zombies that die stay dead.' },
+    { id: 'zombies', name: 'ZOMBIES', desc: 'Pitch dark: all you have is your flashlight, and the zombies\' glowing eyes. Pick how many survivors and zombies. Anyone the horde takes down turns into a zombie. Zombies that die stay dead.' },
     { id: 'war', name: 'TEAMS', desc: 'Teams battle it out. Arm your squad from big supply crates and wipe out the other teams.' },
     { id: 'ffa', name: 'FREE FOR ALL', desc: 'Every player for themselves. Last one standing wins.' },
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
