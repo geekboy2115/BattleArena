@@ -13994,8 +13994,35 @@ $('again-btn').addEventListener('click', () => startGame(lastMap));
 $('mapsel-back').addEventListener('click', () => { screens.mapsel.classList.add('hidden'); screens.typesel.classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
-    card.addEventListener('click', () => startGame(card.dataset.map));
+    card.addEventListener('click', () => openBriefing(card.dataset.map));
 }
+
+// ---------- Briefing: what this game is about, in a few lines, before it starts ----------
+const BRIEF = {
+    ffa: [['🎯', '<b>Goal:</b> be the last one alive.'], ['📦', 'Everyone starts with nothing: grab guns, armor and medkits from boxes and the ground.'], ['🔴', 'The red zone shrinks over time. Stay inside the circle or you take damage.'], ['🚗', 'Hop in cars, tanks and helicopters with <b>F</b>.']],
+    war: [['🎯', '<b>Goal:</b> wipe out every other team.'], ['📦', 'Your team starts at its base. Grab guns from the supply crates nearby.'], ['🩹', 'When you go down, a teammate can revive you before you bleed out.'], ['🔴', 'The zone shrinks, so the fight keeps moving.']],
+    zombies: [['🎯', '<b>Goal:</b> survive. Survivors win when every zombie is dead; the horde wins when everyone is turned.'], ['🌑', 'It is pitch dark. Only your flashlight lights the way, and zombies show glowing green eyes.'], ['🧟', 'If a zombie gets you, you turn into one, and then you hunt the survivors.'], ['💉', 'Cures can turn zombies back into survivors.']],
+    survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat (<b>C</b> to eat). Drink at ponds (<b>V</b>).'], ['😴', 'Rest when you are tired (<b>B</b>).'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
+    revolution: [['🎯', '<b>Goal:</b> wipe out the other side or bring down their castle.'], ['🏰', 'Each side has a castle with healing rooms, an armory, guard towers and cannons on the walls.'], ['💥', 'Load ammo into your boss strike pad (<b>F</b>) and launch it at the enemy castle.'], ['☠️', 'No revives: when you die, you stay dead.']],
+    assassin: [['🎯', '<b>Survivors:</b> find the assassin and touch him (or take him down) to win.'], ['🔫', '<b>Assassin:</b> a Barrett with 2000 rounds and a medkit (a Railgun in High Tech). Take everyone out without getting caught.'], ['🌑', 'Pitch dark. Everyone has a flashlight.'], ['🔭', 'Hold <b>right click</b> (or <b>Z</b>) for the 8x night-vision scope.'], ['🚶', 'Survivors spread out: they can\'t stay together.']],
+    escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
+};
+const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
+const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland' };
+let briefMap = null;
+function openBriefing(map) {
+    const m = MODES[menuMode], lines = BRIEF[m.id] || BRIEF.ffa;
+    briefMap = map;
+    $('brief-title').textContent = m.name;
+    const tags = [BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map];
+    if (m.id === 'assassin') tags.unshift(assassinRole === 'assassin' ? 'You: Assassin' : 'You: Survivor');
+    $('brief-tags').innerHTML = tags.filter(Boolean).map(t => `<span>${t}</span>`).join('');
+    $('brief-list').innerHTML = lines.map(([i, t]) => `<li data-i="${i}">${TOUCH.enabled ? t.replace('Hold <b>right click</b> (or <b>Z</b>)', 'Tap the <b>8x</b> button').replace(' (<b>F</b>)', ' (the button at the bottom)').replace(' with <b>F</b>', '') : t}</li>`).join('');
+    screens.mapsel.classList.add('hidden');
+    $('brief').classList.remove('hidden');
+}
+$('brief-go').addEventListener('click', () => { $('brief').classList.add('hidden'); startGame(briefMap); });
+$('brief-back').addEventListener('click', () => { $('brief').classList.add('hidden'); screens.mapsel.classList.remove('hidden'); });
 
 // Pressing Play first asks where to fight (Escape needs streets and towers, so no open countryside there)
 let lastMap = 'ordinary';
