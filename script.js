@@ -483,10 +483,12 @@ canvas.addEventListener('mousedown', e => {
         return;
     }
     if (e.button === 0) mouse.down = true;
+    if (e.button === 2 && canScope(G && G.player)) { G.player.scoped = true; return; }
     if (e.button === 2) playerCook();
 });
 window.addEventListener('mouseup', e => {
     if (e.button === 0) mouse.down = false;
+    if (e.button === 2 && G && G.player && G.player.scoped) { G.player.scoped = false; return; }
     if (e.button === 2) playerRelease();
 });
 
@@ -582,6 +584,7 @@ function playerAction(p, code) {
     if (code === 'KeyB' && G.survival) toggleRest(p);
     if (code === 'KeyG') playerCook(p);
     if (code === 'KeyT') cycleThrowable(p);
+    if (code === 'KeyZ' && p.isPlayer && !p.remote && canScope(p)) p.scoped = !p.scoped;
 }
 
 // ---------- Audio (synthesized, no files) ----------
@@ -6508,7 +6511,40 @@ function addFloat(x, y, text, color, big) {
 }
 
 // ---------- Player ----------
+// ---------- 8x scope (sniper rifles only) ----------
+// Scoped in, the view slides out 8 times as far as your mouse is from the middle of the screen,
+// and you aim at the middle of the scope instead of the mouse.
+const SCOPE = { mag: 8, guns: { 'Sniper': 1, 'AWP': 1, 'Barrett': 1, 'Railgun': 1 } };
+const canScope = p => !!(G && G.mode === 'playing' && p && p.isPlayer && !p.dead && !p.downed && !p.car && !p.nadeReady && SCOPE.guns[p.inv[p.slot]]);
+function scopeTarget(p) {
+    const W = CONFIG.WORLD_SIZE, dx = (mouse.x - viewW / 2) / G.zoom, dy = (mouse.y - viewH / 2) / G.zoom;
+    return { x: clamp(p.x + dx * SCOPE.mag, 0, W), y: clamp(p.y + dy * SCOPE.mag, 0, W) };
+}
+const scopedIn = () => !!(G && G.player && G.player.scoped && canScope(G.player));
+function drawScope() {
+    const t = G.player.scopeAt; if (!t) return;
+    const zoom = G.zoom, cx = (t.x - G.cam.x) * zoom + viewW / 2, cy = (t.y - G.cam.y) * zoom + viewH / 2;
+    const R = Math.min(viewW, viewH) * 0.42;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
+    ctx.beginPath(); ctx.rect(0, 0, viewW, viewH); ctx.arc(cx, cy, R, 0, TAU); ctx.fill('evenodd');
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx - 18, cy); ctx.moveTo(cx + 18, cy); ctx.lineTo(cx + R, cy);
+    ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy - 18); ctx.moveTo(cx, cy + 18); ctx.lineTo(cx, cy + R); ctx.stroke();
+    ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx - R * 0.45, cy); ctx.moveTo(cx + R * 0.45, cy); ctx.lineTo(cx + R, cy); ctx.moveTo(cx, cy + R * 0.45); ctx.lineTo(cx, cy + R); ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    for (let i = 1; i <= 4; i++) for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.arc(cx + ax * i * R * 0.09, cy + ay * i * R * 0.09, 2.2, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, TAU); ctx.fill();
+    // night vision in the pitch-dark modes
+    if (pitchDark()) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = 'rgb(120,255,140)'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
+    ctx.font = '800 16px Rajdhani, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = '#8fd8ff';
+    ctx.fillText(`${SCOPE.mag}x · ${Math.round(Math.hypot(t.x - G.player.x, t.y - G.player.y) / 10)}m`, cx + R * 0.05, cy + R * 0.05);
+    ctx.restore();
+}
+
 function mouseWorld() {
+    if (G && G.player && G.player.scoped && G.player.scopeAt && canScope(G.player)) return { x: G.player.scopeAt.x, y: G.player.scopeAt.y };
     return { x: (mouse.x - viewW / 2) / G.zoom + G.cam.x, y: (mouse.y - viewH / 2) / G.zoom + G.cam.y };
 }
 
@@ -8197,6 +8233,7 @@ function drawLighting(camX, camY, zoom) {
             g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, L, f.angle - 0.32, f.angle + 0.32); g.closePath(); g.fill();
         };
         for (const f of G.fighters) if (f !== p && !f.dead && !f.zombie && !f.downed && !f.car) { cone(f, 650, 0.7); light(f.x, f.y, 55, 0.55); }
+        if (p && p.scopeAt) light(p.scopeAt.x, p.scopeAt.y, Math.min(viewW, viewH) * 0.6 / zoom, 1);
         ctx.drawImage(lightCv, 0, 0, viewW, viewH);
         if (G.zombies) drawZombieEyes(camX, camY, zoom);
         return;
@@ -11455,8 +11492,12 @@ function updateCamera(dt) {
         G.cam.x += (tx - G.cam.x) * Math.min(1, dt * 1.2);
         G.cam.y += (ty - G.cam.y) * Math.min(1, dt * 1.2);
     } else if (G.player && !G.player.dead) {
-        G.cam.x += (G.player.x - G.cam.x) * Math.min(1, dt * 12);
-        G.cam.y += (G.player.y - G.cam.y) * Math.min(1, dt * 12);
+        const p = G.player;
+        if (p.scoped && !canScope(p)) p.scoped = false;
+        if (p.scoped) p.scopeAt = scopeTarget(p); else p.scopeAt = null;
+        const t = p.scopeAt || p;
+        G.cam.x += (t.x - G.cam.x) * Math.min(1, dt * (p.scopeAt ? 9 : 12));
+        G.cam.y += (t.y - G.cam.y) * Math.min(1, dt * (p.scopeAt ? 9 : 12));
     } else if (G.war && G.player && G.spectating) {
         // Spectate a teammate (once you've chosen to after dying)
         if (!G.demoFollow || G.demoFollow.dead) {
@@ -11680,6 +11721,7 @@ function render() {
     // Screen-space overlays
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(vignette, 0, 0, viewW, viewH);
+    if (p && p.scopeAt && !p.dead) drawScope();
     if (p) {
         const low = p.hp < 30 ? (0.25 + Math.sin(now * 6) * 0.12) * (1 - p.hp / 30) + 0.1 : 0;
         const a = Math.min(1, G.hurt * 0.8 + low);
@@ -14568,8 +14610,12 @@ function touchFrame() {
     if (!p || G.mode === 'demo') return;
     // (the crosshair sits out along the way you're aiming; further the harder you push)
     const reach = 140 + 260 * (a.on ? a.mag : (a.lastMag ?? 0.6));
-    mouse.x = viewW / 2 + (p.x - G.cam.x) * G.zoom + a.x * reach;
-    mouse.y = viewH / 2 + (p.y - G.cam.y) * G.zoom + a.y * reach;
+    // (scoped in, the stick steers the scope: it stays put while you let go)
+    if (p.scoped) { if (a.on) { mouse.x = viewW / 2 + a.x * reach; mouse.y = viewH / 2 + a.y * reach; } }
+    else {
+        mouse.x = viewW / 2 + (p.x - G.cam.x) * G.zoom + a.x * reach;
+        mouse.y = viewH / 2 + (p.y - G.cam.y) * G.zoom + a.y * reach;
+    }
     if (a.on || TOUCH.wasFiring) mouse.down = firing;
     TOUCH.wasFiring = firing;
 }
@@ -14662,6 +14708,17 @@ function touchFrame() {
         if (t && pick.textContent !== t) pick.textContent = t;
     }, 150);
     pick.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); touchKey('KeyF', true); touchKey('KeyF', false); });
+    // The 8x scope button: tap to look through it, tap again to come out
+    const scopeBtn = $('tb-scope');
+    setInterval(() => {
+        if (!TOUCH.enabled) return;
+        const p = G && G.player, ok = !NET.viewing && canScope(p);
+        scopeBtn.classList.toggle('hidden', !ok);
+        scopeBtn.classList.toggle('on', !!(ok && p.scoped));
+        const a = aimEl.getBoundingClientRect();
+        if (a.width) { scopeBtn.style.left = `${a.left + a.width / 2 - 29}px`; scopeBtn.style.top = `${a.top - 70}px`; }
+    }, 150);
+    scopeBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); const p = G && G.player; if (canScope(p)) p.scoped = !p.scoped; });
     $('tb-pause').addEventListener('pointerdown', e => {
         e.preventDefault(); e.stopPropagation();
         if (NET.viewing) { $('net-leave').classList.toggle('hidden'); return; }

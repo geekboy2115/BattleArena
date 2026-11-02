@@ -854,3 +854,8 @@ body.touch .slot .key { display: none; }
     .nm-title { font-size: 18px; }
     #nm-cancel { padding: 4px 12px; }
 }
+
+/* Touch: the 8x scope button (only while holding a sniper rifle) */
+#tb-scope { position: fixed; width: 58px; height: 58px; border-radius: 50%; background: rgba(14, 10, 28, 0.78); color: #8fd8ff; border: 2px solid #8fd8ff; font: 800 18px Rajdhani, sans-serif; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+#tb-scope.on { background: #8fd8ff; color: #0e0a1c; }
+#tb-scope.hidden { display: none; }
