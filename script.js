@@ -13986,7 +13986,7 @@ function fitSliders(moved) {
 }
 $('surv-slider').addEventListener('input', () => fitSliders('surv'));
 $('zomb-slider').addEventListener('input', () => fitSliders('zomb'));
-$('start-btn').addEventListener('click', openTypeSelect);
+$('start-btn').addEventListener('click', openDescription);
 $('typesel-back').addEventListener('click', () => { screens.typesel.classList.add('hidden'); screens.menu.classList.remove('hidden'); });
 for (const card of document.querySelectorAll('.type-card')) card.addEventListener('click', () => { lastWarfare = card.dataset.type; screens.typesel.classList.add('hidden'); openMapSelect(); });
 function openTypeSelect() {
@@ -14019,30 +14019,55 @@ for (const card of document.querySelectorAll('#mapsel .map-card')) {
 
 // ---------- Briefing: what this game is about, in a few lines, before it starts ----------
 const BRIEF = {
-    ffa: [['🎯', '<b>Goal:</b> be the last one alive.'], ['📦', 'Everyone starts with nothing: grab guns, armor and medkits from boxes and the ground.'], ['🔴', 'The red zone shrinks over time. Stay inside the circle or you take damage.'], ['🚗', 'Hop in cars, tanks and helicopters with <b>F</b>.']],
+    ffa: [['🎯', '<b>Goal:</b> be the last one alive.'], ['📦', 'Everyone starts with nothing: grab guns, armor and medkits from boxes and the ground.'], ['🔴', 'The red zone shrinks over time. Stay inside the circle or you take damage.'], ['🚗', 'Hop in cars, tanks and helicopters.']],
     war: [['🎯', '<b>Goal:</b> wipe out every other team.'], ['📦', 'Your team starts at its base. Grab guns from the supply crates nearby.'], ['🩹', 'When you go down, a teammate can revive you before you bleed out.'], ['🔴', 'The zone shrinks, so the fight keeps moving.']],
     zombies: [['🎯', '<b>Goal:</b> survive. Survivors win when every zombie is dead; the horde wins when everyone is turned.'], ['🌑', 'It is pitch dark. Only your flashlight lights the way, and zombies show glowing green eyes.'], ['🧟', 'If a zombie gets you, you turn into one, and then you hunt the survivors.'], ['💉', 'Cures can turn zombies back into survivors.']],
-    survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat (<b>C</b> to eat). Drink at ponds (<b>V</b>).'], ['😴', 'Rest when you are tired (<b>B</b>).'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
-    revolution: [['🎯', '<b>Goal:</b> wipe out the other side or bring down their castle.'], ['🏰', 'Each side has a castle with healing rooms, an armory, guard towers and cannons on the walls.'], ['💥', 'Load ammo into your boss strike pad (<b>F</b>) and launch it at the enemy castle.'], ['☠️', 'No revives: when you die, you stay dead.']],
-    assassin: [['🎯', '<b>Survivors:</b> find the assassin and touch him (or take him down) to win.'], ['🔫', '<b>Assassin:</b> a Barrett with 2000 rounds and a medkit (a Railgun in High Tech). Take everyone out without getting caught.'], ['🌑', 'Pitch dark. Everyone has a flashlight.'], ['🔭', 'Hold <b>right click</b> (or <b>Z</b>) for the 8x night-vision scope.'], ['🚶', 'Survivors spread out: they can\'t stay together.']],
+    survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat, and drink at ponds.'], ['😴', 'Rest when you are tired.'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
+    revolution: [['🎯', '<b>Goal:</b> wipe out the other side or bring down their castle.'], ['🏰', 'Each side has a castle with healing rooms, an armory, guard towers and cannons on the walls.'], ['💥', 'Load ammo into your boss strike pad and launch it at the enemy castle.'], ['☠️', 'No revives: when you die, you stay dead.']],
+    assassin: [['🎯', '<b>Survivors:</b> find the assassin and touch him (or take him down) to win.'], ['🔫', '<b>Assassin:</b> a Barrett with 2000 rounds and a medkit (a Railgun in High Tech). Take everyone out without getting caught.'], ['🌑', 'Pitch dark. Everyone has a flashlight.'], ['🔭', 'Sniper rifles have an 8x night-vision scope.'], ['🚶', 'Survivors spread out: they can\'t stay together.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland' };
-let briefMap = null;
-function openBriefing(map) {
-    const m = MODES[menuMode], lines = BRIEF[m.id] || BRIEF.ffa;
-    briefMap = map;
-    $('brief-title').textContent = m.name;
-    const tags = [BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map];
-    if (m.id === 'assassin') tags.unshift(assassinRole === 'assassin' ? 'You: Assassin' : 'You: Survivor');
+// Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
+const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
+const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
+function controlsFor(id) {
+    const t = TOUCH.enabled, list = (t ? CONTROLS_TOUCH : CONTROLS_KEYS).slice();
+    if (id === 'survival') list.push(['🍖', t ? 'Tap the meat or water on the left to eat or drink' : '<b>C</b> eat · <b>V</b> drink or fill a bucket at water · <b>B</b> rest']);
+    if (id === 'revolution') list.push(['💥', t ? 'At your boss strike pad, the bottom button loads ammo or launches it' : 'At your boss strike pad, <b>F</b> loads ammo or launches it']);
+    list.push(['🔭', t ? 'Sniper rifles: tap the <b>8x</b> button for the scope' : 'Sniper rifles: hold <b>right click</b> (or <b>Z</b>) for the 8x scope']);
+    list.push(['☢️', 'Doomsday Nuke: press <b>USE NUKE</b> and pick the target on the map']);
+    return list;
+}
+const BRIEF_STAGE = { stage: null, map: null };
+function showBrief(title, tags, lines, back, go) {
+    $('brief-title').textContent = title;
     $('brief-tags').innerHTML = tags.filter(Boolean).map(t => `<span>${t}</span>`).join('');
-    $('brief-list').innerHTML = lines.map(([i, t]) => `<li data-i="${i}">${TOUCH.enabled ? t.replace('Hold <b>right click</b> (or <b>Z</b>)', 'Tap the <b>8x</b> button').replace(' (<b>F</b>)', ' (the button at the bottom)').replace(' with <b>F</b>', '') : t}</li>`).join('');
-    screens.mapsel.classList.add('hidden');
+    $('brief-list').innerHTML = lines.map(([i, t]) => `<li data-i="${i}">${t}</li>`).join('');
+    $('brief-back').textContent = back; $('brief-go').textContent = go;
     $('brief').classList.remove('hidden');
 }
-$('brief-go').addEventListener('click', () => { $('brief').classList.add('hidden'); startGame(briefMap); });
-$('brief-back').addEventListener('click', () => { $('brief').classList.add('hidden'); screens.mapsel.classList.remove('hidden'); });
+function openDescription() {
+    const m = MODES[menuMode];
+    BRIEF_STAGE.stage = 'desc';
+    screens.menu.classList.add('hidden');
+    showBrief(m.name, [m.id === 'assassin' ? (assassinRole === 'assassin' ? 'You: Assassin' : 'You: Survivor') : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+}
+function openBriefing(map) {
+    const m = MODES[menuMode];
+    BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
+    screens.mapsel.classList.add('hidden');
+    showBrief('CONTROLS', [m.name, BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+}
+$('brief-go').addEventListener('click', () => {
+    $('brief').classList.add('hidden');
+    if (BRIEF_STAGE.stage === 'desc') openTypeSelect(); else startGame(BRIEF_STAGE.map);
+});
+$('brief-back').addEventListener('click', () => {
+    $('brief').classList.add('hidden');
+    (BRIEF_STAGE.stage === 'desc' ? screens.menu : screens.mapsel).classList.remove('hidden');
+});
 
 // Pressing Play first asks where to fight (Escape needs streets and towers, so no open countryside there)
 let lastMap = 'ordinary';

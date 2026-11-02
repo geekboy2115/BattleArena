@@ -890,3 +890,10 @@ body.fs #fs-btn { opacity: 0.55; }
     .brief-list li { padding-left: 22px; line-height: 1.2; }
     .brief-btns .btn { padding-top: 8px; padding-bottom: 8px; }
 }
+@media (max-height: 520px) and (min-width: 640px) {
+    .brief-card { max-width: min(780px, calc(100vw - 24px)); }
+    .brief-list { grid-template-columns: 1fr 1fr; column-gap: 18px; }
+}
+@media (max-height: 520px) and (min-width: 640px) {
+    #brief .menu-card.brief-card { width: min(780px, calc(100vw - 24px)); max-width: none; }
+}
