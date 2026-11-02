@@ -4738,14 +4738,14 @@ function newState(mode, setup) {
     }
     if (hightech && setup.map !== 'wasteland') gearUpHighTech();
     if (revolution) for (const f of G.fighters) f.hp = f.maxHp = REVO.hp;
-    if (assassin && mode === 'playing') pickAssassin(setup.role === 'assassin' ? G.player : null);
+    if (assassin && mode === 'playing') { spreadOut(); pickAssassin(setup.role === 'assassin' ? G.player : null); }
     G.alive = G.fighters.length;
 }
 
 // ---------- Assassin ----------
 // One fighter is the assassin: a Barrett with 2000 rounds (a Railgun in High Tech) and a medkit.
 // He looks just like everyone else in the dark. Any survivor that touches him catches him.
-const ASSASSIN = { ammo: 2000, catchGap: 10 };
+const ASSASSIN = { ammo: 2000, catchGap: 10, apart: 650, spawnApart: 900 };
 function pickAssassin(who) {
     const a = who || pick(G.fighters.filter(f => !f.isPlayer));
     if (!a) return;
@@ -4756,6 +4756,25 @@ function pickAssassin(who) {
     a.ammo[gun] = ASSASSIN.ammo;
     a.items.medkit = 1;
     G.assassinF = a;
+}
+// Everyone starts well apart from everyone else, all over the map
+function spreadOut() {
+    const placed = [], W = CONFIG.WORLD_SIZE;
+    for (const f of G.fighters) {
+        let best = null, bestD = -1;
+        for (let t = 0; t < 30; t++) {
+            const x = rand(250, W - 250), y = rand(250, W - 250);
+            if (blockedAt(G.world.grid, x, y, 40) || buildingAt(x, y)) continue;
+            let d = Infinity;
+            for (const q of placed) { d = Math.min(d, Math.hypot(q.x - x, q.y - y)); if (d < bestD) break; }
+            if (d > bestD) { bestD = d; best = { x, y }; }
+            if (d >= ASSASSIN.spawnApart) break;
+        }
+        if (!best) continue;
+        placed.push(best);
+        f.x = best.x; f.y = best.y; f.vx = f.vy = 0;
+    }
+    if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
 }
 // A survivor right up against the assassin catches him
 function checkAssassinCaught() {
@@ -6793,6 +6812,17 @@ function botThink(b) {
         b.mode = 'zone';
         b.goal = goal;
         return;
+    }
+    // Assassin: survivors can't stay together. Anyone too close to another survivor heads off on their own
+    if (G.assassin && b.team === 0 && G.mode === 'playing') {
+        let near = null, nd = ASSASSIN.apart;
+        G.fgrid.query(b.x, b.y, ASSASSIN.apart, f => { if (f !== b && !f.dead && f.team === 0) { const d = Math.hypot(f.x - b.x, f.y - b.y); if (d < nd) { nd = d; near = f; } } });
+        if (near) {
+            const a = (nd > 1 ? Math.atan2(b.y - near.y, b.x - near.x) : rand(0, TAU)) + rand(-0.5, 0.5), W = CONFIG.WORLD_SIZE;
+            b.mode = 'zone';
+            b.goal = { x: clamp(b.x + Math.cos(a) * ASSASSIN.apart * 1.6, 150, W - 150), y: clamp(b.y + Math.sin(a) * ASSASSIN.apart * 1.6, 150, W - 150) };
+            return;
+        }
     }
     // Already on the way to some loot, a crate or a car: see it through instead of changing its mind as it walks
     if (b.mode === 'loot' && b.goal && !b.goal.gone && !claimedByOther(b.goal, b)) return;
