@@ -1212,6 +1212,7 @@ function styleBuilding(b, rusty) {
 // floors: whether the tall buildings have upper floors you can climb (Escape only).
 function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'maze' || type === 'mountain') return generateTerrain(type);
+    if (type === 'cavern') return generateCavern();
     // Wasteland (Assassin's map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
@@ -4614,7 +4615,7 @@ function findSpawn(avoid, minDist) {
     const W = CONFIG.WORLD_SIZE;
     for (let tries = 0; tries < 60; tries++) {
         const x = rand(200, W - 200), y = rand(200, W - 200);
-        let ok = !blockedAt(G.world.grid, x, y, 40);
+        let ok = !blockedAt(G.world.grid, x, y, 40) && (!G.world.cave || G.world.cave.inside(x, y, 200));
         if (ok && avoid) for (const a of avoid) if (Math.hypot(a.x - x, a.y - y) < minDist) { ok = false; break; }
         if (ok) return { x, y };
     }
@@ -4697,13 +4698,14 @@ function newState(mode, setup) {
         if (s.good) { const k2 = weightedPick(GROUND_TABLE); if (rarityRank(k2) > rarityRank(key)) key = k2; }
         spawnLoot(s.x, s.y, key);
     }
-    const boxes = Math.min(800, 220 + cpuCount * 0.6);
+    const caveK = G.world.cave ? 0.12 : 1;  // (the cavern is a lot smaller than the whole world)
+    const boxes = Math.min(800, 220 + cpuCount * 0.6) * caveK;
     for (let i = 0; i < boxes; i++) {
         const s = findSpawn(null, 0);
         if (!blockedAt(G.world.grid, s.x, s.y, 34) && !buildingAt(s.x, s.y, 30)) addLootBox(s.x, s.y);
     }
     // Supplies lying out in the open are rare; most loot comes from boxes, airdrops and kills
-    const scatter = Math.min(150, 30 + cpuCount * 0.12);
+    const scatter = Math.min(150, 30 + cpuCount * 0.12) * caveK;
     for (let i = 0; i < scatter; i++) {
         const s = findSpawn(null, 0);
         spawnLoot(s.x, s.y, survival && Math.random() < 0.25 ? pick(['water', 'bucket', 'meat']) : weightedPick(GROUND_TABLE));
@@ -4714,7 +4716,7 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the Assassin's wasteland)
-    if (setup.map !== 'wasteland') spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern') spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     if (war) {
         spawnTeams(W / 2, setup.baseDist || W * 0.33);
@@ -4736,7 +4738,7 @@ function newState(mode, setup) {
         // Survival: everyone starts scattered across the map
         if (survival && mode === 'playing') arrangeStart();
     }
-    if (hightech && setup.map !== 'wasteland') gearUpHighTech();
+    if (hightech && setup.map !== 'wasteland' && setup.map !== 'cavern') gearUpHighTech();
     if (revolution) for (const f of G.fighters) f.hp = f.maxHp = REVO.hp;
     if (assassin && mode === 'playing') { spreadOut(); pickAssassin(setup.role === 'assassin' ? G.player : null); }
     if (bossFight) setupBossFight();
@@ -4941,7 +4943,7 @@ function spawnNear(c, r, pad = 40, outdoors = false) {
     for (let tries = 0; tries < 40; tries++) {
         const a = rand(0, TAU), d = Math.sqrt(Math.random()) * r;
         const x = clamp(c.x + Math.cos(a) * d, 200, W - 200), y = clamp(c.y + Math.sin(a) * d, 200, W - 200);
-        if (!blockedAt(G.world.grid, x, y, pad) && !(outdoors && buildingAt(x, y, 40))) return { x, y };
+        if (!blockedAt(G.world.grid, x, y, pad) && !(outdoors && buildingAt(x, y, 40)) && (!G.world.cave || G.world.cave.inside(x, y, 150))) return { x, y };
     }
     return { x: c.x, y: c.y };
 }
@@ -5332,7 +5334,7 @@ function newDemo() {
     }
     const epic = id === 'epic', zombies = id === 'zombies';
     if (id === 'boss') {
-        newState('demo', { type: 'boss', count: 24 });
+        newState('demo', { type: 'boss', count: 24, map: 'cavern' });
         G.alive = G.fighters.length;
         G.cam.x = G.bossF.x; G.cam.y = G.bossF.y;
         return;
@@ -5696,7 +5698,7 @@ function updateAirdrops(dt) {
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
     }
     // And now and then a high-tech vehicle, lowered on a big parachute
-    if (G.time >= G.nextTech && G.zone.r > 400 && !G.early && G.map !== 'wasteland') {
+    if (G.time >= G.nextTech && G.zone.r > 400 && !G.early && G.map !== 'wasteland' && G.map !== 'cavern') {
         spawnAirdrop('vehicle');
         G.nextTech = G.time + rand(...(G.hightech ? HIGHTECH.drops : TECH_DROP.every));
     }
@@ -8237,6 +8239,16 @@ function buildGroundDetail() {
             const x = rand(0, W), y = rand(0, W);
             add({ k: 'litter', x, y, a: rand(0, TAU), c: pick(['#e9e4d8', '#d8d0c0', '#c0392b', '#2e86de', '#7f8c8d', '#e9c46a']), s: rand(3, 7) });
         }
+    } else if (G.world.terrain === 'cavern') {
+        // Loose stones and cracks across the cave floor
+        const cave = G.world.cave;
+        for (let i = 0; i < 4000 * MAP_AREA; i++) {
+            const x = rand(0, W), y = rand(0, W), r = Math.random();
+            if (!cave.inside(x, y)) continue;
+            if (r < 0.6) add({ k: 'pebble', x, y, s: rand(2, 6), c: pick(['#6e655b', '#7d7368', '#544c44', '#8a8075']) });
+            else if (r < 0.85) add({ k: 'rubble', x, y, s: rand(3, 8), a: rand(0, TAU), c: pick(['#5a524a', '#6a6158', '#3e3832']) });
+            else { const pts = [[0, 0]]; let a = rand(0, TAU); for (let j = 0; j < 6; j++) { a += rand(-0.8, 0.8); const l = pts[pts.length - 1]; pts.push([l[0] + Math.cos(a) * rand(15, 35), l[1] + Math.sin(a) * rand(15, 35)]); } add({ k: 'crack', x, y, pts }); }
+        }
     } else if (G.world.terrain !== 'maze') {
         for (let i = 0; i < 5500 * MAP_AREA; i++) {
             const x = rand(0, W), y = rand(0, W), r = Math.random();
@@ -8364,6 +8376,7 @@ const ZOMBIE_DARK = 1;
 const pitchDark = () => !!G && (G.zombies || G.assassin) && G.mode !== 'demo';  // Zombies is played in pitch dark: your flashlight is all you've got
 function darkness() {
     if ((G.zombies || G.assassin) && G.mode !== 'demo') return ZOMBIE_DARK;
+    if (G.world.terrain === 'cavern') return CAVERN.dark;
     if (!G.dayCycle || G.world.floor) return 0;
     const t = dayT();
     if (t < 0.45) return 0;
@@ -8445,6 +8458,7 @@ function drawLighting(camX, camY, zoom) {
         return;
     }
     if (G.world.lampGrid) G.world.lampGrid.query(G.cam.x, G.cam.y, viewW / zoom, l => light(l.x, l.y, 240, 0.85));
+    if (G.world.glows) for (const q of G.world.glows) light(q.x, q.y, q.lava ? q.r * 3.2 : q.r * 6, q.lava ? 0.9 : 0.75);
     for (const q of G.particles) {
         if (q.type === 'flash') light(q.x, q.y, 170, 0.9);
         else if (q.type === 'boom') light(q.x, q.y, q.size * 2.2, 1);
@@ -9554,6 +9568,96 @@ function generateTerrain(type) {
     return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: type, maze, mazeExtra: maze_extra, height, escapeStart: start, escapeEnd: end };
 }
 
+// ---------- The Cavern (Boss Fight's own arena) ----------
+// One giant cave deep underground: walls of rock all the way round, boulders everywhere, glowing crystals and
+// cracks of lava in the floor. It's dim down here; the crystals and the lava give the only light besides yours.
+const CAVERN = { r: 2700, clear: 420, step: 175, dark: 0.6 };
+function cavernShape() {
+    const W = CONFIG.WORLD_SIZE, cx = W / 2, cy = W / 2, P = [[3, rand(0, TAU), 0.11], [5, rand(0, TAU), 0.07], [9, rand(0, TAU), 0.035]];
+    const edge = a => CAVERN.r * (1 + P.reduce((n, [f, ph, amp]) => n + Math.sin(a * f + ph) * amp, 0));
+    return { cx, cy, edge, inside: (x, y, m = 0) => Math.hypot(x - cx, y - cy) < edge(Math.atan2(y - cy, x - cx)) - m };
+}
+function generateCavern() {
+    const W = CONFIG.WORLD_SIZE, grid = new Grid(256, 90), obstacles = [], lootSpots = [], glows = [];
+    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
+    const cave = cavernShape(), { cx, cy, edge } = cave;
+    const rock = (x, y, r, cliff) => addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU), cliff });
+    // The cave wall: two rings of huge rocks, packed so there's no way through
+    for (const [off, big] of [[60, 1], [330, 1.3]]) {
+        for (let a = 0; a < TAU; ) {
+            const R = edge(a) + off + rand(0, 60), r = rand(130, 180) * big;
+            rock(cx + Math.cos(a) * R, cy + Math.sin(a) * R, r, true);
+            a += (r * 1.2) / R;
+        }
+    }
+    // Rocks everywhere inside: boulders, stones and pebbles, with the middle (where the boss waits) kept open
+    for (let x = cx - CAVERN.r * 1.2; x < cx + CAVERN.r * 1.2; x += CAVERN.step) for (let y = cy - CAVERN.r * 1.2; y < cy + CAVERN.r * 1.2; y += CAVERN.step) {
+        const qx = x + rand(-60, 60), qy = y + rand(-60, 60), d = Math.hypot(qx - cx, qy - cy);
+        if (d < CAVERN.clear || !cave.inside(qx, qy, 200)) continue;
+        const r = Math.random();
+        if (r < 0.09) rock(qx, qy, rand(70, 125), true);
+        else if (r < 0.3) rock(qx, qy, rand(32, 58), false);
+        else if (r < 0.48) rock(qx, qy, rand(16, 28), false);
+    }
+    // Crystals (blue and purple) and lava cracks: the light down here
+    for (let i = 0; i < 70; i++) {
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (CAVERN.r - 250), x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
+        if (d < CAVERN.clear || !cave.inside(x, y, 220) || blockedAt(grid, x, y, 40)) continue;
+        const lava = Math.random() < 0.3;
+        glows.push(lava ? { x, y, lava: true, r: rand(60, 120), pts: Array.from({ length: 5 }, () => [rand(-1, 1), rand(-1, 1)]) }
+            : { x, y, r: rand(28, 48), c: pick(['#5fe1ff', '#5fe1ff', '#b47dff', '#7dffc8']), n: randInt(3, 6), seed: Math.random() * 1000 });
+    }
+    // Supplies scattered round the cave
+    for (let i = 0; i < 90; i++) {
+        const a = rand(0, TAU), d = rand(CAVERN.clear + 100, CAVERN.r - 250), x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
+        if (cave.inside(x, y, 220) && !blockedAt(grid, x, y, 30)) lootSpots.push({ x, y, box: Math.random() < 0.45, good: Math.random() < 0.3 });
+    }
+    // The map: black rock, the cave floor, the boulders and the glowing bits
+    const [mm, g] = makeCanvas(200, 200), k = 200 / W;
+    g.fillStyle = '#0d0a08'; g.fillRect(0, 0, 200, 200);
+    g.fillStyle = '#4a4038'; g.beginPath();
+    for (let a = 0; a <= TAU + 0.01; a += 0.05) { const R = edge(a); g.lineTo((cx + Math.cos(a) * R) * k, (cy + Math.sin(a) * R) * k); }
+    g.fill();
+    for (const o of obstacles) { g.fillStyle = o.cliff ? '#26201b' : '#6e655b'; g.beginPath(); g.arc(o.x * k, o.y * k, Math.max(0.8, o.r * k), 0, TAU); g.fill(); }
+    for (const q of glows) { g.fillStyle = q.lava ? '#ff7a2a' : q.c; g.beginPath(); g.arc(q.x * k, q.y * k, 1.3, 0, TAU); g.fill(); }
+    const mid = { x: cx, y: cy };
+    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'cavern', cave, glows, maze: null, mazeExtra: null, height: null, escapeStart: mid, escapeEnd: mid };
+}
+// The cave floor: dark stone inside, black rock beyond the walls, with the crystals and lava painted in
+function paintCavern(g, x0, y0, S) {
+    const w = G.world, cave = w.cave, B = 16;
+    for (let x = x0; x < x0 + S; x += B) for (let y = y0; y < y0 + S; y += B) {
+        const inn = cave.inside(x + B / 2, y + B / 2, -40), v = ((Math.sin(x * 0.013) * Math.cos(y * 0.011) + Math.sin(x * 0.0041 + y * 0.0037)) * 6) | 0;
+        g.fillStyle = inn ? `rgb(${58 + v},${50 + v},${44 + v})` : `rgb(${18 + v / 2},${14 + v / 2},${12 + v / 2})`;
+        g.fillRect(x, y, B + 1, B + 1);
+    }
+    for (const q of w.glows) {
+        if (q.x + 200 < x0 || q.y + 200 < y0 || q.x - 200 > x0 + S || q.y - 200 > y0 + S) continue;
+        if (q.lava) {
+            const gr = g.createRadialGradient(q.x, q.y, 0, q.x, q.y, q.r * 1.8);
+            gr.addColorStop(0, 'rgba(255,120,30,0.35)'); gr.addColorStop(1, 'rgba(255,80,20,0)');
+            g.fillStyle = gr; g.beginPath(); g.arc(q.x, q.y, q.r * 1.8, 0, TAU); g.fill();
+            g.lineCap = 'round';
+            for (const [lw, col] of [[9, '#5a1a08'], [5, '#ff6a1a'], [2, '#ffd27a']]) {
+                g.strokeStyle = col; g.lineWidth = lw; g.beginPath();
+                q.pts.forEach(([a, b], i) => { const px = q.x + a * q.r, py = q.y + b * q.r; i ? g.lineTo(px, py) : g.moveTo(px, py); });
+                g.stroke();
+            }
+        } else {
+            const gr = g.createRadialGradient(q.x, q.y, 0, q.x, q.y, q.r * 3);
+            gr.addColorStop(0, q.c + '55'); gr.addColorStop(1, q.c + '00');
+            g.fillStyle = gr; g.beginPath(); g.arc(q.x, q.y, q.r * 3, 0, TAU); g.fill();
+            const rnd = seededRand(q.seed | 0);
+            for (let i = 0; i < q.n; i++) {
+                const a = rnd() * TAU, L = q.r * (0.6 + rnd() * 0.7), wdt = 6 + rnd() * 6, bx = q.x + Math.cos(a) * rnd() * 10, by = q.y + Math.sin(a) * rnd() * 10;
+                const tx = bx + Math.cos(a) * L, ty = by + Math.sin(a) * L, nx = -Math.sin(a) * wdt, ny = Math.cos(a) * wdt;
+                g.fillStyle = shade(q.c, -0.35); g.beginPath(); g.moveTo(bx + nx, by + ny); g.lineTo(tx, ty); g.lineTo(bx - nx, by - ny); g.closePath(); g.fill();
+                g.fillStyle = q.c; g.beginPath(); g.moveTo(bx + nx * 0.4, by + ny * 0.4); g.lineTo(tx, ty); g.lineTo(bx, by); g.closePath(); g.fill();
+            }
+        }
+    }
+}
+
 // Smooth rolling height, rising from the start corner to the far one (0 = valley, 1 = peak)
 function makeHeight(P) {
     const W = CONFIG.WORLD_SIZE;
@@ -9575,6 +9679,7 @@ function altitudeColor(h) {
 // Ground for the maze (concrete slabs) and the mountains (grass to rock to snow), painted into the cached tiles
 function paintTerrainBase(g, x0, y0, S) {
     const w = G.world;
+    if (w.terrain === 'cavern') { paintCavern(g, x0, y0, S); return; }
     if (w.terrain === 'maze') {
         g.fillStyle = '#5a5c62'; g.fillRect(x0, y0, S, S);
         g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 2;
@@ -14200,7 +14305,7 @@ const BRIEF = {
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland' };
+const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
@@ -14247,7 +14352,7 @@ function openMapSelect() {
     const id = MODES[menuMode].id, escape = id === 'escape';
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
-        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution' || id === 'boss') && m === 'maze') || (m === 'wasteland' && id !== 'assassin'));
+        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin') || ((m === 'cavern') !== (id === 'boss')));
         card.disabled = false;
         card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
     }
@@ -14260,6 +14365,7 @@ const MAP_DESC = {
     rusty: 'An abandoned facility in a warzone: rusted sheds, wrecked cars, ruins and smoke.',
     maze: 'A huge maze of concrete corridors. Every corner could hide someone.',
     mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.',
+    cavern: 'The boss\'s lair: a giant cave deep underground with rocks everywhere, glowing crystals and lava cracks.',
     wasteland: 'Made for Assassin: wide open ground, a few lone trees and broken junk everywhere, no cars. Snipe from far away.'
 };
 const ESCAPE_MAP_DESC = {
@@ -14279,6 +14385,16 @@ function drawMapPreview(cv, map) {
         for (let i = 0; i < 4; i++) { const x = rnd() * W, y = rnd() * H; g.fillStyle = '#2f5a2a'; g.beginPath(); g.arc(x, y, 12, 0, TAU); g.fill(); g.fillStyle = '#3f7a35'; g.beginPath(); g.arc(x - 3, y - 3, 7, 0, TAU); g.fill(); }
         g.strokeStyle = 'rgba(255,60,60,0.9)'; g.lineWidth = 2; const cx = W * 0.62, cy = H * 0.45;
         g.beginPath(); g.arc(cx, cy, 14, 0, TAU); g.moveTo(cx - 22, cy); g.lineTo(cx + 22, cy); g.moveTo(cx, cy - 22); g.lineTo(cx, cy + 22); g.stroke();
+        return;
+    }
+    if (map === 'cavern') {
+        g.fillStyle = '#0d0a08'; g.fillRect(0, 0, W, H);
+        g.fillStyle = '#4a4038'; g.beginPath(); g.ellipse(W / 2, H / 2, W * 0.46, H * 0.42, 0, 0, TAU); g.fill();
+        for (let i = 0; i < 60; i++) { const a = rnd() * TAU, d = Math.sqrt(rnd()); const x = W / 2 + Math.cos(a) * d * W * 0.44, y = H / 2 + Math.sin(a) * d * H * 0.4; if (Math.hypot((x - W / 2) / W, (y - H / 2) / H) < 0.09) continue; g.fillStyle = rnd() < 0.3 ? '#2a231d' : '#7a7066'; g.beginPath(); g.arc(x, y, 3 + rnd() * (rnd() < 0.2 ? 12 : 5), 0, TAU); g.fill(); }
+        for (let i = 0; i < 10; i++) { const x = W * 0.12 + rnd() * W * 0.76, y = H * 0.15 + rnd() * H * 0.7, c = rnd() < 0.35 ? '#ff7a2a' : rnd() < 0.5 ? '#b47dff' : '#5fe1ff'; g.shadowColor = c; g.shadowBlur = 10; g.fillStyle = c; g.beginPath(); g.arc(x, y, 3, 0, TAU); g.fill(); }
+        g.shadowBlur = 0;
+        g.fillStyle = '#5a1620'; g.beginPath(); g.arc(W / 2, H / 2, 14, 0, TAU); g.fill();
+        g.fillStyle = '#ffb000'; g.beginPath(); g.arc(W / 2 + 6, H / 2 - 4, 2.5, 0, TAU); g.arc(W / 2 + 6, H / 2 + 4, 2.5, 0, TAU); g.fill();
         return;
     }
     if (map === 'maze') {
@@ -14364,7 +14480,8 @@ function startGame(map = lastMap) {
     // Escape has no open countryside to cross, and Survival has no maze
     if (id === 'escape' && map === 'ordinary') map = 'city';
     if (id !== 'assassin' && map === 'wasteland') map = 'ordinary';
-    if ((id === 'survival' || id === 'boss') && map === 'maze') map = 'ordinary';
+    if (id === 'survival' && map === 'maze') map = 'ordinary';
+    if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     lastMap = map;
     const setup = war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
