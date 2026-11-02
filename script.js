@@ -5712,6 +5712,25 @@ function lootRefusal(f, key) {
     return 'No guns that use ammo';
 }
 
+// Walk over something and it's yours: anything you have room for is picked up on its own.
+// (A gun only goes into an empty slot; to swap one you're carrying, use F / the pick-up button.
+// Picking up a gun doesn't switch you off the gun you're holding.)
+const AUTO_PICKUP = { reach: 34, every: 120 };
+function autoPickup(p) {
+    if (p.dead || p.zombie || p.downed || G.mode !== 'playing' || G.time < (p.nextAuto || 0)) return;
+    p.nextAuto = G.time + AUTO_PICKUP.every;
+    const near = [];
+    G.lootGrid.query(p.x, p.y, p.r + AUTO_PICKUP.reach + 10, l => { if (!l.gone && Math.hypot(l.x - p.x, l.y - p.y) < p.r + AUTO_PICKUP.reach) near.push(l); });
+    for (const l of near) {
+        if (l.gone) continue;
+        const key = l.key, prev = p.slot, held = p.inv[prev], gun = !!WEAPONS[key];
+        const took = takeLoot(p, l, -1);
+        if (!took) continue;
+        if (gun && held && p.slot !== prev) switchSlot(p, prev, true);
+        if (!p.remote) { Sound.pickup(); addFloat(p.x, p.y - 34, `+ ${lootName(key)}${took > 1 ? ' x' + took : ''}`, RARITY[lootRarity(key)].color); }
+    }
+}
+
 function playerPickup(p = G.player) {
     if (p.zombie) return;
     const l = nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE);
@@ -6590,6 +6609,7 @@ function updatePlayer(p, dt) {
     if (I === LOCAL_INPUT && TOUCH.move.on) { mx = TOUCH.move.x; my = TOUCH.move.y; len = 1; }
     // Driving: the car handles the controls (see updateCars)
     if (p.car) return;
+    autoPickup(p);
     // Survival: frozen on the platform until the countdown ends; resting until you move
     if (G.frozen || p.resting || stunned(p)) {
         if (p.resting && !stunned(p) && (mx || my || mouse.down)) p.resting = false;
