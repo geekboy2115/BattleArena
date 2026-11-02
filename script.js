@@ -14700,6 +14700,26 @@ if (window.matchMedia && matchMedia('(pointer: coarse)').matches) enableTouch();
 // screen sideways where the phone allows it). The ⛶ button switches it off and back on.
 // iPhones can't make a web page full screen, so there the button explains Add to Home Screen instead.
 const FS = { off: false };
+// Whichever way the phone was held when the game was opened (upright or sideways) is the way it stays
+const START_ORIENT = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+
+// Every menu box is shrunk just enough to fit on the screen, so nothing ever has to scroll
+function fitMenus() {
+    const availH = window.innerHeight - 16, availW = window.innerWidth - 12;
+    for (const card of document.querySelectorAll('.overlay:not(.hidden) .menu-card')) {
+        const prev = card.style.zoom;
+        card.style.zoom = 1;
+        const h = card.scrollHeight, w = card.offsetWidth;
+        if (!h || !w) { card.style.zoom = prev; continue; }
+        const z = Math.min(1, availH / h, availW / w);
+        card.style.zoom = z < 0.995 ? z.toFixed(3) : '';
+    }
+}
+window.addEventListener('resize', () => setTimeout(fitMenus, 50));
+window.addEventListener('orientationchange', () => setTimeout(fitMenus, 200));
+new MutationObserver(() => requestAnimationFrame(fitMenus)).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+setTimeout(fitMenus, 300);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitMenus);
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
 const fsCan = () => !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
 const standalone = () => (window.matchMedia && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) || navigator.standalone;
@@ -14708,7 +14728,7 @@ function enterFullscreen() {
     const el = document.documentElement;
     try {
         const r = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen();
-        if (r && r.then) r.then(() => { try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); } catch (_) {} }).catch(() => {});
+        if (r && r.then) r.then(() => { try { screen.orientation && screen.orientation.lock && screen.orientation.lock(START_ORIENT).catch(() => {}); } catch (_) {} }).catch(() => {});
     } catch (_) {}
 }
 function exitFullscreen() {
@@ -14830,11 +14850,23 @@ function touchFrame() {
         if (!TOUCH.enabled) return;
         const heal = $('heal-panel').getBoundingClientRect(), nade = $('grenade-panel').getBoundingClientRect(), top = $('hud-topright').getBoundingClientRect();
         const W = window.innerWidth, H = window.innerHeight, s = moveEl.offsetWidth || 130;
-        moveEl.style.left = `${Math.max(12, (heal.width ? heal.right : 12) + 14)}px`;
-        moveEl.style.top = `${H - s - 18}px`;
-        // (never off the right half of the screen, however many kinds of grenade you're carrying)
-        const nadeLeft = nade.width ? nade.left : W - 12;
-        const ax = clamp(nadeLeft - s - 14, W * 0.55, W - s - 12), stickTop = H - s - 18;
+        // (sideways: the gun slots move down between the sticks; upright: back up top under the health)
+        const hb = $('hotbar'), hudRoot = $('hud'), wide = W >= H;
+        if (wide && hb.parentElement !== hudRoot) { hudRoot.append(hb); hb.classList.add('hb-bottom'); }
+        if (!wide && hb.parentElement === hudRoot) { $('hud-bottom').append(hb); hb.classList.remove('hb-bottom'); }
+        let ax, stickTop;
+        if (H > W) {
+            // Upright: each stick sits right above its supply panel, one in each bottom corner
+            const top = Math.min(heal.height ? heal.top : H, nade.height ? nade.top : H) - s - 16;
+            moveEl.style.left = '16px'; moveEl.style.top = `${top}px`;
+            ax = W - s - 16; stickTop = top;
+        } else {
+            moveEl.style.left = `${Math.max(12, (heal.width ? heal.right : 12) + 14)}px`;
+            moveEl.style.top = `${H - s - 18}px`;
+            // (never off the right half of the screen, however many kinds of grenade you're carrying)
+            const nadeLeft = nade.width ? nade.left : W - 12;
+            ax = clamp(nadeLeft - s - 14, W * 0.55, W - s - 12); stickTop = H - s - 18;
+        }
         aimEl.style.left = `${ax}px`;
         aimEl.style.top = `${stickTop}px`;
         // (pause: just under your stats, top left)
@@ -14846,7 +14878,8 @@ function touchFrame() {
         // The pick-up button sits at the bottom, between the two sticks
         const pk = $('tb-pick'), mr = moveEl.getBoundingClientRect(), gapW = ax - mr.right - 12;
         pk.style.maxWidth = `${Math.max(120, gapW)}px`;
-        pk.style.top = `${H - pk.offsetHeight - 24}px`;
+        const hbr = hb.getBoundingClientRect();
+        pk.style.top = `${wide && hbr.height ? hbr.top - pk.offsetHeight - 10 : H - pk.offsetHeight - 24}px`;
         pk.style.left = `${(mr.right + ax) / 2}px`;
     };
     setInterval(place, 400);
