@@ -1212,7 +1212,9 @@ function styleBuilding(b, rusty) {
 // floors: whether the tall buildings have upper floors you can climb (Escape only).
 function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'maze' || type === 'mountain') return generateTerrain(type);
-    const city = type !== 'ordinary', rusty = type === 'rusty';
+    // Wasteland (Assassin's map): open ground with long sightlines, a few lone trees and wreckage strewn about
+    const waste = type === 'wasteland';
+    const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
     const W = CONFIG.WORLD_SIZE;
     const grid = new Grid(256, 90);
     const obstacles = [], buildings = [], biomes = [], roads = [], decor = [], lootSpots = [], parks = [], streets = [], stairs = [];
@@ -1235,7 +1237,7 @@ function generateWorld(type = 'ordinary', opts = {}) {
             }
         }
     };
-    if (!city) {
+    if (!city && !waste) {
         placeRegions('town', Math.round(5 * MAP_AREA), 650, 850);
         placeRegions('rocks', Math.round(5 * MAP_AREA), 450, 750);
         placeRegions('forest', Math.round(8 * MAP_AREA), 600, 1000);
@@ -1377,8 +1379,8 @@ function generateWorld(type = 'ordinary', opts = {}) {
         lootSpots.push({ x: cx + (horizontal ? 0 : sign * 50), y: cy + (horizontal ? sign * 50 : 0), good: Math.random() < 0.5 });
     };
     for (const t of towns) for (let i = 0; i < 3; i++) { const p = randIn(t, t.r); if (!nearRoad(p.x, p.y, 70)) crateStack(p.x, p.y); }
-    if (!city) for (let i = 0; i < 26 * MAP_AREA; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (!biomeAt(x, y) && !nearRoad(x, y, 90)) crateStack(x, y); }
-    if (!city) for (let i = 0; i < 30 * MAP_AREA; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); const bm = biomeAt(x, y); if ((!bm || bm.type === 'rocks') && !nearRoad(x, y, 120)) ruin(x, y); }
+    if (!city) for (let i = 0; i < (waste ? 8 : 26) * MAP_AREA; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (!biomeAt(x, y) && !nearRoad(x, y, 90)) crateStack(x, y); }
+    if (!city) for (let i = 0; i < (waste ? 22 : 30) * MAP_AREA; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); const bm = biomeAt(x, y); if ((!bm || bm.type === 'rocks') && !nearRoad(x, y, 120)) ruin(x, y); }
 
     // --- Natural cover ---
     const tree = (x, y) => {
@@ -1472,10 +1474,19 @@ function generateWorld(type = 'ordinary', opts = {}) {
             else addBox({ type: 'crate', x, y, hw: 18, hh: 18 });
         }
     }
-    field(320 * MAP_AREA, tree);
-    field(360 * MAP_AREA, bush);
-    field(130 * MAP_AREA, (x, y) => rock(x, y, 24, 55));
-    field(420 * MAP_AREA, (x, y) => decor.push({ x, y, s: rand(1.2, 3.2), spr: randInt(0, 3) }));
+    if (waste) {
+        // Broken stuff scattered thin across open ground: burnt-out cars, oil drums, rubble and smashed crates
+        const scatter = (n, fn) => { for (let i = 0; i < n; i++) fn(rand(200, W - 200), rand(200, W - 200)); };
+        scatter(45 * MAP_AREA, (x, y) => { const horiz = Math.random() < 0.5; if (clear(x, y, 60)) addBox({ type: 'crate', car: true, rust: true, x, y, hw: horiz ? 40 : 19, hh: horiz ? 19 : 40, color: pick(RUST_CAR_COLORS), horiz, seed: randInt(1, 1e9) }); if (Math.random() < 0.5 && clear(x + 70, y + 40, 22)) lootSpots.push({ x: x + 70, y: y + 40 }); });
+        scatter(70 * MAP_AREA, (x, y) => { for (let k = randInt(1, 3); k > 0; k--) { const bx = x + rand(-40, 40), by = y + rand(-40, 40); if (clear(bx, by, 18)) addBox({ type: 'crate', barrel: true, x: bx, y: by, hw: 14, hh: 14, color: pick(['#7a3b22', '#5a5f3a', '#3b4a5a', '#8a6a2a']) }); } });
+        scatter(60 * MAP_AREA, (x, y) => { const l = rand(18, 40), horiz = Math.random() < 0.5; if (clear(x, y, l + 10)) addBox({ type: 'wall', x, y, hw: horiz ? l : 10, hh: horiz ? 10 : l, color: '#8f897d', ruin: true }); });
+        scatter(35 * MAP_AREA, (x, y) => { const sz = rand(14, 20); if (clear(x, y, sz + 6)) addBox({ type: 'crate', x, y, hw: sz, hh: sz }); });
+        scatter(40 * MAP_AREA, (x, y) => { if (clear(x, y, 22)) lootSpots.push({ x, y, good: Math.random() < 0.3 }); });
+    }
+    field((waste ? 22 : 320) * MAP_AREA, tree);
+    field((waste ? 20 : 360) * MAP_AREA, bush);
+    field((waste ? 30 : 130) * MAP_AREA, (x, y) => rock(x, y, 24, waste ? 40 : 55));
+    field(420 * MAP_AREA, (x, y) => decor.push({ x, y, s: rand(1.2, 3.2), spr: waste ? 5 : randInt(0, 3) }));
 
     const decorGrid = new Grid(512, 900);
     if (city) decor.length = 0;
@@ -13962,7 +13973,7 @@ function openMapSelect() {
     const id = MODES[menuMode].id, escape = id === 'escape';
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
-        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze'));
+        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin'));
         card.disabled = false;
         card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
     }
@@ -13974,7 +13985,8 @@ const MAP_DESC = {
     city: 'Streets, parked cars, hotels, hospitals and houses.',
     rusty: 'An abandoned facility in a warzone: rusted sheds, wrecked cars, ruins and smoke.',
     maze: 'A huge maze of concrete corridors. Every corner could hide someone.',
-    mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.'
+    mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.',
+    wasteland: 'Made for Assassin: wide open ground, a few lone trees and broken wreckage everywhere. Snipe from far away.'
 };
 const ESCAPE_MAP_DESC = {
     city: 'Cross the city to the HQ tower and fight up 12 floors to the helicopter.',
@@ -13985,6 +13997,17 @@ const ESCAPE_MAP_DESC = {
 // Little painted thumbnails of each battlefield
 function drawMapPreview(cv, map) {
     const g = cv.getContext('2d'), W = cv.width, H = cv.height, rnd = seededRand(map.length * 977);
+    if (map === 'wasteland') {
+        g.fillStyle = '#6f8a4a'; g.fillRect(0, 0, W, H);
+        for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(120,100,60,${0.15 + rnd() * 0.2})`; g.beginPath(); g.arc(rnd() * W, rnd() * H, 6 + rnd() * 18, 0, TAU); g.fill(); }
+        for (let i = 0; i < 9; i++) { g.fillStyle = pick(['#6b4a35', '#4f4a44', '#7a5a3a']); g.save(); g.translate(rnd() * W, rnd() * H); g.rotate(rnd() * 3); g.fillRect(-10, -5, 20, 10); g.restore(); }
+        for (let i = 0; i < 14; i++) { g.fillStyle = '#8f897d'; g.fillRect(rnd() * W, rnd() * H, 4 + rnd() * 10, 3); }
+        for (let i = 0; i < 12; i++) { g.fillStyle = '#5a5f3a'; g.beginPath(); g.arc(rnd() * W, rnd() * H, 3, 0, TAU); g.fill(); }
+        for (let i = 0; i < 4; i++) { const x = rnd() * W, y = rnd() * H; g.fillStyle = '#2f5a2a'; g.beginPath(); g.arc(x, y, 12, 0, TAU); g.fill(); g.fillStyle = '#3f7a35'; g.beginPath(); g.arc(x - 3, y - 3, 7, 0, TAU); g.fill(); }
+        g.strokeStyle = 'rgba(255,60,60,0.9)'; g.lineWidth = 2; const cx = W * 0.62, cy = H * 0.45;
+        g.beginPath(); g.arc(cx, cy, 14, 0, TAU); g.moveTo(cx - 22, cy); g.lineTo(cx + 22, cy); g.moveTo(cx, cy - 22); g.lineTo(cx, cy + 22); g.stroke();
+        return;
+    }
     if (map === 'maze') {
         g.fillStyle = '#5a5c62'; g.fillRect(0, 0, W, H);
         const n = 10, cw = W / n, ch = H / 6;
@@ -14067,6 +14090,7 @@ function startGame(map = lastMap) {
     if (id === 'revolution' && map === 'maze') map = 'ordinary';
     // Escape has no open countryside to cross, and Survival has no maze
     if (id === 'escape' && map === 'ordinary') map = 'city';
+    if (id !== 'assassin' && map === 'wasteland') map = 'ordinary';
     if (id === 'survival' && map === 'maze') map = 'ordinary';
     lastMap = map;
     const setup = war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
