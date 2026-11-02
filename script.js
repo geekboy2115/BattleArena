@@ -8186,7 +8186,21 @@ function drawLighting(camX, camY, zoom) {
         g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, len, p.angle - 0.35, p.angle + 0.35); g.closePath(); g.fill();
         if (!pitch) for (const f of G.fighters) if (f !== p && !f.dead && f.team !== null && f.team === p.team && Math.abs(f.x - p.x) < 1400 && Math.abs(f.y - p.y) < 1000) light(f.x, f.y, 120, 0.5);
     }
-    if (pitch) { ctx.drawImage(lightCv, 0, 0, viewW, viewH); if (G.zombies) drawZombieEyes(camX, camY, zoom); return; }
+    if (pitch) {
+        // Everyone else carries a flashlight too (zombies don't): you see their beams sweep the dark
+        const cone = (f, len, a) => {
+            const sx = (f.x - camX) * s, sy = (f.y - camY) * s, L = len * s;
+            if (sx < -L || sy < -L || sx > w + L || sy > h + L) return;
+            const grad = g.createRadialGradient(sx, sy, 0, sx, sy, L);
+            grad.addColorStop(0, `rgba(0,0,0,${a})`); grad.addColorStop(1, 'rgba(0,0,0,0)');
+            g.fillStyle = grad;
+            g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, L, f.angle - 0.32, f.angle + 0.32); g.closePath(); g.fill();
+        };
+        for (const f of G.fighters) if (f !== p && !f.dead && !f.zombie && !f.downed && !f.car) { cone(f, 650, 0.7); light(f.x, f.y, 55, 0.55); }
+        ctx.drawImage(lightCv, 0, 0, viewW, viewH);
+        if (G.zombies) drawZombieEyes(camX, camY, zoom);
+        return;
+    }
     if (G.world.lampGrid) G.world.lampGrid.query(G.cam.x, G.cam.y, viewW / zoom, l => light(l.x, l.y, 240, 0.85));
     for (const q of G.particles) {
         if (q.type === 'flash') light(q.x, q.y, 170, 0.9);
