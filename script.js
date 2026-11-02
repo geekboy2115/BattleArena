@@ -1475,9 +1475,8 @@ function generateWorld(type = 'ordinary', opts = {}) {
         }
     }
     if (waste) {
-        // Broken stuff scattered thin across open ground: burnt-out cars, oil drums, rubble and smashed crates
+        // Broken stuff scattered thin across open ground (no cars): oil drums, rubble and smashed crates
         const scatter = (n, fn) => { for (let i = 0; i < n; i++) fn(rand(200, W - 200), rand(200, W - 200)); };
-        scatter(45 * MAP_AREA, (x, y) => { const horiz = Math.random() < 0.5; if (clear(x, y, 60)) addBox({ type: 'crate', car: true, rust: true, x, y, hw: horiz ? 40 : 19, hh: horiz ? 19 : 40, color: pick(RUST_CAR_COLORS), horiz, seed: randInt(1, 1e9) }); if (Math.random() < 0.5 && clear(x + 70, y + 40, 22)) lootSpots.push({ x: x + 70, y: y + 40 }); });
         scatter(70 * MAP_AREA, (x, y) => { for (let k = randInt(1, 3); k > 0; k--) { const bx = x + rand(-40, 40), by = y + rand(-40, 40); if (clear(bx, by, 18)) addBox({ type: 'crate', barrel: true, x: bx, y: by, hw: 14, hh: 14, color: pick(['#7a3b22', '#5a5f3a', '#3b4a5a', '#8a6a2a']) }); } });
         scatter(60 * MAP_AREA, (x, y) => { const l = rand(18, 40), horiz = Math.random() < 0.5; if (clear(x, y, l + 10)) addBox({ type: 'wall', x, y, hw: horiz ? l : 10, hh: horiz ? 10 : l, color: '#8f897d', ruin: true }); });
         scatter(35 * MAP_AREA, (x, y) => { const sz = rand(14, 20); if (clear(x, y, sz + 6)) addBox({ type: 'crate', x, y, hw: sz, hh: sz }); });
@@ -4714,7 +4713,8 @@ function newState(mode, setup) {
     initChaos();
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
-    spawnCars();
+    // (no vehicles at all on the Assassin's wasteland)
+    if (setup.map !== 'wasteland') spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     if (war) {
         spawnTeams(W / 2, setup.baseDist || W * 0.33);
@@ -4736,7 +4736,7 @@ function newState(mode, setup) {
         // Survival: everyone starts scattered across the map
         if (survival && mode === 'playing') arrangeStart();
     }
-    if (hightech) gearUpHighTech();
+    if (hightech && setup.map !== 'wasteland') gearUpHighTech();
     if (revolution) for (const f of G.fighters) f.hp = f.maxHp = REVO.hp;
     if (assassin && mode === 'playing') pickAssassin(setup.role === 'assassin' ? G.player : null);
     G.alive = G.fighters.length;
@@ -5538,7 +5538,7 @@ function updateAirdrops(dt) {
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
     }
     // And now and then a high-tech vehicle, lowered on a big parachute
-    if (G.time >= G.nextTech && G.zone.r > 400 && !G.early) {
+    if (G.time >= G.nextTech && G.zone.r > 400 && !G.early && G.map !== 'wasteland') {
         spawnAirdrop('vehicle');
         G.nextTech = G.time + rand(...(G.hightech ? HIGHTECH.drops : TECH_DROP.every));
     }
@@ -13986,7 +13986,7 @@ const MAP_DESC = {
     rusty: 'An abandoned facility in a warzone: rusted sheds, wrecked cars, ruins and smoke.',
     maze: 'A huge maze of concrete corridors. Every corner could hide someone.',
     mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.',
-    wasteland: 'Made for Assassin: wide open ground, a few lone trees and broken wreckage everywhere. Snipe from far away.'
+    wasteland: 'Made for Assassin: wide open ground, a few lone trees and broken junk everywhere, no cars. Snipe from far away.'
 };
 const ESCAPE_MAP_DESC = {
     city: 'Cross the city to the HQ tower and fight up 12 floors to the helicopter.',
@@ -14000,7 +14000,6 @@ function drawMapPreview(cv, map) {
     if (map === 'wasteland') {
         g.fillStyle = '#6f8a4a'; g.fillRect(0, 0, W, H);
         for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(120,100,60,${0.15 + rnd() * 0.2})`; g.beginPath(); g.arc(rnd() * W, rnd() * H, 6 + rnd() * 18, 0, TAU); g.fill(); }
-        for (let i = 0; i < 9; i++) { g.fillStyle = pick(['#6b4a35', '#4f4a44', '#7a5a3a']); g.save(); g.translate(rnd() * W, rnd() * H); g.rotate(rnd() * 3); g.fillRect(-10, -5, 20, 10); g.restore(); }
         for (let i = 0; i < 14; i++) { g.fillStyle = '#8f897d'; g.fillRect(rnd() * W, rnd() * H, 4 + rnd() * 10, 3); }
         for (let i = 0; i < 12; i++) { g.fillStyle = '#5a5f3a'; g.beginPath(); g.arc(rnd() * W, rnd() * H, 3, 0, TAU); g.fill(); }
         for (let i = 0; i < 4; i++) { const x = rnd() * W, y = rnd() * H; g.fillStyle = '#2f5a2a'; g.beginPath(); g.arc(x, y, 12, 0, TAU); g.fill(); g.fillStyle = '#3f7a35'; g.beginPath(); g.arc(x - 3, y - 3, 7, 0, TAU); g.fill(); }
