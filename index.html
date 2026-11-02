@@ -114,7 +114,7 @@
 
     <!-- Title screen -->
     <div id="menu" class="overlay menu-overlay">
-        <div class="menu-card">
+        <div class="menu-card step-mode" id="menu-card">
             <h1 class="title"><span class="title-top">BATTLE</span><span class="title-bottom">ARENA</span></h1>
             <p class="credit">Made by Grant Zhang</p>
 
@@ -130,6 +130,12 @@
                 <button class="mode-arrow" id="mode-next" aria-label="Next mode">&#8250;</button>
             </div>
             <div class="mode-dots" id="mode-dots"></div>
+
+            <!-- Step 2: once the mode is picked, who you're up against and everything else -->
+            <div class="setup-head">
+                <div class="setup-step">STEP 2 OF 2 · SET UP</div>
+                <div class="setup-mode" id="setup-mode"></div>
+            </div>
 
             <div class="cpu-select hidden" id="settings-assassin">
                 <div class="cpu-row"><span>Play as</span>
@@ -171,7 +177,11 @@
                 <div class="cpu-scale"><span>1 · Easy</span><span>10 · Insane</span></div>
             </div>
 
-            <button id="start-btn" class="btn primary">PLAY</button>
+            <button id="mode-go" class="btn primary">NEXT</button>
+            <div class="setup-btns">
+                <button id="setup-back" class="btn ghost">BACK</button>
+                <button id="start-btn" class="btn primary">PLAY</button>
+            </div>
 
             <p class="best">Best kills <strong id="best-kills">0</strong></p>
 

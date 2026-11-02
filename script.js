@@ -14263,6 +14263,16 @@ function fitSliders(moved) {
 $('surv-slider').addEventListener('input', () => fitSliders('surv'));
 $('zomb-slider').addEventListener('input', () => fitSliders('zomb'));
 $('start-btn').addEventListener('click', openDescription);
+// The title screen has two steps: first the game mode, then the opponents and the rest of the settings
+function menuStep(step) {
+    const c = $('menu-card');
+    c.classList.toggle('step-mode', step === 'mode');
+    c.classList.toggle('step-setup', step === 'setup');
+    if (step === 'setup') $('setup-mode').textContent = MODES[menuMode].name;
+    if (typeof fitMenus === 'function') fitMenus();
+}
+$('mode-go').addEventListener('click', () => menuStep('setup'));
+$('setup-back').addEventListener('click', () => menuStep('mode'));
 $('typesel-back').addEventListener('click', () => { screens.typesel.classList.add('hidden'); screens.menu.classList.remove('hidden'); });
 for (const card of document.querySelectorAll('.type-card')) card.addEventListener('click', () => { lastWarfare = card.dataset.type; screens.typesel.classList.add('hidden'); openMapSelect(); });
 function openTypeSelect() {
@@ -14539,6 +14549,7 @@ function toMenu() {
     $('strike-load').classList.add('hidden');
     hud.root.classList.add('hidden');
     canvas.classList.remove('dead');
+    menuStep('mode');
     screens.menu.classList.remove('hidden');
     document.body.classList.remove('playing');
     $('best-kills').textContent = bestKills;

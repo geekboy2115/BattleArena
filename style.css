@@ -937,3 +937,22 @@ body.fs #fs-btn { opacity: 0.55; }
 .boss-hp b { font-size: 18px; line-height: 1; }
 .boss-hp.rage span, .boss-hp.rage b { color: #ff4f6d; }
 @media (max-width: 760px), (max-height: 500px) { .boss-hp div { width: 90px; } .boss-hp span { display: none; } .boss-hp b { font-size: 15px; } }
+
+/* ---------- Title screen in two steps: 1. the game mode, 2. opponents and settings ---------- */
+#menu-card.step-mode .cpu-select,
+#menu-card.step-mode .setup-head,
+#menu-card.step-mode .setup-btns { display: none !important; }
+#menu-card.step-setup .mode-select,
+#menu-card.step-setup .mode-dots,
+#menu-card.step-setup #mode-go,
+#menu-card.step-setup .best,
+#menu-card.step-setup .controls-wrap,
+#menu-card.step-setup .credit { display: none !important; }
+#menu-card.step-setup .title { display: none; }
+.setup-head { text-align: center; margin: 4px 0 14px; }
+.setup-step { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: var(--muted); }
+.setup-mode { font-family: "Black Ops One", sans-serif; font-size: 38px; color: var(--gold); letter-spacing: 2px; line-height: 1.1; margin-top: 4px; }
+.setup-btns { display: flex; gap: 10px; }
+.setup-btns .btn { flex: 1; }
+.setup-btns .btn.ghost { flex: 0 0 34%; }
+#menu-card.step-setup { min-width: min(460px, 92vw); }
