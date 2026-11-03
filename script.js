@@ -33,7 +33,8 @@ const RARITY = {
     epic: { color: '#c77dff', rank: 3 },
     legendary: { color: '#ffc23d', rank: 4 },
     mythic: { color: '#ff5a5f', rank: 5 },
-    hyper: { color: '#00f5d4', rank: 6 }  // only from hyper drops
+    hyper: { color: '#00f5d4', rank: 6 },  // only from hyper drops
+    divine: { color: '#fff1a8', rank: 7 }  // death effects only
 };
 
 const WEAPONS = {
@@ -683,6 +684,8 @@ const Sound = {
     siren(vol) { this.tone(880, 0.18, 'sawtooth', 0.08 * vol, 660); },
     timber(vol) { this.tone(90, 0.5, 'sawtooth', 0.25 * vol, 40); this.noiseBurst(1500, 0.6, 0.6 * vol); },
     death() { this.tone(160, 0.8, 'sawtooth', 0.18, 40); this.noiseBurst(600, 0.6, 0.4); },
+    // A heavenly chord, for the divine effects
+    choir(vol) { if (vol < 0.03) return; [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.tone(f, 1.1, 'sine', 0.06 * vol), i * 60)); },
     fanfare() {
         [[523, 0], [659, 140], [784, 280], [1047, 420], [784, 640], [1047, 780], [1319, 920]].forEach(([f, t], i) =>
             setTimeout(() => { this.tone(f, i === 6 ? 0.9 : 0.22, 'triangle', 0.25); this.tone(f / 2, i === 6 ? 0.9 : 0.2, 'square', 0.05); }, t));
@@ -6735,6 +6738,17 @@ const SKULLS = {
     wings: { shape: 'wings', cells: 'm:wings:thick', e: 4.5, hover: 40, rise: 55, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.6, twinkle: 0.5, gather: [0.3, 0.9], formBy: 1.5, explode: 2.8, charge: 0, end: 'dissolve', loose: 6, intro: 3 },
     meteor: { shape: 'ground', start: 'sky', cells: 'm:tomb:thick', e: 5, hover: 0, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.5, twinkle: 0.2, gather: [0, 0.5], formBy: 1.1, explode: 2.2, charge: 0.2, end: 'break', loose: 0, intro: 2 },
     ghostrise: { cells: 'm:ghost:flat', e: 4.5, hover: 30, rise: 90, spin: 0, wobble: 0.3, jaw: false, eyes: false, sparks: 0, twinkle: 0.3, gather: [0.2, 0.5], formBy: 0.9, explode: 2.0, charge: 0, end: 'dissolve', loose: 0, intro: 1 },
+    // Divine: big, multi-part, and each ends its own way (not just a bang)
+    dvortex: { shape: 'funnel', cells: 'funnel', e: 7, hover: 0, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.6, twinkle: 0.3, gather: [0.2, 0.8], formBy: 1.3, explode: 3.2, drainT: 0.9, charge: 0.5, end: 'ascend', loose: 0, intro: 3, divine: true },
+    qatom: { shape: 'qatom', cells: 'qatom', e: 7, hover: 62, spin: 0.6, wobble: 0, jaw: false, eyes: false, sparks: 0.5, twinkle: 0.2, gather: [0.2, 0.7], formBy: 1.2, explode: 3.2, collapse: 0.8, charge: 0.8, end: 'implode', orbits: true, loose: 0, intro: 3, divine: true },
+    ascend: { shape: 'wings', cells: 'angel', e: 6, hover: 46, rise: 60, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.3, twinkle: 0.6, gather: [0.2, 0.7], formBy: 1.2, explode: 2.9, charge: 0, end: 'ascend', loose: 0, intro: 3, divine: true, pillar: true },
+    portal: { shape: 'portal', cells: 'portal', e: 7, hover: 58, spin: 0, wobble: 0.2, jaw: false, eyes: false, sparks: 0.8, twinkle: 0.3, gather: [0.2, 0.8], formBy: 1.3, explode: 3.1, collapse: 0.6, charge: 0.6, end: 'implode', loose: 0, intro: 3, divine: true },
+    judgement: { start: 'sky', cells: 'm:sword:thick', e: 6.5, hover: 30, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 1, twinkle: 0.3, gather: [0.05, 0.25], formBy: 0.9, explode: 2.7, charge: 0.4, end: 'shatter', loose: 0, intro: 3, divine: true, strike: true },
+    sungod: { shape: 'sun', cells: 'sun', e: 7, hover: 64, spin: 0, wobble: 0.3, jaw: false, eyes: false, sparks: 0.8, twinkle: 0.4, gather: [0.2, 0.8], formBy: 1.3, explode: 3.1, charge: 0.7, end: 'circle', loose: 10, intro: 3, divine: true },
+    timefreeze: { shape: 'timefreeze', cells: 'timefreeze', e: 6.5, hover: 58, spin: 0.4, wobble: 0, jaw: false, eyes: false, sparks: 0.4, twinkle: 0.5, gather: [0.15, 0.6], formBy: 1.0, explode: 2.9, charge: 0.3, end: 'rewind', loose: 0, intro: 3, divine: true },
+    crystal: { shape: 'crystal', cells: 'crystal', e: 7, hover: 0, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.4, twinkle: 0.8, gather: [0.1, 0.5], formBy: 1.2, explode: 2.9, charge: 0.4, end: 'shatter', loose: 0, intro: 3, divine: true },
+    infinity: { shape: 'infinity', cells: 'infinity', e: 6.5, hover: 58, spin: 0, wobble: 0.3, jaw: false, eyes: false, sparks: 0.5, twinkle: 0.5, gather: [0.2, 0.8], formBy: 1.3, explode: 3.0, collapse: 0.6, charge: 0.6, end: 'implode', loose: 0, intro: 3, divine: true },
+    creation: { shape: 'galaxy', cells: 'disc', e: 7, hover: 54, spin: 3, wobble: 0, jaw: false, eyes: false, sparks: 0.6, twinkle: 0.8, gather: [0.2, 0.9], formBy: 1.4, explode: 3.0, collapse: 0.7, charge: 0.7, end: 'ascend', loose: 0, intro: 3, divine: true, pillar: true },
     tornado: { shape: 'twister', cells: 'twister', e: 5, hover: 0, spin: 6, wobble: 0, jaw: false, eyes: false, sparks: 0.8, twinkle: 0.3, gather: [0.3, 0.9], formBy: 1.6, explode: 3.3, charge: 0.4, end: 'spiral', loose: 10, intro: 3 },
     nova: { shape: 'ball', cells: 'ball4', e: 5, hover: 58, spin: 1.6, wobble: 0, jaw: false, eyes: false, sparks: 1, twinkle: 0.3, gather: [0.45, 1.2], formBy: 2.1, collapse: 0.75, explode: 3.7, charge: 0.75, end: 'nova', loose: 20, intro: 3 },
     skull3d: { cells: 'solid', e: 5, hover: 62, spin: 2.1, wobble: 0, jaw: true, eyes: true, eyeW: -2, sparks: 1, twinkle: 0.25, gather: [0.5, 1.3], formBy: 2.3, explode: 4.0, charge: 0.6, end: 'circle', loose: 18, intro: 3 }
@@ -6859,10 +6873,21 @@ const FX_LIST = [
     ['nova_gold', 'Golden Nova', 'mythic', 3650, 'nova', { pal: 'gold', piece: 'octa' }, 'A golden star collapses and blows out.'],
     ['stormnova', 'Storm Nova', 'mythic', 3750, 'tornado', { pal: 'ocean', piece: 'octa', collapse: 0.8, charge: 0.8, end: 'nova', explode: 3.6 }, 'A tornado squeezes into a point and explodes.'],
     ['timebomb', 'Time Bomb', 'mythic', 3850, 'nova', { shape: 'clock', cells: 'clock', pal: 'blood', piece: 'cube', spin: 0, word: 'TICK... BOOM!' }, 'A clock ticks faster and faster, then blows.'],
-    ['kingdom', 'Mythical Kingdom', 'mythic', 3950, 'nova', { cells: 'm:castle:thick', pal: 'rainbow', piece: 'octa', spin: 1.6, after: { loose: 'dust', n: 60 }, afterPiece: 'octa' }, 'A rainbow castle spins, collapses into a star and showers glitter.']
+    ['kingdom', 'Mythical Kingdom', 'mythic', 3950, 'nova', { cells: 'm:castle:thick', pal: 'rainbow', piece: 'octa', spin: 1.6, after: { loose: 'dust', n: 60 }, afterPiece: 'octa' }, 'A rainbow castle spins, collapses into a star and showers glitter.'],
+    // Divine: the best of all - huge, detailed, and each one ends its own way
+    ['dvortex', 'Divine Vortex', 'divine', 5000, 'dvortex', { pal: 'ocean', piece: 'octa' }, 'A huge vortex of ten spinning rings drains into the ground, and everything rises up a pillar of light.'],
+    ['qatom', 'Quantum Atom', 'divine', 5200, 'qatom', { pal: 'neon', piece: 'orb' }, 'A detailed atom: a jiggling nucleus, four electrons with glowing trails on their orbits. It collapses and blinks out of existence.'],
+    ['ascension', 'Ascension', 'divine', 5400, 'ascend', { pal: 'gold', piece: 'chip' }, 'Angel wings and a halo rise in a pillar of light and are taken up into the sky.'],
+    ['portal', 'Celestial Portal', 'divine', 5600, 'portal', { pal: 'candy', piece: 'octa' }, 'A portal opens with a swirl pouring into it, then it snaps shut and is gone.'],
+    ['judgement', 'Divine Judgement', 'divine', 5800, 'judgement', { pal: 'gold', piece: 'octa' }, 'A holy sword falls from the sky, lightning strikes it, and it shatters into glass.'],
+    ['sungod', 'Sun God', 'divine', 6000, 'sungod', { pal: 'fire', piece: 'orb' }, 'A blazing sun with twelve pulsing rays rises and bursts into a solar flare.'],
+    ['timefreeze', 'Time Freeze', 'divine', 6300, 'timefreeze', { pal: 'ice', piece: 'cube' }, 'Time stops: a frozen orb with a clock ring running backwards, then everything rewinds back into the body.'],
+    ['crystal', 'Crystal Cathedral', 'divine', 6600, 'crystal', { pal: 'ice', piece: 'octa' }, 'Crystal spires grow up out of the ground, shimmer, then shatter into glass.'],
+    ['infinity', 'Infinity', 'divine', 7000, 'infinity', { pal: 'rainbow', piece: 'orb' }, 'A rainbow figure of eight loops round and round, then folds into nothing.'],
+    ['creation', 'Creation', 'divine', 7500, 'creation', { pal: 'rainbow', piece: 'octa' }, 'A galaxy is born, spins, curls up into a star and rises into the heavens.']
 ];
 // Effects are quick (it's a kill, not a show): how long each rarity takes before it blows
-const FX_TIME = { uncommon: 1.0, rare: 1.3, epic: 1.6, legendary: 1.9, mythic: 2.1 };
+const FX_TIME = { uncommon: 1.0, rare: 1.3, epic: 1.6, legendary: 1.9, mythic: 2.1, divine: 2.6 };
 const FX_SPECS = {}, DEATH_FX = [];
 // What the cheaper rarities cost (legendary and mythic have their own prices in the list): it goes up through each rarity
 const FX_PRICE = { uncommon: [100, 300], rare: [400, 900], epic: [1000, 1800] }, fxTierN = {}, fxTierI = {};
@@ -6874,7 +6899,7 @@ for (let [id, name, rarity, cost, base, o, desc] of FX_LIST) {
     if (!base) continue;
     if (base === 'pop') { FX_SPECS[id] = Object.assign({ kind: 'pop', loose: 'pop', intro: 1, sparks: 0, twinkle: 0, pal: 'neon', piece: 'cube' }, o); continue; }
     const sp = Object.assign({}, SKULLS[base], { piece: 'cube', pal: 'neon' }, o), r = FX_TIME[rarity] / sp.explode;
-    for (const k of ['formBy', 'explode', 'charge', 'collapse', 'launch']) if (sp[k]) sp[k] *= r;
+    for (const k of ['formBy', 'explode', 'charge', 'collapse', 'launch', 'drainT']) if (sp[k]) sp[k] *= r;
     sp.gather = sp.gather.map(g => g * r);
     FX_SPECS[id] = sp;
 }
@@ -6932,6 +6957,7 @@ const FX_MASKS = {
     chicken: ['..TT.....', '.XXX.....', '.XTXT....', '.XXX...X.', '..XXXXXX.', '..XXXXXX.', '...XXXX..', '...T..T..'],
     castle: ['X.X.....X.X', 'XXX..X..XXX', 'XXX.XXX.XXX', 'XXXXXXXXXXX', 'XXTXXXXXTXX', 'XXXXXTXXXXX', 'XXXXTTTXXXX', 'XXXXTTTXXXX'],
     unicorn: ['.......T...', '......TX...', '.....XXXX..', '....XXTXX..', 'XXXXXXXXX..', 'XXXXXXXX...', 'XXXXXXX....', 'X.X..X.X...', 'X.X..X.X...'],
+    sword: ['....TTT....', '.....T.....', '.XXXXXXXXX.', '..XXXXXXX..', '.....X.....', '....XXX....', '....XTX....', '....XXX....', '....XTX....', '....XXX....', '....XXX....', '.....X.....'],
     crown: ['X...X...X', 'XX.XXX.XX', 'XXXXXXXXX', 'XTXXTXXTX', 'XXXXXXXXX', 'XXXXXXXXX']
 };
 // The simple (shapeless) effects
@@ -6972,6 +6998,56 @@ function skullCells(kind) {
         // A little core ball, and three rings of pieces orbiting it on different tilts
         for (const c of skullCells('ball3')) if (c.u * c.u + c.v * c.v + c.w * c.w < 3.2) out.push(Object.assign({}, c, { core: true }));
         for (let r = 0; r < 3; r++) ring(24, i => ({ ring: r, a0: (i / 24) * TAU }));
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'funnel') {
+        // A huge vortex: ten rings stacked up, wider at the top
+        for (let L = 0; L < 10; L++) ring(22, i => ({ L, a0: (i / 22) * TAU + L * 0.35 }));
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'qatom') {
+        // A nucleus of protons and neutrons, four electrons (a few pieces each) and dotted orbits
+        for (let x = -2; x <= 2; x++) for (let y = -2; y <= 2; y++) for (let z = -2; z <= 2; z++) if (x * x + y * y + z * z <= 5.2) out.push({ u: x * 0.9, v: y * 0.9, w: z * 0.9, nuc: true, flip: (x + y + z) % 2 === 0, color: (x + y + z) % 2 === 0 ? '#ffff46' : '#00ffe8', eye: false, jaw: false });
+        for (let r = 0; r < 4; r++) {
+            ring(3, i => ({ ring: r, electron: true, a0: r * 1.3 + i * 0.12, flip: false, color: '#00ffe8' }));
+            ring(18, i => ({ ring: r, dot: true, a0: (i / 18) * TAU }));
+        }
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'angel') {
+        // Wings with a halo over them
+        for (const c of skullCells('m:wings:thick')) out.push(c);
+        ring(16, i => { const a = i / 16 * TAU; return { u: Math.cos(a) * 2.6, v: -7, w: Math.sin(a) * 2.6, halo: true, flip: true, color: '#ffff46' }; });
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'portal') {
+        // A standing ring, and a swirl of pieces pouring into the middle
+        ring(40, i => { const a = i / 40 * TAU; return { u: Math.cos(a) * 6.5, v: Math.sin(a) * 6.5, a0: a, rim: true }; });
+        ring(50, i => ({ r: 0.5 + (i / 50) * 5.5, a0: i * 2.39996, swirl: true }));
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'sun') {
+        // A blazing core with twelve rays round it
+        for (const c of skullCells('ball3')) out.push(Object.assign({}, c, { core: true }));
+        for (let r = 0; r < 12; r++) for (let j = 0; j < 4; j++) out.push({ u: 0, v: 0, w: 0, ray: r, j, flip: j % 2 === 0, color: j % 2 ? '#00ffe8' : '#ffff46', eye: false, jaw: false });
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'timefreeze') {
+        // A frozen ball, with a clock ring round it that runs backwards
+        for (const c of skullCells('ball4')) out.push(Object.assign({}, c, { core: true }));
+        ring(30, i => { const a = i / 30 * TAU; return { a0: a, clockring: true, flip: i % 3 !== 0, color: i % 3 ? '#ffff46' : '#00ffe8' }; });
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'crystal') {
+        // Crystal spires: a tall one in the middle, rings of shorter ones round it
+        const pill = (px, py, h, k) => { for (let j = 0; j < h; j++) out.push({ u: 0, v: 0, w: 0, px, py, j, k, flip: j % 2 === 0, color: j % 2 ? '#00ffe8' : '#ffff46', eye: false, jaw: false }); };
+        pill(0, 0, 10, 0);
+        for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; pill(Math.cos(a) * 2.4, Math.sin(a) * 2.4, 5 + (i % 3), 1 + i % 3); }
+        for (let i = 0; i < 10; i++) { const a = i / 10 * TAU + 0.3; pill(Math.cos(a) * 4.6, Math.sin(a) * 4.6, 2 + (i % 3), 3 + i % 3); }
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'infinity') {
+        ring(96, i => ({ a0: (i / 96) * TAU }));
         return (skullCellCache[kind] = out);
     }
     if (kind === 'solar') {
@@ -7158,8 +7234,9 @@ function cubeDeath(t, fx, given) {
         const cells = skullCells(spec.cells);
         if (spec.links && !cells.linked) { cells.linked = true; cells.forEach((c, i) => { c.links = []; cells.forEach((d, j) => { if (j > i && Math.abs(c.u - d.u) + Math.abs(c.v - d.v) + Math.abs(c.w - d.w) === 1) c.links.push(j); }); }); }
         for (const c of cells)
-            sko.cubes.push(spawn({ ring: c.ring, core: c.core, hf: c.hf, hand: c.hand, alt: c.alt, s: c.s, t: c.t, k: c.k, r: c.r, pet: c.pet, j: c.j, i: c.i, n: c.n, links: c.links, sk: sko, u: c.u * e, v: c.v * e, w: c.w * e, a0: c.a0, h: (c.h || 0) * e, size: e, flip: c.flip, color: c.color, eye: c.eye && spec.eyes, jaw: c.jaw && spec.jaw,
+            sko.cubes.push(spawn({ ring: c.ring, core: c.core, hf: c.hf, hand: c.hand, alt: c.alt, L: c.L, nuc: c.nuc, electron: c.electron, dot: c.dot, halo: c.halo, rim: c.rim, swirl: c.swirl, ray: c.ray, clockring: c.clockring, px: c.px, py: c.py, s: c.s, t: c.t, k: c.k, r: c.r, pet: c.pet, j: c.j, i: c.i, n: c.n, links: c.links, sk: sko, u: c.u * e, v: c.v * e, w: c.w * e, a0: c.a0, h: (c.h || 0) * e, size: e, flip: c.flip, color: c.color, eye: c.eye && spec.eyes, jaw: c.jaw && spec.jaw,
                 life: 99, max: 99, gatherIn: rand(spec.gather[0], spec.gather[1]) }));
+        for (const c of sko.cubes) { if (c.dot) c.size = e * 0.45; if (c.electron) c.size = e * 0.8; }
         if (spec.start === 'sky') for (const c of sko.cubes) {
             // Meteor: the pieces come down out of the sky onto the spot instead of bursting out of the body
             const s0 = skullSpot(c);
@@ -7198,8 +7275,29 @@ function skullRot(sko, x, y, z) {
     t = y * cp - z * sp; z = y * sp + z * cp; y = t;
     return [x, y, z];
 }
+// A point on one of the detailed atom's four orbits (each on its own tilt), before the atom's own turn
+function qatomOrbit(sko, ring, a) {
+    const e = sko.e, R = (4.2 + ring * 0.9) * e, tilt = [0.2, 1.2, -1.2, 0.7][ring], turn = [0, 1.05, 2.1, 0.5][ring];
+    let x = Math.cos(a) * R, y = 0, z = Math.sin(a) * R * 0.95;
+    [y, z] = [y * Math.cos(tilt) - z * Math.sin(tilt), y * Math.sin(tilt) + z * Math.cos(tilt)];
+    [x, z] = [x * Math.cos(turn) + z * Math.sin(turn), -x * Math.sin(turn) + z * Math.cos(turn)];
+    return [x, y, z];
+}
 function skullSpot(c) {
     const sko = c.sk;
+    if (sko.spec.shape === 'funnel') {
+        // The huge vortex: wide at the top, spinning faster at the bottom, then it drains away into the ground
+        const sp = sko.spec, e = sko.e, A = sko.age, drain = clamp((A - (sp.explode - sp.drainT)) / sp.drainT, 0, 1);
+        const R = (1.5 + c.L * 1.25) * e * (0.3 + 0.7 * sko.build) * (1 - drain * 0.92), a = c.a0 + A * (2 + 9 / (c.L + 1.5)) * (1 + drain * 2.5);
+        c.depth = -Math.sin(a) * R;
+        return { x: sko.x + Math.cos(a) * R, y: sko.y + Math.sin(a) * R * 0.5, z: 3 + c.L * e * 1.5 * (1 - drain) * sko.build };
+    }
+    if (sko.spec.shape === 'crystal') {
+        // Crystal spires grow up out of the ground one ring after another
+        const e = sko.e, grow = clamp((sko.age - c.k * 0.1) / 0.55, 0, 1), sh = Math.sin(sko.age * 6 + c.k) * 0.5;
+        c.depth = -c.py * e;
+        return { x: sko.x + c.px * e + sh, y: sko.y + c.py * e * 0.6, z: 3 + c.j * e * 1.05 * grow };
+    }
     if (sko.spec.shape === 'twister') {
         // Round and round up the funnel, faster near the top; it grows as it gets going
         const a = c.a0 + sko.age * sko.spec.spin * (1 + c.h / (sko.e * 30)), r = (sko.e * 1.2 + c.h * 0.42) * (0.4 + 0.6 * sko.build) * sko.scale;
@@ -7256,8 +7354,35 @@ function skullSpot(c) {
         }
         case 'wings': {
             // Each wing flaps about the middle
+            if (c.halo) { lx = c.u; ly = c.v + Math.sin(A * 4) * e * 0.4; lz = c.w; break; }
             const flap = Math.sin(A * 11) * 0.75 * (c.u < 0 ? 1 : -1), x = c.u, z = c.w;
             lx = x * Math.cos(flap) - z * Math.sin(flap); lz = x * Math.sin(flap) + z * Math.cos(flap); ly = c.v; break;
+        }
+        case 'qatom': {
+            // The nucleus jiggles; electrons whizz round their orbits; the orbits are dotted
+            if (c.nuc) { const j = Math.sin(A * 30 + c.seedT * 5) * e * 0.12; lx = c.u + j; ly = c.v - j; lz = c.w; break; }
+            [lx, ly, lz] = qatomOrbit(sko, c.ring, c.dot ? c.a0 + A * 0.3 : c.a0 + A * (5 + c.ring * 1.3));
+            break;
+        }
+        case 'portal': {
+            if (c.rim) { const a = c.a0 + A * 1.6, r = 6.5 * e; lx = Math.cos(a) * r; ly = Math.sin(a) * r; lz = Math.sin(a * 3 + A * 6) * e * 0.3; break; }
+            // The swirl keeps pouring in towards the middle
+            const r = ((c.r - A * 4) % 5.5 + 5.5) % 5.5 + 0.3, a = c.a0 + A * (2 + 9 / r);
+            lx = Math.cos(a) * r * e; ly = Math.sin(a) * r * e; lz = -r * e * 0.25; break;
+        }
+        case 'sun': {
+            if (c.core) { lx = c.u * 1.5; ly = c.v * 1.5; lz = c.w * 1.5; break; }
+            const a = c.ray * TAU / 12 + A * 0.9, d = (3.4 + c.j * 1.2) * e * (1 + 0.28 * Math.sin(A * 8 + c.ray * 1.7));
+            lx = Math.cos(a) * d; ly = Math.sin(a) * d; lz = 0; break;
+        }
+        case 'timefreeze': {
+            if (c.core) { lx = c.u; ly = c.v; lz = c.w; break; }
+            const a = c.a0 - A * 2.5, r = 7.2 * e; lx = Math.cos(a) * r; ly = Math.sin(a) * r * 0.4; lz = Math.sin(a) * r * 0.9; break;
+        }
+        case 'infinity': {
+            // A figure of eight, the pieces running round it
+            const t = c.a0 + A * 2.6, d = 1 + Math.sin(t) ** 2, R = 7.5 * e;
+            lx = R * Math.cos(t) / d; ly = R * Math.sin(t) * Math.cos(t) / d; lz = Math.sin(t) * R * 0.35; break;
         }
         case 'glitch': {
             // A glitchy block: rows tear sideways and the whole thing jumps
@@ -7304,6 +7429,23 @@ function updateSkull(p, dt) {
         if (spec.jaw && v > 0.03) for (let i = 0; i < 5; i++) setTimeout(() => Sound.tone(rand(180, 240), 0.07, 'square', 0.05 * v, 120), i * 75);
     }
     sko.build = Math.min(1, sko.age / 1.4);
+    if (spec.divine && !sko.blessed) {
+        // Divine: a pillar of light and a heavenly chord to start
+        sko.blessed = true;
+        if (spec.pillar || spec.shape === 'funnel') G.particles.push({ type: 'pillar', x: sko.x, y: sko.y, vx: 0, vy: 0, life: 0.9, max: 0.9, size: sko.e * 6, color: sko.PA });
+        G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life: 0.8, max: 0.8, size: sko.e * 30, color: '#fff1a8' });
+        Sound.choir(v);
+    }
+    if (spec.orbits && sko.formed && G.particles.length < 2500) for (const c of sko.cubes) if (c.electron && c.set) G.particles.push({ type: 'glow', x: c.x, y: c.y - c.z, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 3, color: sko.PB });
+    if (spec.strike && sko.thud && !sko.struck) {
+        // Divine judgement: lightning crashes down onto the sword, and a shockwave rolls out
+        sko.struck = true;
+        for (let i = 0; i < 4; i++) G.particles.push({ type: 'bolt', x: sko.x + rand(-30, 30), y: sko.y - 520, x2: sko.x + rand(-6, 6), y2: sko.y - sko.e * 6, vx: 0, vy: 0, life: 0.35, max: 0.35, seed: Math.random() });
+        for (const [life, size, col] of [[0.6, sko.e * 34, '#ffffff'], [0.8, sko.e * 26, sko.PA]]) G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life, max: life, size, color: col });
+        const near = G.player && !G.player.dead ? Math.hypot(sko.x - G.player.x, sko.y - G.player.y) : 9999;
+        if (near < 800) { G.shake = Math.max(G.shake || 0, 12 * (1 - near / 800)); G.flash = Math.max(G.flash || 0, 0.3 * (1 - near / 800)); G.flashColor = '255,248,210'; }
+        if (v > 0.03) Sound.boom(v * 0.7, 0.8);
+    }
     // Some float up as they go (the ghost, the wings, the helix)
     if (spec.rise) sko.hover = spec.hover * Math.sqrt(sko.k) + Math.max(0, sko.age - spec.formBy * 0.5) * spec.rise * Math.sqrt(sko.k);
     if (spec.launch && sko.age > spec.launch) {
@@ -7337,6 +7479,58 @@ function updateSkull(p, dt) {
                 wx: rand(-12, 12), wy: rand(-12, 12), wz: rand(-8, 8), life: rand(0.4, 0.7), max: 0.7, zapT: 9 }); }
         G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.35, max: 0.35, size: sko.e * 12, color: sko.PA });
         if (v > 0.03) Sound.pop();
+        return;
+    }
+    if (spec.divine) {
+        // Every divine ends with a flash of holy light
+        const near = G.player && !G.player.dead ? Math.hypot(sko.x - G.player.x, sko.y - G.player.y) : 9999;
+        if (near < 900) { G.flash = Math.max(G.flash || 0, 0.3 * (1 - near / 900)); G.flashColor = '255,244,200'; G.shake = Math.max(G.shake || 0, 8 * (1 - near / 900)); }
+    }
+    if (spec.end === 'ascend') {
+        // Taken up: everything rises up a pillar of light into the sky
+        for (const c of live) {
+            const s = skullSpot(c);
+            Object.assign(c, s, { sk: null, set: false, landed: true, lite: true, grav: -rand(500, 900), vx: (sko.x - s.x) * 1.5 + rand(-20, 20), vy: (sko.y - s.y) * 1.5, vz: rand(150, 350),
+                wx: rand(-8, 8), wy: rand(-8, 8), wz: rand(-6, 6), life: rand(0.6, 0.95), max: 0.95, zapT: 9 });
+        }
+        G.particles.push({ type: 'pillar', x: sko.x, y: sko.y, vx: 0, vy: 0, life: 1.1, max: 1.1, size: sko.e * 8, color: sko.PA });
+        G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life: 0.6, max: 0.6, size: sko.e * 20, color: '#fff1a8' });
+        for (let i = 0; i < 20; i++) G.particles.push({ type: 'twinkle', x: sko.x + rand(-20, 20), y: sko.y - rand(0, 200), vx: rand(-20, 20), vy: rand(-160, -60), life: rand(0.5, 1), max: 1, size: rand(5, 10), color: i % 2 ? '#ffffff' : '#fff1a8' });
+        Sound.choir(v);
+        return;
+    }
+    if (spec.end === 'implode') {
+        // Gone: it shrinks to nothing and just blinks out, with the light rushing inwards
+        for (const c of live) c.life = 0, c.quiet = true;
+        G.particles.push({ type: 'iring', x: cx, y: cy, vx: 0, vy: 0, life: 0.45, max: 0.45, size: sko.e * 26, color: sko.PB });
+        G.particles.push({ type: 'iring', x: cx, y: cy, vx: 0, vy: 0, life: 0.3, max: 0.3, size: sko.e * 16, color: '#ffffff' });
+        G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.2, max: 0.2, size: sko.e * 4, color: '#ffffff' });
+        for (let i = 0; i < 16; i++) { const a = rand(0, TAU), d = rand(60, 140); G.particles.push({ type: 'twinkle', x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d, vx: -Math.cos(a) * d * 3, vy: -Math.sin(a) * d * 3, life: 0.3, max: 0.3, size: rand(5, 9), color: '#ffffff' }); }
+        if (v > 0.03) { Sound.tone(1600, 0.4, 'sine', 0.09 * v, 120); setTimeout(() => Sound.tink(v * 1.5, true), 300); }
+        return;
+    }
+    if (spec.end === 'rewind') {
+        // Time runs backwards: everything flies back to where they died and vanishes
+        for (const c of live) {
+            const s = skullSpot(c), T = rand(0.25, 0.4);
+            Object.assign(c, s, { sk: null, set: false, landed: true, lite: true, grav: 0, drag: 1, vx: (sko.x - s.x) / T, vy: (sko.y - s.y) / T, vz: -s.z / T,
+                wx: -c.wx || 8, wy: -c.wy || 8, wz: 0, life: T, max: 0.4, zapT: 9 });
+        }
+        G.particles.push({ type: 'iring', x: sko.x, y: sko.y - sko.hover, vx: 0, vy: 0, life: 0.4, max: 0.4, size: sko.e * 22, color: sko.PA });
+        if (v > 0.03) Sound.tone(1400, 0.45, 'sawtooth', 0.05 * v, 200);
+        return;
+    }
+    if (spec.end === 'shatter') {
+        // Shatters: every piece cracks into little glass shards that tinkle down
+        for (const c of live) {
+            const s = skullSpot(c);
+            c.life = 0; c.quiet = true;
+            if (G.particles.length < 3200) for (let i = 0; i < 2; i++) { const a = rand(0, TAU), sp = rand(60, 200);
+                G.particles.push({ type: 'cube', piece: 'shard', lite: true, landed: false, age: 0, group: c.group, x: s.x, y: s.y, z: s.z, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: rand(50, 200), size: c.size * 0.8,
+                    ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-20, 20), wy: rand(-20, 20), wz: rand(-20, 20), life: rand(0.4, 0.75), max: 0.75, zapT: 9, seedT: rand(0, 10), color: c.color, pal: c.pal, palHex: c.palHex }); }
+        }
+        G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: sko.e * 16, color: '#ffffff' });
+        if (v > 0.03) { Sound.shatter(v); for (let i = 0; i < 5; i++) setTimeout(() => Sound.tink(v, true), 80 + i * 60); }
         return;
     }
     if (spec.end === 'fountain') {
@@ -7428,6 +7622,23 @@ function drawSkull(sko) {
         ctx.globalAlpha = 1;
     }
     set.sort((a, b) => b.depth - a.depth);
+    if (spec.orbits) {
+        // The atom's orbits, drawn as thin glowing rings
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineWidth = 1; ctx.strokeStyle = sko.PB; ctx.globalAlpha = 0.35 * f;
+        for (let r = 0; r < 4; r++) {
+            ctx.beginPath();
+            for (let i = 0; i <= 40; i++) { const [x, y, z] = qatomOrbit(sko, r, i / 40 * TAU), [X, Y] = skullRot(sko, x * sko.scale, y * sko.scale, z * sko.scale); const px = sko.x + X, py = sko.y + 2 - sko.hover - Math.sin(sko.age * 3) * 2 + Y; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+    if (spec.shape === 'funnel' || spec.shape === 'portal') {
+        // The eye of the vortex / the middle of the portal: a dark swirl with a bright edge
+        const cy2 = spec.shape === 'portal' ? sko.y + 2 - sko.hover : sko.y + 2, r = sko.e * (spec.shape === 'portal' ? 5 : 3) * sko.scale;
+        ctx.save(); const g = ctx.createRadialGradient(sko.x, cy2, 0, sko.x, cy2, r);
+        g.addColorStop(0, 'rgba(5,2,15,0.9)'); g.addColorStop(0.7, 'rgba(40,10,60,0.5)'); g.addColorStop(1, sko.PB + '00');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sko.x, cy2, r, spec.shape === 'portal' ? r : r * 0.5, 0, 0, TAU); ctx.fill(); ctx.restore();
+    }
     if (spec.beam) {
         // UFO: a beam of light down to the ground
         const top = sko.y - sko.hover, g = ctx.createLinearGradient(0, top, 0, sko.y);
@@ -14332,6 +14543,22 @@ function drawParticles() {
         switch (p.type) {
             case 'cube': if (!(p.sk && p.set)) drawCube(p); break;
             case 'cubeskull': drawSkull(p.sk); break;
+            case 'pillar': {
+                // A pillar of light from the ground up into the sky
+                const w = p.size * (0.6 + 0.4 * Math.sin((1 - t) * Math.PI)), top = p.y - 900;
+                const g = ctx.createLinearGradient(0, p.y, 0, top);
+                g.addColorStop(0, p.color + 'cc'); g.addColorStop(0.5, '#ffffff66'); g.addColorStop(1, '#ffffff00');
+                ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(1, t * 2); ctx.fillStyle = g;
+                ctx.fillRect(p.x - w / 2, top, w, p.y - top);
+                ctx.globalAlpha = Math.min(1, t * 2) * 0.8; ctx.fillStyle = '#ffffff'; ctx.fillRect(p.x - w / 8, top, w / 4, p.y - top);
+                ctx.restore();
+                break;
+            }
+            case 'iring':
+                // A ring rushing inwards
+                ctx.strokeStyle = p.color; ctx.globalAlpha = 1 - t * 0.3; ctx.lineWidth = 2 + 4 * (1 - t);
+                ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.size * t), 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+                break;
             case 'word': {
                 // Comic word: pops in big, wobbles, fades
                 const age = p.max - p.life, sc = age < 0.12 ? age / 0.12 * 1.3 : 1.3 - Math.min(0.3, (age - 0.12) * 1.5);
