@@ -6687,7 +6687,7 @@ function updateVictory(realDt) {
 // crackle with electricity, and fizzle and pop as they fade away
 // Death: the body breaks up into spinning 3D cubes (three neon yellow sides, three teal sides)
 // that blast out, tumble to the ground, crackle with electricity and sparkle, then explode one by one
-const CUBES = { yellow: [244, 255, 58], teal: [0, 245, 212], n: 48, life: [2.2, 3.8], grav: 1100, tilt: 0.55 };
+const CUBES = { yellow: [244, 255, 58], teal: [0, 245, 212], n: 85, life: [2.2, 3.8], grav: 1100, tilt: 0.55 };
 // The six faces: [normal, the four corners], +x +y +z are neon yellow, -x -y -z are teal
 const CUBE_FACES = [
     [[1, 0, 0], [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]], 0], [[-1, 0, 0], [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]], 1],
@@ -6695,14 +6695,14 @@ const CUBE_FACES = [
     [[0, 0, 1], [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]], 0], [[0, 0, -1], [[-1, -1, -1], [-1, 1, -1], [1, 1, -1], [1, -1, -1]], 1]
 ];
 function cubeDeath(t) {
-    if (!inView(t.x, t.y, 160) || G.particles.length > 2400) return;
+    if (!inView(t.x, t.y, 160) || G.particles.length > 3000) return;
     const k = t.r / CONFIG.RADIUS, n = Math.round(CUBES.n * Math.min(3, k));
     // Which way the hit came from, so the pieces get knocked away from the killer
     const ka = t.killedBy && t.killedBy !== t ? Math.atan2(t.y - t.killedBy.y, t.x - t.killedBy.x) : rand(0, TAU);
     for (let i = 0; i < n; i++) {
-        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(60, 300) * Math.sqrt(k), kick = rand(30, 180);
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(120, 620) * Math.sqrt(k), kick = rand(60, 320);
         G.particles.push({
-            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(200, 520),
+            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(260, 680),
             vx: Math.cos(a) * sp + Math.cos(ka) * kick, vy: Math.sin(a) * sp + Math.sin(ka) * kick,
             size: rand(5, 10) * Math.min(2, Math.sqrt(k) * 1.1),
             ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-12, 12), wy: rand(-12, 12), wz: rand(-8, 8),
@@ -6734,7 +6734,7 @@ function updateCube(p, dt) {
         if (p.vz < -120) { p.vz = -p.vz * 0.4; p.vx *= 0.65; p.vy *= 0.65; p.wx *= 0.6; p.wy *= 0.6; p.wz *= 0.6; }
         else p.vz = 0;
     }
-    const drag = Math.pow(ground ? 0.25 : 0.8, dt * 3);
+    const drag = Math.pow(ground ? 0.45 : 0.9, dt * 3);
     p.vx *= drag; p.vy *= drag;
     if (ground) { const sd = Math.pow(0.15, dt * 3); p.wx *= sd; p.wy *= sd; p.wz *= sd; }
     p.x += p.vx * dt; p.y += p.vy * dt;
