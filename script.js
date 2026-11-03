@@ -6832,12 +6832,16 @@ function updateSkull(p, dt) {
         // BOOM: every cube is thrown out from the skull and goes loose, to land, fizzle and pop
         p.life = 0;
         const cx = sko.x, cy = sko.y - sko.hover;
-        for (const c of sko.cubes) {
-            if (c.life <= 0) continue;
-            const s = skullSpot(c), dx = s.x - cx, dy = (s.y - s.z) - cy, d = Math.hypot(dx, dy) || 1, sp = rand(160, 420) * Math.sqrt(sko.k);
-            Object.assign(c, s, { sk: null, set: false, landed: false, vx: dx / d * sp + rand(-40, 40), vy: rand(-50, 50), vz: -dy / d * sp * 0.8 + rand(120, 300),
-                wx: rand(-16, 16), wy: rand(-16, 16), wz: rand(-10, 10), life: rand(0.9, 1.9), max: 1.9, zapT: rand(0.2, 0.5) });
-        }
+        // They go out in a circle: spread evenly all the way round, all at about the same speed, so it's a ring that grows
+        const live = sko.cubes.filter(c => c.life > 0), n = live.length, a0 = rand(0, TAU);
+        live.forEach((c, i) => {
+            const s = skullSpot(c), a = a0 + (i / n) * TAU * 3.0 + rand(-0.04, 0.04), sp = (i % 3 === 0 ? 260 : i % 3 === 1 ? 330 : 400) * Math.sqrt(sko.k) * rand(0.95, 1.05);
+            Object.assign(c, s, { sk: null, set: false, landed: false, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: rand(60, 160),
+                wx: rand(-16, 16), wy: rand(-16, 16), wz: rand(-10, 10), life: rand(1.1, 1.9), max: 1.9, zapT: rand(0.2, 0.5) });
+        });
+        // Shock rings rolling out along the ground with them
+        for (const [life, size, col] of [[0.55, sko.e * 30, '#ffffff'], [0.7, sko.e * 26, '#00ffe8'], [0.8, sko.e * 20, '#ffff46']])
+            G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life, max: life, size, color: col });
         G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.25, max: 0.25, size: sko.e * 9, color: '#ffffff' });
         G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.5, max: 0.5, size: sko.e * 22, color: '#00ffe8' });
         G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.35, max: 0.35, size: sko.e * 15, color: '#ffff46' });
