@@ -984,3 +984,14 @@ body.fs #fs-btn { opacity: 0.55; }
     .fx-select { margin: 0 0 4px; } .fx-open { padding: 3px 10px; }
     .fx-rarity { font-size: 22px; } #fx-clip { max-width: 340px; }
 }
+
+.fx-bank { text-align: center; font-size: 13px; letter-spacing: 2px; color: #ff8a8a; margin: -6px 0 10px; }
+.fx-bank b { color: #fff; font-size: 16px; }
+.fx-action { margin: 10px auto 0; display: block; min-width: 220px; padding: 10px 18px; font-size: 16px; }
+.fx-action.done { opacity: 0.6; }
+.fx-action.buy { background: linear-gradient(135deg, #ffc23d, #ff5a5f); color: #2a0d12; }
+.fx-action.locked { opacity: 0.55; background: rgba(255,255,255,0.08); color: var(--ink); }
+.fx-item.view { outline: 2px dashed var(--rc); outline-offset: 2px; }
+.fx-item.lock .fx-in { opacity: 0.75; }
+.fx-item .fx-check { white-space: nowrap; font-size: 13px; font-weight: 700; }
+.fx-item.lock .fx-check { opacity: 1; color: #ffb3b3; }
