@@ -15174,6 +15174,28 @@ document.querySelectorAll('.fx-item').forEach(b => b.addEventListener('click', (
     fxClip.restart();
     $('fxsel').querySelector('.fx-card').scrollTo({ top: 0, behavior: 'smooth' }); $('fxsel').scrollTo({ top: 0, behavior: 'smooth' });
 }));
+// Search: matches the name, the rarity or what it does. (Creator's testing secret: typing abcxyz unlocks every effect)
+$('fx-search').addEventListener('input', () => {
+    const q = $('fx-search').value.trim().toLowerCase();
+    if (q === 'abcxyz') {
+        for (const f of DEATH_FX) fxOwned[f.id] = true;
+        saveFx();
+        $('fx-search').value = '';
+        $('fx-search').blur();
+        Sound.init(); Sound.fanfare && Sound.fanfare();
+        $('fx-none').textContent = 'ALL EFFECTS UNLOCKED!'; $('fx-none').classList.remove('hidden'); $('fx-none').classList.add('unlocked');
+        setTimeout(() => { $('fx-none').classList.add('hidden'); $('fx-none').classList.remove('unlocked'); $('fx-none').textContent = 'No effects match that.'; }, 2500);
+        document.querySelectorAll('.fx-item').forEach(b => b.classList.remove('hidden'));
+        showDeathFx();
+        return;
+    }
+    let shown = 0;
+    document.querySelectorAll('.fx-item').forEach(b => {
+        const f = fxInfo(b.dataset.fx), hit = !q || `${f.name} ${f.rarity} ${f.desc}`.toLowerCase().includes(q);
+        b.classList.toggle('hidden', !hit); if (hit) shown++;
+    });
+    $('fx-none').classList.toggle('hidden', shown > 0);
+});
 $('fx-action').addEventListener('click', () => {
     const f = fxInfo(fxView);
     if (!fxHave(f.id)) {
