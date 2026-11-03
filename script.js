@@ -6499,7 +6499,7 @@ function killFighter(t, killer, weapon) {
     if (killer && killer !== t) killer.kills++;
 
     dropDeathWeapons(t);
-    if (!t.escaped && !t.vaporized) cubeDeath(t);
+    if (!t.escaped && !t.vaporized) { if (G.mode === 'demo') burst(t.x, t.y, 10, t.color, 200, 'blood'); else cubeDeath(t); }
 
     if (G.mode !== 'demo') addKillfeed(t, killer, weapon);
 
@@ -6637,8 +6637,8 @@ function playerKillFx(t) {
     G.streak = G.time < G.streakUntil ? G.streak + 1 : 1;
     G.streakUntil = G.time + 5000;
     // Brief slow-mo, camera punch and a gold flash
-    G.timeScale = 0.3;
-    G.zoomKick = 0.07;
+    G.timeScale = 0.1;
+    G.zoomKick = 0.09;
     G.flash = 0.28;
     G.flashColor = '255,209,102';
     G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 110, color: '#ffd166' });
@@ -6694,7 +6694,7 @@ function updateVictory(realDt) {
 // crackle with electricity, and fizzle and pop as they fade away
 // Death: the body breaks up into spinning 3D cubes (three neon yellow sides, three teal sides)
 // that blast out, tumble to the ground, crackle with electricity and sparkle, then explode one by one
-const CUBES = { yellow: [255, 255, 70], teal: [0, 255, 232], n: 85, life: [2.2, 3.8], grav: 1100, tilt: 0.55 };
+const CUBES = { yellow: [255, 255, 70], teal: [0, 255, 232], n: 120, life: [2.2, 3.8], grav: 1100, tilt: 0.55 };
 // The six faces: [normal, the four corners], +x +y +z are neon yellow, -x -y -z are teal
 const CUBE_FACES = [
     [[1, 0, 0], [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]], 0], [[-1, 0, 0], [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]], 1],
@@ -6702,10 +6702,13 @@ const CUBE_FACES = [
     [[0, 0, 1], [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]], 0], [[0, 0, -1], [[-1, -1, -1], [-1, 1, -1], [1, 1, -1], [1, -1, -1]], 1]
 ];
 function cubeDeath(t) {
-    if (!inView(t.x, t.y, 160) || G.particles.length > 3000) return;
+    if (!inView(t.x, t.y, 160) || G.particles.length > 3600) return;
     const k = t.r / CONFIG.RADIUS, n = Math.round(CUBES.n * Math.min(3, k));
     // Which way the hit came from, so the pieces get knocked away from the killer
     const ka = t.killedBy && t.killedBy !== t ? Math.atan2(t.y - t.killedBy.y, t.x - t.killedBy.x) : rand(0, TAU);
+    const group = [];
+    // A neon burn mark glows on the ground under where they fell
+    addDecal({ kind: 'scorch', x: t.x, y: t.y, r: 70 * k, tint: Math.random() < 0.5 ? '0,255,232' : '255,255,70', life: 9000 });
     for (let i = 0; i < n; i++) {
         const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(25, 150) * Math.sqrt(k), kick = rand(10, 70);
         G.particles.push({
@@ -6714,9 +6717,13 @@ function cubeDeath(t) {
             size: rand(3.5, 7) * Math.min(2, Math.sqrt(k) * 1.1),
             ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-12, 12), wy: rand(-12, 12), wz: rand(-8, 8),
             life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], zapT: rand(0.3, 0.6), seedT: rand(0, 10),
-            color: i % 2 ? '#00ffe8' : '#ffff46'
+            color: i % 2 ? '#00ffe8' : '#ffff46', group
         });
+        group.push(G.particles[G.particles.length - 1]);
     }
+    // The body flashes white and blows apart
+    G.particles.push({ type: 'glow', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.1, max: 0.1, size: t.r * 2.2, color: '#ffffff' });
+    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 120 * k, color: '#ffffff' });
     // The moment it happens: a blast of light, shock rings, arcs across the body and a shower of sparkles
     G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 85 * k, color: '#00f5d4' });
     G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 55 * k, color: '#f4ff3a' });
@@ -6761,7 +6768,11 @@ function updateCube(p, dt) {
     if ((p.zapT -= dt) <= 0) {
         p.zapT = p.landed ? rand(0.03, 0.12) * (p.life / p.max + 0.4) : rand(0.35, 0.8);
         const a = rand(0, TAU), L = rand(6, 16);
-        G.particles.push({ type: 'zap', x: p.x, y: p.y - p.z, x2: p.x + Math.cos(a) * L, y2: p.y + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: rand(0.06, 0.14), max: 0.14, seed: Math.random(), color: Math.random() < 0.25 ? '#e8ffff' : p.color });
+        // Often the spark jumps across to another cube in the pile, so the whole pile crackles together
+        const o = p.landed && p.group && Math.random() < 0.45 ? p.group[(Math.random() * p.group.length) | 0] : null;
+        if (o && o !== p && o.life > 0 && o.landed && Math.hypot(o.x - p.x, o.y - p.y) < 60)
+            G.particles.push({ type: 'zap', x: p.x, y: p.y, x2: o.x, y2: o.y, vx: 0, vy: 0, life: rand(0.06, 0.12), max: 0.12, seed: Math.random(), color: p.color });
+        else G.particles.push({ type: 'zap', x: p.x, y: p.y - p.z, x2: p.x + Math.cos(a) * L, y2: p.y + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: rand(0.06, 0.14), max: 0.14, seed: Math.random(), color: Math.random() < 0.25 ? '#e8ffff' : p.color });
         if (Math.random() < 0.04) Sound.zap(Sound.volAt(p.x, p.y) * 0.25);
     }
     // Sparkles: a glint pops up on it now and then
@@ -6774,6 +6785,13 @@ function updateCube(p, dt) {
         for (let i = 0; i < 8; i++) { const a = rand(0, TAU), sp = rand(90, 280); G.particles.push({ type: 'glow', x: p.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.15, 0.35), max: 0.35, size: 2.4, color: i % 2 ? '#00ffe8' : '#ffff46' }); }
         for (let i = 0; i < 2; i++) { const a = rand(0, TAU), sp = rand(40, 120); G.particles.push({ type: 'twinkle', x: p.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.25, 0.45), max: 0.45, size: rand(5, 9), color: '#ffffff' }); }
         if (Math.random() < 0.25) Sound.tink(Sound.volAt(p.x, p.y) * 1.4, true);
+        // It shatters into a couple of tiny cubes that hop and vanish
+        if (!p.mini && G.particles.length < 3600) for (let i = 0; i < 2; i++) {
+            const a = rand(0, TAU), sp = rand(30, 90);
+            G.particles.push({ type: 'cube', mini: true, landed: true, x: p.x, y: p.y, z: p.z + 2, vz: rand(140, 260), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, size: p.size * 0.5,
+                ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-20, 20), wy: rand(-20, 20), wz: rand(-12, 12),
+                life: rand(0.35, 0.6), max: 0.6, zapT: 1, seedT: rand(0, 10), color: i ? '#00ffe8' : '#ffff46' });
+        }
     }
 }
 
