@@ -6685,87 +6685,120 @@ function updateVictory(realDt) {
 // ---------- Effects ----------
 // Death: the body breaks up into neon yellow and teal cubes that tumble to the ground,
 // crackle with electricity, and fizzle and pop as they fade away
-const CUBES = { colors: [['#f4ff3a', '#b9c400', '#fdffb0'], ['#00f5d4', '#00a892', '#b6fff2']], n: 26, life: [2.2, 3.6], grav: 1100 };
+// Death: the body breaks up into spinning 3D cubes (three neon yellow sides, three teal sides)
+// that blast out, tumble to the ground, crackle with electricity and sparkle, then explode one by one
+const CUBES = { yellow: [244, 255, 58], teal: [0, 245, 212], n: 48, life: [2.2, 3.8], grav: 1100, tilt: 0.55 };
+// The six faces: [normal, the four corners], +x +y +z are neon yellow, -x -y -z are teal
+const CUBE_FACES = [
+    [[1, 0, 0], [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]], 0], [[-1, 0, 0], [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]], 1],
+    [[0, 1, 0], [[-1, 1, -1], [-1, 1, 1], [1, 1, 1], [1, 1, -1]], 0], [[0, -1, 0], [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]], 1],
+    [[0, 0, 1], [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]], 0], [[0, 0, -1], [[-1, -1, -1], [-1, 1, -1], [1, 1, -1], [1, -1, -1]], 1]
+];
 function cubeDeath(t) {
-    if (!inView(t.x, t.y, 160) || G.particles.length > 1700) return;
+    if (!inView(t.x, t.y, 160) || G.particles.length > 2400) return;
     const k = t.r / CONFIG.RADIUS, n = Math.round(CUBES.n * Math.min(3, k));
     // Which way the hit came from, so the pieces get knocked away from the killer
     const ka = t.killedBy && t.killedBy !== t ? Math.atan2(t.y - t.killedBy.y, t.x - t.killedBy.x) : rand(0, TAU);
     for (let i = 0; i < n; i++) {
-        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(40, 230) * Math.sqrt(k), kick = rand(30, 160);
-        const c = CUBES.colors[i % 2];
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(60, 300) * Math.sqrt(k), kick = rand(30, 180);
         G.particles.push({
-            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(180, 460),
+            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(200, 520),
             vx: Math.cos(a) * sp + Math.cos(ka) * kick, vy: Math.sin(a) * sp + Math.sin(ka) * kick,
-            size: rand(4, 9) * Math.min(2, Math.sqrt(k) * 1.1), color: c[0], dark: c[1], hi: c[2],
-            rot: rand(0, TAU), spin: rand(-14, 14), life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], zapT: rand(0.1, 0.6), seedT: rand(0, 10)
+            size: rand(5, 10) * Math.min(2, Math.sqrt(k) * 1.1),
+            ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-12, 12), wy: rand(-12, 12), wz: rand(-8, 8),
+            life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], zapT: rand(0.1, 0.6), seedT: rand(0, 10),
+            color: i % 2 ? '#00f5d4' : '#f4ff3a'
         });
     }
-    // The moment it happens: a teal shock ring, a white flash, and arcs across the body
-    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.45, max: 0.45, size: 70 * k, color: '#00f5d4' });
-    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 45 * k, color: '#f4ff3a' });
-    G.particles.push({ type: 'glow', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 26 * k, color: '#e8ffff' });
-    for (let i = 0; i < 4; i++) {
-        const a = rand(0, TAU), L = rand(20, 45) * k;
+    // The moment it happens: a blast of light, shock rings, arcs across the body and a shower of sparkles
+    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 85 * k, color: '#00f5d4' });
+    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 55 * k, color: '#f4ff3a' });
+    G.particles.push({ type: 'glow', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 34 * k, color: '#e8ffff' });
+    for (let i = 0; i < 5; i++) {
+        const a = rand(0, TAU), L = rand(25, 55) * k;
         G.particles.push({ type: 'zap', x: t.x, y: t.y, x2: t.x + Math.cos(a) * L, y2: t.y + Math.sin(a) * L, vx: 0, vy: 0, life: rand(0.12, 0.25), max: 0.25, seed: Math.random(), color: i % 2 ? '#f4ff3a' : '#00f5d4' });
     }
-    burst(t.x, t.y, 14, '#00f5d4', 320, 'glow');
-    burst(t.x, t.y, 10, '#f4ff3a', 280, 'glow');
+    for (let i = 0; i < 10; i++) { const a = rand(0, TAU), sp = rand(120, 380); G.particles.push({ type: 'twinkle', x: t.x, y: t.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), max: 0.7, size: rand(5, 9), color: i % 2 ? '#b6fff2' : '#fdffb0' }); }
+    burst(t.x, t.y, 16, '#00f5d4', 340, 'glow');
+    burst(t.x, t.y, 12, '#f4ff3a', 300, 'glow');
     Sound.zap(Sound.volAt(t.x, t.y));
 }
 
-// A cube: falls with gravity, bounces, skids to a stop, then crackles until it pops
+// A cube: falls with gravity, bounces, skids and tumbles to a stop, then crackles and sparkles until it explodes
 function updateCube(p, dt) {
     p.z += p.vz * dt;
     p.vz -= CUBES.grav * dt;
     const ground = p.z <= 0;
     if (ground) {
         p.z = 0;
-        if (p.vz < -120) { p.vz = -p.vz * 0.38; p.vx *= 0.65; p.vy *= 0.65; p.spin *= 0.6; }
+        if (p.vz < -120) { p.vz = -p.vz * 0.4; p.vx *= 0.65; p.vy *= 0.65; p.wx *= 0.6; p.wy *= 0.6; p.wz *= 0.6; }
         else p.vz = 0;
     }
     const drag = Math.pow(ground ? 0.25 : 0.8, dt * 3);
     p.vx *= drag; p.vy *= drag;
-    if (ground) p.spin *= Math.pow(0.2, dt * 3);
+    if (ground) { const sd = Math.pow(0.15, dt * 3); p.wx *= sd; p.wy *= sd; p.wz *= sd; }
     p.x += p.vx * dt; p.y += p.vy * dt;
-    p.rot += p.spin * dt;
-    // Electricity: little arcs jump off it (to a neighbour, or into the ground)
+    p.ax += p.wx * dt; p.ay += p.wy * dt; p.az += p.wz * dt;
+    // Electricity: little arcs jump off it
     if ((p.zapT -= dt) <= 0) {
         p.zapT = rand(0.15, 0.7) * (p.life / p.max + 0.3);
         const a = rand(0, TAU), L = rand(8, 22);
         G.particles.push({ type: 'zap', x: p.x, y: p.y - p.z, x2: p.x + Math.cos(a) * L, y2: p.y + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: rand(0.06, 0.14), max: 0.14, seed: Math.random(), color: Math.random() < 0.5 ? '#e8ffff' : p.color });
-        if (Math.random() < 0.3) Sound.zap(Sound.volAt(p.x, p.y) * 0.25);
+        if (Math.random() < 0.2) Sound.zap(Sound.volAt(p.x, p.y) * 0.25);
     }
-    // At the very end it pops
+    // Sparkles: a glint pops up on it now and then
+    if (Math.random() < dt * 3) G.particles.push({ type: 'twinkle', x: p.x + rand(-p.size, p.size), y: p.y - p.z + rand(-p.size, p.size), vx: 0, vy: -20, life: rand(0.2, 0.4), max: 0.4, size: rand(4, 8), color: Math.random() < 0.5 ? '#ffffff' : p.color });
+    // At the end it explodes: a flash, a ring, sparks and sparkles
     if (p.life <= 0) {
-        G.particles.push({ type: 'glow', x: p.x, y: p.y - p.z, vx: 0, vy: 0, life: 0.18, max: 0.18, size: p.size * 1.6, color: p.hi });
-        G.particles.push({ type: 'ring', x: p.x, y: p.y - p.z, vx: 0, vy: 0, life: 0.2, max: 0.2, size: p.size * 2.2, color: p.color });
-        for (let i = 0; i < 3; i++) { const a = rand(0, TAU), sp = rand(60, 160); G.particles.push({ type: 'glow', x: p.x, y: p.y - p.z, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.15, 0.3), max: 0.3, size: 2, color: p.color }); }
-        if (Math.random() < 0.25) Sound.pop();
+        const y = p.y - p.z;
+        G.particles.push({ type: 'glow', x: p.x, y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: p.size * 2.4, color: '#ffffff' });
+        G.particles.push({ type: 'ring', x: p.x, y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: p.size * 3.5, color: p.color });
+        for (let i = 0; i < 6; i++) { const a = rand(0, TAU), sp = rand(90, 260); G.particles.push({ type: 'glow', x: p.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.15, 0.35), max: 0.35, size: 2.2, color: i % 2 ? '#00f5d4' : '#f4ff3a' }); }
+        for (let i = 0; i < 2; i++) { const a = rand(0, TAU), sp = rand(40, 120); G.particles.push({ type: 'twinkle', x: p.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.25, 0.45), max: 0.45, size: rand(5, 9), color: '#ffffff' }); }
+        if (Math.random() < 0.3) Sound.pop();
     }
 }
 
+// Drawn as a real spinning 3D cube, seen from above and a little to the side, with the hidden faces left out
 function drawCube(p) {
-    const t = p.life / p.max, fade = Math.min(1, p.life / 0.9);
+    const fade = Math.min(1, p.life / 0.9);
     // Fizzling: it flickers more and more as it runs out
     if (fade < 1 && Math.random() > 0.35 + fade * 0.65) return;
-    const s = p.size * (0.55 + 0.45 * Math.min(1, p.life / 0.5)), y = p.y - p.z;
+    const h = p.size * (0.55 + 0.45 * Math.min(1, p.life / 0.5)) / 2, cy = p.y - p.z;
     ctx.globalAlpha = 0.35 * fade / (1 + p.z / 40);
     ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(p.x + 2, p.y + 2, s * 0.8, s * 0.5, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(p.x + 2, p.y + 2, h * 1.6, h, 0, 0, TAU); ctx.fill();
+    // Rotation (x, then y, then z, then the fixed camera tilt)
+    const cx_ = Math.cos(p.ax), sx_ = Math.sin(p.ax), cy_ = Math.cos(p.ay), sy_ = Math.sin(p.ay), cz = Math.cos(p.az), sz = Math.sin(p.az);
+    const ct = Math.cos(CUBES.tilt), st = Math.sin(CUBES.tilt);
+    const rot = (v) => {
+        let [x, y, z] = v;
+        let t = y * cx_ - z * sx_; z = y * sx_ + z * cx_; y = t;
+        t = x * cy_ + z * sy_; z = -x * sy_ + z * cy_; x = t;
+        t = x * cz - y * sz; y = x * sz + y * cz; x = t;
+        t = y * ct - z * st; z = y * st + z * ct; y = t;
+        return [x, y, z];
+    };
     ctx.save();
-    ctx.translate(p.x, y); ctx.rotate(p.rot);
-    // Neon glow
+    // Neon glow around it
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.28 * fade * (0.7 + 0.3 * Math.sin(G.time / 40 + p.seedT));
+    ctx.globalAlpha = 0.22 * fade * (0.7 + 0.3 * Math.sin(G.time / 40 + p.seedT));
     ctx.fillStyle = p.color;
-    ctx.fillRect(-s * 1.2, -s * 1.2, s * 2.4, s * 2.4);
+    ctx.beginPath(); ctx.arc(p.x, cy, h * 2.6, 0, TAU); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = fade;
-    // The cube: a dark side, the bright face and a light edge
-    ctx.fillStyle = p.dark; ctx.fillRect(-s / 2 + s * 0.22, -s / 2 + s * 0.22, s, s);
-    ctx.fillStyle = p.color; ctx.fillRect(-s / 2, -s / 2, s, s);
-    ctx.fillStyle = p.hi; ctx.fillRect(-s / 2, -s / 2, s, s * 0.22); ctx.fillRect(-s / 2, -s / 2, s * 0.22, s);
+    ctx.lineJoin = 'round';
+    for (const [n, corners, side] of CUBE_FACES) {
+        const nz = rot(n)[2];
+        if (nz >= 0) continue;               // facing away (the camera looks down -z)
+        const lit = 0.55 + 0.45 * -nz, c = side ? CUBES.teal : CUBES.yellow;
+        ctx.fillStyle = `rgb(${c[0] * lit | 0},${c[1] * lit | 0},${c[2] * lit | 0})`;
+        ctx.beginPath();
+        corners.forEach((v, i) => { const r = rot(v); i ? ctx.lineTo(p.x + r[0] * h, cy + r[1] * h) : ctx.moveTo(p.x + r[0] * h, cy + r[1] * h); });
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = side ? 'rgba(200,255,245,0.8)' : 'rgba(255,255,200,0.8)';
+        ctx.lineWidth = 0.8; ctx.stroke();
+    }
     ctx.restore();
     ctx.globalAlpha = 1;
 }
@@ -13453,6 +13486,20 @@ function drawParticles() {
         const t = p.life / p.max;
         switch (p.type) {
             case 'cube': drawCube(p); break;
+            case 'twinkle': {
+                // A four-point sparkle that grows then shrinks
+                const k = Math.sin(t * Math.PI), r = p.size * k, w = r * 0.22;
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.globalAlpha = Math.min(1, t * 2);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y - r); ctx.lineTo(p.x + w, p.y - w); ctx.lineTo(p.x + r, p.y); ctx.lineTo(p.x + w, p.y + w);
+                ctx.lineTo(p.x, p.y + r); ctx.lineTo(p.x - w, p.y + w); ctx.lineTo(p.x - r, p.y); ctx.lineTo(p.x - w, p.y - w);
+                ctx.closePath(); ctx.fill();
+                ctx.restore();
+                break;
+            }
             case 'zap': {
                 // A tiny crackle of electricity
                 const rnd = seededRand(Math.floor(p.seed * 1e6) + Math.floor(G.time / 40));
