@@ -6751,6 +6751,16 @@ const FX_LIST = [
     ['confetti', 'Confetti', 'common', 0, 'pop', { loose: 'confetti', pal: 'rainbow', piece: 'chip' }, 'A burst of confetti that flutters down.'],
     ['bubbles', 'Bubbles', 'common', 0, 'pop', { loose: 'bubbles', pal: 'ocean', piece: 'orb' }, 'Bubbles that float up and pop.'],
     ['dust', 'Dust Away', 'common', 0, 'pop', { loose: 'dust', pal: 'shadow' }, 'Crumbles into dust that blows away.'],
+    ['up', 'Gravity Flip', 'common', 0, 'pop', { loose: 'up' }, 'The pieces fall up into the sky.'],
+    ['pebbles', 'Pebble Rain', 'common', 0, 'pop', { loose: 'meteors', n: 16, pal: 'shadow' }, 'Little pebbles rain down on the spot.'],
+    ['melt', 'Melt', 'common', 0, 'pop', { loose: 'puddle', pal: 'toxic', piece: 'orb' }, 'Melts into a gooey puddle that spreads out.'],
+    ['embers', 'Embers', 'common', 0, 'pop', { loose: 'embers', pal: 'fire', piece: 'tetra' }, 'Glowing embers drift up and go out.'],
+    ['streamers', 'Streamers', 'common', 0, 'pop', { loose: 'streamers', pal: 'rainbow', piece: 'chip' }, 'Party streamers fly up and flutter down.'],
+    ['candyspill', 'Candy Spill', 'common', 0, 'pop', { loose: 'candy', pal: 'candy', piece: 'orb' }, 'Sweets spill out everywhere.'],
+    ['feathers', 'Feathers', 'common', 0, 'pop', { loose: 'feathers', pal: 'ice', piece: 'chip' }, 'A puff of feathers floats down.'],
+    ['rocks', 'Rock Crumble', 'common', 0, 'pop', { loose: 'rocks', pal: 'shadow' }, 'Crumbles into heavy rocks.'],
+    ['bluesparks', 'Blue Sparks', 'common', 0, 'pop', { loose: 'geyser', n: 14, pal: 'ocean', piece: 'tetra' }, 'A little fountain of blue sparks.'],
+    ['glitter', 'Glitter', 'common', 0, 'pop', { loose: 'dust', n: 50, pal: 'rainbow', piece: 'octa' }, 'Turns into rainbow glitter that blows away.'],
     // Uncommon: a little shape or a little show
     ['sketch', 'Sketch Skull', 'uncommon', 0, 'sketch', {}, 'A few cubes make the outline of a skull, then just drop.'],
     ['heart_sk', 'Sketch Heart', 'uncommon', 0, 'sketch', { cells: 'm:heart:outline', pal: 'candy', piece: 'orb' }, 'An outline of a heart, then it drops.'],
@@ -6762,6 +6772,16 @@ const FX_LIST = [
     ['vortex_s', 'Leaf Swirl', 'uncommon', 0, 'vortex', { cells: 'spiral_s', pal: 'toxic', piece: 'chip' }, 'A swirl of leaves spins in and shoots up.'],
     ['shards_fire', 'Lava Shards', 'uncommon', 0, 'pop', { loose: 'shards', n: 22, pal: 'fire', piece: 'shard' }, 'Bursts into glowing lava shards.'],
     ['dust_gold', 'Gold Dust', 'uncommon', 0, 'pop', { loose: 'dust', n: 80, pal: 'gold' }, 'Crumbles into gold dust that blows away.'],
+    ['glitch', 'Pixel Glitch', 'uncommon', 0, 'sketch', { shape: 'glitch', cells: 'm:block:flat', end: 'drop' }, 'Turns into a glitchy block that jumps about, then blinks out.'],
+    ['balloon', 'Balloon Pop', 'uncommon', 0, 'ghostrise', { cells: 'm:balloon:flat', pal: 'candy', piece: 'orb', rise: 70, end: 'break', word: 'POP!' }, 'Puffs up into a balloon that floats up and pops.'],
+    ['statue', 'Stone Statue', 'uncommon', 0, 'sketch', { cells: 'm:block:flat', pal: 'shadow', end: 'drop', twinkle: 0 }, 'Turns to stone and crumbles.'],
+    ['freeze', 'Ice Freeze', 'uncommon', 0, 'flat', { cells: 'm:block:flat', pal: 'ice', piece: 'octa', wobble: 0, word: 'FROZEN!' }, 'Freezes solid into a block of ice, which shatters.'],
+    ['xmark', 'Airstrike X', 'uncommon', 0, 'ripple', { shape: 'ground', cells: 'm:x:flat', pal: 'fire', piece: 'tetra' }, 'A red X marks the spot, then blasts up.'],
+    ['duck', 'Rubber Duck', 'uncommon', 0, 'sketch', { shape: 'hop', cells: 'm:duck:flat', pal: 'gold', word: 'QUACK!' }, 'A rubber duck hops away.'],
+    ['chicken', 'Chicken Run', 'uncommon', 0, 'sketch', { shape: 'hop', cells: 'm:chicken:flat', pal: 'ice', word: 'BAWK!' }, 'Turns into a chicken that runs off.'],
+    ['jigsaw', 'Jigsaw', 'uncommon', 0, 'flat', { cells: 'm:block:flat', pal: 'candy', piece: 'chip', wobble: 0 }, 'Falls apart like a jigsaw puzzle.'],
+    ['crop_s', 'Crop Circle', 'uncommon', 0, 'ripple', { cells: 'ripple2', pal: 'toxic', piece: 'chip' }, 'Glowing rings burn into the ground.'],
+    ['cloud', 'Cartoon Cloud', 'uncommon', 0, 'pop', { loose: 'bubbles', n: 26, pal: 'ice', piece: 'orb', word: 'POW!' }, 'A cartoon fight cloud: POW!'],
     // Rare: whole shapes and proper moves
     ['flat', 'Flat Skull', 'rare', 0, 'flat', {}, 'A whole flat skull of cubes, which breaks apart.'],
     ['firework', 'Firework', 'rare', 0, 'firework', {}, 'A ball of cubes rockets up and bursts, raining down.'],
@@ -6774,6 +6794,16 @@ const FX_LIST = [
     ['geyser', 'Neon Geyser', 'rare', 0, 'pop', { loose: 'geyser', n: 50 }, 'A geyser of neon cubes blasts up.'],
     ['vortex', 'Vortex', 'rare', 0, 'vortex', { pal: 'ocean', piece: 'octa' }, 'A whirlpool spirals in tighter and faster, then shoots up.'],
     ['firework_candy', 'Candy Firework', 'rare', 0, 'firework', { pal: 'candy', piece: 'orb' }, 'A ball of candy rockets up and bursts.'],
+    ['anvil', 'Anvil Drop', 'rare', 0, 'meteor', { cells: 'm:anvil:thick', pal: 'shadow', word: 'BONK!' }, 'A cartoon anvil drops on them: BONK!'],
+    ['meteors', 'Meteor Shower', 'rare', 0, 'pop', { loose: 'meteors', n: 34, pal: 'fire', piece: 'tetra', scorch: '255,120,40' }, 'A shower of meteors rains down around the spot.'],
+    ['lava', 'Lava Burst', 'rare', 0, 'pop', { loose: 'geyser', n: 60, pal: 'fire', piece: 'orb', scorch: '255,90,30' }, 'Lava blasts up out of the ground.'],
+    ['crater', 'Crater', 'rare', 0, 'ripple', { pal: 'shadow', piece: 'cube', after: { loose: 'rocks', n: 16 } }, 'The ground caves in and rocks fly up.'],
+    ['grave', 'Grave Rise', 'rare', 0, 'ghostrise', { cells: 'm:tomb:flat', pal: 'shadow', rise: 40, end: 'break', intro: 2 }, 'A tombstone pushes up out of the ground.'],
+    ['magnet', 'Magnet', 'rare', 0, 'vortex', { pal: 'ocean', end: 'circle', piece: 'cube' }, 'Everything is pulled into a magnet, then pushed out.'],
+    ['popper', 'Party Popper', 'rare', 0, 'pop', { loose: 'streamers', n: 70, pal: 'rainbow', piece: 'chip', word: 'BOOM!' }, 'A party popper goes off: BOOM!'],
+    ['pinata', 'Pinata', 'rare', 0, 'flat', { cells: 'm:star:flat', pal: 'candy', piece: 'chip', after: { loose: 'candy', n: 24 }, afterPiece: 'orb' }, 'A pinata bursts open and sweets spill out.'],
+    ['comet', 'Comet', 'rare', 0, 'meteor', { cells: 'ball3', pal: 'ice', piece: 'octa', end: 'circle' }, 'A glowing comet slams down and explodes.'],
+    ['domino', 'Domino Ring', 'rare', 0, 'ripple', { cells: 'ripple2', pal: 'gold', end: 'break' }, 'A ring of dominoes that topples outwards.'],
     // Epic: big moving things
     ['skull', 'Cube Skull', 'epic', 0, 'skull', {}, 'A skull of cubes that turns, laughs and explodes in a circle.'],
     ['tornado', 'Cube Tornado', 'epic', 0, 'tornado', {}, 'A spinning tornado of cubes that flings them out in a spiral.'],
@@ -6785,6 +6815,16 @@ const FX_LIST = [
     ['cage', 'Electric Cage', 'epic', 0, 'cage', { pal: 'ice', piece: 'octa' }, 'A spinning ball cage with electricity crackling along it.'],
     ['wings', 'Angel Wings', 'epic', 0, 'wings', { pal: 'gold', piece: 'chip' }, 'Wings flap up into the sky and fade away.'],
     ['spiral', 'Spiral Galaxy', 'epic', 0, 'galaxy', { pal: 'candy', piece: 'orb' }, 'A spinning galaxy with curling arms, then it explodes.'],
+    ['clock', "Time's Up", 'epic', 0, 'skull', { shape: 'clock', cells: 'clock', eyes: false, jaw: false, pal: 'gold', piece: 'octa' }, 'A clock appears, its hands spin faster and faster, then it shatters.'],
+    ['eye', 'All-Seeing Eye', 'epic', 0, 'skull', { shape: 'eye', cells: 'm:eye:thick', eyes: false, jaw: false, pal: 'candy', piece: 'orb' }, 'A giant eye opens, looks around, blinks and pops.'],
+    ['hourglass', 'Hourglass', 'epic', 0, 'skull', { cells: 'm:hourglass:thick', eyes: false, jaw: false, spin: 2.6, wobble: 0, pal: 'gold', piece: 'cube' }, 'An hourglass spins round, then explodes.'],
+    ['rocket', 'Rocket Launch', 'epic', 0, 'firework', { cells: 'm:rocket:thick', spin: 0, pal: 'neon', piece: 'cube', intro: 3 }, 'A rocket made of cubes blasts off and explodes in the sky.'],
+    ['ufo', 'UFO Beam', 'epic', 0, 'skull', { cells: 'm:ufo:thick', eyes: false, jaw: false, beam: true, rise: 70, wobble: 0.15, end: 'dissolve', pal: 'toxic', piece: 'orb' }, 'A UFO beams them up and zips away.'],
+    ['solar', 'Solar System', 'epic', 0, 'atom', { cells: 'solar', solar: true, pal: 'fire', piece: 'orb', spin: 4 }, 'A sun with planets orbiting it, then it all blows.'],
+    ['washer', 'Washing Machine', 'epic', 0, 'galaxy', { spin: 9, end: 'spiral', pal: 'ocean', piece: 'chip' }, 'Tumbles round and round, then flings everything out.'],
+    ['castle', 'Castle', 'epic', 0, 'skull', { cells: 'm:castle:thick', eyes: false, jaw: false, wobble: 0.4, pal: 'shadow', piece: 'cube' }, 'A castle rises up, then the walls come crashing out.'],
+    ['lavaskull', 'Lava Skull', 'epic', 0, 'skull', { pal: 'fire', piece: 'tetra', after: { loose: 'embers', n: 30 } }, 'A skull of fire that laughs, explodes and leaves embers.'],
+    ['unicorn', 'Unicorn', 'epic', 0, 'skull', { cells: 'm:unicorn:thick', eyes: false, jaw: false, wobble: 0.5, pal: 'rainbow', piece: 'orb', after: { loose: 'dust', n: 50 }, afterPiece: 'octa' }, 'A rainbow unicorn appears, then bursts into glitter.'],
     // Legendary: cost kills
     ['skull3d', '3D Skull', 'legendary', 2500, 'skull3d', {}, 'A solid 3D skull of cubes that spins right round and explodes.'],
     ['skull3d_fire', 'Inferno Skull', 'legendary', 2600, 'skull3d', { pal: 'fire', piece: 'tetra' }, 'A solid 3D skull of fire.'],
@@ -6794,12 +6834,32 @@ const FX_LIST = [
     ['diamond', 'Diamond Storm', 'legendary', 2000, 'skull3d', { cells: 'diamond', eyes: false, jaw: false, pal: 'ice', piece: 'octa' }, 'A giant spinning diamond that explodes.'],
     ['galaxy', 'Rainbow Galaxy', 'legendary', 2400, 'galaxy', { pal: 'rainbow', piece: 'orb', spin: 3 }, 'A huge rainbow galaxy that spins and explodes.'],
     ['atombomb', 'Atom Bomb', 'legendary', 2800, 'atom', { pal: 'fire', piece: 'tetra', collapse: 0.8, charge: 0.8, end: 'nova', explode: 3.4 }, 'A fiery atom that collapses and blows like a bomb.'],
+    ['dragon', 'Dragon', 'legendary', 2900, 'skull3d', { cells: 'm:dragon:thick', eyes: false, jaw: false, pal: 'fire', piece: 'tetra', after: { loose: 'embers', n: 40 } }, 'A dragon head rises, spins, then bursts into flames.'],
+    ['phoenix', 'Phoenix', 'legendary', 3000, 'wings', { cells: 'm:phoenix:thick', pal: 'fire', piece: 'tetra', after: { loose: 'embers', n: 40 } }, 'A phoenix spreads its wings, flies up and bursts into embers.'],
+    ['meteorstorm', 'Meteor Storm', 'legendary', 2100, 'pop', { loose: 'meteors', n: 80, pal: 'fire', piece: 'orb', intro: 3, scorch: '255,120,40', word: 'IMPACT!' }, 'A huge storm of meteors pounds the spot.'],
+    ['abduction', 'Abduction', 'legendary', 2300, 'skull', { cells: 'm:ufo:thick', eyes: false, jaw: false, beam: true, rise: 110, spin: 3, end: 'dissolve', pal: 'ice', piece: 'octa', intro: 3 }, 'A spinning UFO beams them up into the sky.'],
+    ['rocket_gold', 'Golden Rocket', 'legendary', 2400, 'firework', { cells: 'm:rocket:thick', spin: 0, pal: 'gold', piece: 'octa', intro: 3, after: { loose: 'dust', n: 60 } }, 'A golden rocket launches and showers gold.'],
+    ['clock_neon', 'Neon Clock', 'legendary', 2200, 'skull3d', { shape: 'clock', cells: 'clock', eyes: false, jaw: false, spin: 0, wobble: 0.5, pal: 'neon', piece: 'cube' }, 'A neon clock spins its hands wildly, then blows.'],
+    ['eye_toxic', 'Toxic Eye', 'legendary', 2500, 'skull3d', { shape: 'eye', cells: 'm:eye:thick', eyes: false, jaw: false, spin: 0, wobble: 0.4, pal: 'toxic', piece: 'orb' }, 'A huge toxic eye stares, blinks and explodes.'],
+    ['solar_ice', 'Ice Planets', 'legendary', 2600, 'atom', { cells: 'solar', solar: true, pal: 'ice', piece: 'octa', spin: 5, explode: 3.4 }, 'A frozen solar system spins round, then shatters.'],
+    ['skull3d_candy', 'Candy Skull', 'legendary', 2700, 'skull3d', { pal: 'candy', piece: 'orb' }, 'A solid 3D skull of candy.'],
+    ['skull3d_shadow', 'Shadow Skull', 'legendary', 2800, 'skull3d', { pal: 'shadow', piece: 'tetra' }, 'A solid 3D skull of shadow.'],
     // Mythic: cost the most
     ['nova', 'Supernova', 'mythic', 3500, 'nova', {}, 'A ball of cubes collapses to a white-hot point, then blows out in a huge ring.'],
     ['blackhole', 'Black Hole', 'mythic', 3800, 'galaxy', { pal: 'candy', piece: 'tetra', dark: true, spin: 4, collapse: 0.9, charge: 0.9, end: 'nova', explode: 3.6 }, 'A galaxy swirls round a black hole, gets sucked in, then blows.'],
     ['nova_blood', 'Blood Moon', 'mythic', 3700, 'nova', { pal: 'blood', piece: 'orb' }, 'A blood red moon collapses and blows out.'],
     ['nova_rainbow', 'Rainbow Nova', 'mythic', 4000, 'nova', { pal: 'rainbow', piece: 'octa' }, 'A rainbow star collapses and blows out.'],
-    ['skullnova', 'Skull Supernova', 'mythic', 4000, 'nova', { cells: 'solid', eyes: true, eyeW: -2, jaw: true, spin: 2.1 }, 'A 3D skull collapses to a white-hot point and blows out.']
+    ['skullnova', 'Skull Supernova', 'mythic', 4000, 'nova', { cells: 'solid', eyes: true, eyeW: -2, jaw: true, spin: 2.1 }, 'A 3D skull collapses to a white-hot point and blows out.'],
+    ['bigbang', 'Big Bang', 'mythic', 4000, 'nova', { pal: 'rainbow', piece: 'orb', word: 'BIG BANG!' }, 'Everything shrinks to a dot, then a rainbow universe bursts out.'],
+    ['dragon_nova', 'Dragon Nova', 'mythic', 3900, 'nova', { cells: 'm:dragon:thick', pal: 'fire', piece: 'tetra', spin: 2.2 }, 'A spinning dragon collapses and blows out.'],
+    ['rebirth', 'Rebirth', 'mythic', 3800, 'wings', { cells: 'm:phoenix:thick', pal: 'gold', piece: 'octa', rise: 30, collapse: 0.8, charge: 0.8, end: 'nova', explode: 3.4 }, 'A golden phoenix rises, collapses into a star and blows.'],
+    ['eye_nova', 'Eye of Doom', 'mythic', 3700, 'nova', { shape: 'eye', cells: 'm:eye:thick', pal: 'blood', piece: 'orb', spin: 0 }, 'A blood red eye blinks, collapses and blows out.'],
+    ['solar_nova', 'Dying Star', 'mythic', 3600, 'atom', { cells: 'solar', solar: true, pal: 'fire', piece: 'orb', spin: 5, collapse: 0.8, charge: 0.8, end: 'nova', explode: 3.4 }, 'The sun swallows its planets and explodes.'],
+    ['void_ice', 'Frozen Void', 'mythic', 3550, 'galaxy', { pal: 'ice', piece: 'octa', dark: true, spin: 4, collapse: 0.9, charge: 0.9, end: 'nova', explode: 3.6 }, 'An icy galaxy is sucked into a black hole, then blows.'],
+    ['nova_gold', 'Golden Nova', 'mythic', 3650, 'nova', { pal: 'gold', piece: 'octa' }, 'A golden star collapses and blows out.'],
+    ['stormnova', 'Storm Nova', 'mythic', 3750, 'tornado', { pal: 'ocean', piece: 'octa', collapse: 0.8, charge: 0.8, end: 'nova', explode: 3.6 }, 'A tornado squeezes into a point and explodes.'],
+    ['timebomb', 'Time Bomb', 'mythic', 3850, 'nova', { shape: 'clock', cells: 'clock', pal: 'blood', piece: 'cube', spin: 0, word: 'TICK... BOOM!' }, 'A clock ticks faster and faster, then blows.'],
+    ['kingdom', 'Mythical Kingdom', 'mythic', 3950, 'nova', { cells: 'm:castle:thick', pal: 'rainbow', piece: 'octa', spin: 1.6, after: { loose: 'dust', n: 60 }, afterPiece: 'octa' }, 'A rainbow castle spins, collapses into a star and showers glitter.']
 ];
 // Effects are quick (it's a kill, not a show): how long each rarity takes before it blows
 const FX_TIME = { uncommon: 1.0, rare: 1.3, epic: 1.6, legendary: 1.9, mythic: 2.1 };
@@ -6858,6 +6918,20 @@ const FX_MASKS = {
     bolt: ['.....XXX', '....XXX.', '...XXX..', '..XXXXXX', '.XXXXXX.', '....XXX.', '...XXX..', '..XXX...', '.XX.....', 'X.......'],
     bones: ['XX.......XX', 'XXX.....XXX', '.XXX...XXX.', '..XXX.XXX..', '...XXXXX...', '....XXX....', '...XXXXX...', '..XXX.XXX..', '.XXX...XXX.', 'XXX.....XXX', 'XX.......XX'],
     wings: ['XX.............XX', 'XXX...........XXX', '.XXX.........XXX.', '.XXXX.......XXXX.', '..XXXX..T..XXXX..', '..XXXXXTTTXXXXX..', '...XXXXTTTXXXX...', '....XXXTTTXXX....', '.....XX.T.XX.....', '......X...X......'],
+    block: ['..XXX..', '.XXXXX.', '..XXX..', 'XXXXXXX', 'X.XXX.X', 'X.XXX.X', '..XXX..', '..X.X..', '..X.X..'],
+    balloon: ['..XXXXX..', '.XXXXXXX.', 'XXXXXXXXX', 'XXXXXXXXX', 'XXXXXXXXX', '.XXXXXXX.', '..XXXXX..', '...XXX...', '....T....', '....T....', '...T.....'],
+    x: ['XX.....XX', 'XXX...XXX', '.XXX.XXX.', '..XXXXX..', '...XXX...', '..XXXXX..', '.XXX.XXX.', 'XXX...XXX', 'XX.....XX'],
+    eye: ['....XXXXX....', '..XXXXXXXXX..', '.XXXXTTTXXXX.', 'XXXXTTTTTXXXX', 'XXXXTTTTTXXXX', '.XXXXTTTXXXX.', '..XXXXXXXXX..', '....XXXXX....'],
+    hourglass: ['XXXXXXXXX', '.XTTTTTX.', '..XTTTX..', '...XTX...', '....X....', '...X.X...', '..X...X..', '.X..T..X.', 'XXXXXXXXX'],
+    rocket: ['...X...', '..XXX..', '..XTX..', '..XXX..', '..XTX..', '..XXX..', '.XXXXX.', 'XX.X.XX', 'X..T..X', '...T...'],
+    dragon: ['XX.........XX', '.XX.......XX.', '..XXXXXXXXX..', '.XXXXXXXXXXX.', 'XXXTXXXXXTXXX', 'XXXXXXXXXXXXX', '.XXXXXXXXXXX.', '..XXXXXXXXX..', '..XTXTXTXTX..', '...XXXXXXX...', '....XXXXX....'],
+    phoenix: ['X.............X', 'XX....XXX....XX', '.XX..XXTXX..XX.', '.XXXXXXXXXXXXX.', '..XXXXXXXXXXX..', '....XXXXXXX....', '.....XXXXX.....', '......XTX......', '.....X.T.X.....', '....X..T..X....'],
+    ufo: ['.....XXX.....', '....XTTTX....', '...XXXXXXX...', '.XXXXXXXXXXX.', 'XXTXXTXXTXXTX', '.XXXXXXXXXXX.', '...X.....X...'],
+    anvil: ['XXXXXXXXXXX', '.XXXXXXXXXX', '....XXXXX..', '.....XXX...', '....XXXXX..', '...XXXXXXX.'],
+    duck: ['...XXX...', '..XXXXX..', '..XTXXXTT', '..XXXXX..', 'X..XXX...', 'XXXXXXXX.', 'XXXXXXXXX', '.XXXXXXX.'],
+    chicken: ['..TT.....', '.XXX.....', '.XTXT....', '.XXX...X.', '..XXXXXX.', '..XXXXXX.', '...XXXX..', '...T..T..'],
+    castle: ['X.X.....X.X', 'XXX..X..XXX', 'XXX.XXX.XXX', 'XXXXXXXXXXX', 'XXTXXXXXTXX', 'XXXXXTXXXXX', 'XXXXTTTXXXX', 'XXXXTTTXXXX'],
+    unicorn: ['.......T...', '......TX...', '.....XXXX..', '....XXTXX..', 'XXXXXXXXX..', 'XXXXXXXX...', 'XXXXXXX....', 'X.X..X.X...', 'X.X..X.X...'],
     crown: ['X...X...X', 'XX.XXX.XX', 'XXXXXXXXX', 'XTXXTXXTX', 'XXXXXXXXX', 'XXXXXXXXX']
 };
 // The simple (shapeless) effects
@@ -6868,7 +6942,15 @@ const LOOSE = {
     bubbles: { n: 18, sp: [20, 80], vz: [40, 100], life: [0.8, 1.3], size: [4, 7], grav: -140, flutter: 120 },
     dust: { n: 60, sp: [0, 0], vz: [20, 50], life: [0.6, 0.9], size: [2.2, 3.4], grav: -60, sweep: 0.45, wind: [70, 130], quiet: true },
     geyser: { n: 40, sp: [20, 80], vz: [450, 650], life: [0.8, 1.1], size: [3.5, 5.5], wait: 0.7, fromCenter: true },
-    snow: { n: 30, sp: [0, 20], vz: [-40, -10], life: [1.2, 1.6], size: [3, 5], grav: 160, flutter: 60, sky: true }
+    snow: { n: 30, sp: [0, 20], vz: [-40, -10], life: [1.2, 1.6], size: [3, 5], grav: 160, flutter: 60, sky: true },
+    up: { n: 24, sp: [30, 120], vz: [40, 120], life: [0.8, 1.2], size: [3.5, 6], grav: -900 },
+    meteors: { n: 30, sp: [0, 30], vz: [-700, -500], life: [0.9, 1.3], size: [4, 7], grav: 900, sky: true, spread: 90 },
+    puddle: { n: 30, sp: [40, 130], vz: [0, 30], life: [0.8, 1.1], size: [3.5, 6], grav: 1400 },
+    embers: { n: 26, sp: [20, 70], vz: [30, 80], life: [0.8, 1.3], size: [2.5, 4.5], grav: -120, flutter: 160 },
+    streamers: { n: 34, sp: [80, 200], vz: [420, 620], life: [1.1, 1.5], size: [4, 7], grav: 340, flutter: 380, drag: 0.55 },
+    candy: { n: 28, sp: [60, 220], vz: [300, 480], life: [0.8, 1.2], size: [4, 6.5] },
+    feathers: { n: 22, sp: [40, 120], vz: [200, 320], life: [1.2, 1.6], size: [4, 6], grav: 220, flutter: 260, drag: 0.5 },
+    rocks: { n: 20, sp: [60, 180], vz: [200, 380], life: [0.7, 1.0], size: [5, 8], grav: 1500 }
 };
 // The cubes that make up each skull, in cube units: u across, v down, w into the screen (front is w <= 0)
 const skullCellCache = {};
@@ -6890,6 +6972,20 @@ function skullCells(kind) {
         // A little core ball, and three rings of pieces orbiting it on different tilts
         for (const c of skullCells('ball3')) if (c.u * c.u + c.v * c.v + c.w * c.w < 3.2) out.push(Object.assign({}, c, { core: true }));
         for (let r = 0; r < 3; r++) ring(24, i => ({ ring: r, a0: (i / 24) * TAU }));
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'solar') {
+        // A small sun and three orbits with planets: 6, 9 and 12 pieces
+        for (const c of skullCells('ball3')) if (c.u * c.u + c.v * c.v + c.w * c.w < 3.2) out.push(Object.assign({}, c, { core: true }));
+        [6, 9, 12].forEach((m, r) => ring(m, i => ({ ring: r, a0: (i / m) * TAU + r })));
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'clock') {
+        // A ring for the face, twelve marks, and two hands
+        ring(28, i => { const a = i / 28 * TAU; return { u: Math.cos(a) * 5.4, v: Math.sin(a) * 5.4 }; });
+        ring(12, i => { const a = i / 12 * TAU; return { u: Math.cos(a) * 4.2, v: Math.sin(a) * 4.2, flip: false, color: '#00ffe8' }; });
+        for (let j = 1; j <= 4; j++) out.push({ u: 0, v: 0, w: 0, hand: 1, j, flip: false, color: '#00ffe8', eye: false, jaw: false });
+        for (let j = 1; j <= 3; j++) out.push({ u: 0, v: 0, w: 0, hand: 0, j, flip: true, color: '#ffff46', eye: false, jaw: false });
         return (skullCellCache[kind] = out);
     }
     if (kind === 'helix') {
@@ -6926,7 +7022,7 @@ function skullCells(kind) {
             if (!has(r, c)) continue;
             const edge = !has(r - 1, c) || !has(r + 1, c) || !has(r, c - 1) || !has(r, c + 1), T = M[r][c] === 'T';
             if (mode === 'outline' && (!edge || (r * 7 + c * 3) % 5 === 0)) continue;
-            const base = { u: c - (MW - 1) / 2, v: r - (MH - 1) / 2, eye: false, jaw: false };
+            const base = { u: c - (MW - 1) / 2, v: r - (MH - 1) / 2, eye: false, jaw: false, alt: T };
             out.push(Object.assign({ w: 0, flip: !T, color: T ? '#00ffe8' : '#ffff46' }, base));
             if (mode === 'thick') out.push(Object.assign({ w: 1, flip: false, color: '#00ffe8' }, base));
         }
@@ -7005,9 +7101,11 @@ function playDeathFx(t, fx) {
     } else cubeDeath(t, fx);
 }
 
-function cubeDeath(t, fx) {
+// A comic word that pops up (BONK!, POP!...)
+function fxWord(x, y, text, color) { G.particles.push({ type: 'word', x, y, vx: 0, vy: -40, life: 0.9, max: 0.9, text, color }); }
+function cubeDeath(t, fx, given) {
     if (!inView(t.x, t.y, 160) || G.particles.length > 3600) return;
-    const spec = FX_SPECS[fx] || null, intro = spec ? spec.intro : 3;
+    const spec = given || FX_SPECS[fx] || null, intro = spec ? spec.intro : 3;
     // Colours and piece shape for this effect
     const palName = spec ? spec.pal : 'neon', rainbow = palName === 'rainbow', PH = FX_PAL[palName] || FX_PAL.neon, PA = PH[0], PB = PH[1];
     const rgbA = hexRgb(PA), rgbB = hexRgb(PB), piece = spec ? spec.piece : 'cube';
@@ -7043,11 +7141,13 @@ function cubeDeath(t, fx) {
                 vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.8, vz: rand(L.vz[0], L.vz[1]), grav: L.grav, flutter: L.flutter, drag: L.drag };
             if (L.spin) Object.assign(o, { wx: rand(-L.spin, L.spin), wy: rand(-L.spin, L.spin), wz: rand(-L.spin, L.spin) });
             if (L.fromCenter) Object.assign(o, { x: t.x + rand(-4, 4), y: t.y + rand(-3, 3), z: 0, wait: (i / n) * L.wait });
-            if (L.sky) Object.assign(o, { x: t.x + rand(-60, 60), y: t.y + rand(-40, 40), z: rand(150, 330), vx: rand(-10, 10), vy: 0 });
+            if (L.sky) { const sp2 = L.spread || 60; Object.assign(o, { x: t.x + rand(-sp2, sp2), y: t.y + rand(-sp2 * 0.66, sp2 * 0.66), z: rand(150, 330), vx: rand(-10, 10), vy: 0, wait: L.spread ? rand(0, 0.6) : 0 }); }
             if (L.sweep) { const x = t.x + Math.cos(a) * d; Object.assign(o, { x, y: t.y + Math.sin(a) * d * 0.8, z: rand(2, 22), vx: rand(L.wind[0], L.wind[1]), vy: rand(-20, 20), wait: ((x - t.x) / t.r + 1) / 2 * L.sweep }); }
             spawn(o);
         }
         G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 45 * k, color: PA });
+        if (spec.word) fxWord(t.x, t.y - 30, spec.word, PA);
+        if (spec.scorch) addDecal({ kind: 'scorch', x: t.x, y: t.y, r: 60 * k, tint: spec.scorch, life: 6000 });
         if (Sound.volAt(t.x, t.y) > 0.03) Sound.pop();
         return;
     }
@@ -7058,7 +7158,7 @@ function cubeDeath(t, fx) {
         const cells = skullCells(spec.cells);
         if (spec.links && !cells.linked) { cells.linked = true; cells.forEach((c, i) => { c.links = []; cells.forEach((d, j) => { if (j > i && Math.abs(c.u - d.u) + Math.abs(c.v - d.v) + Math.abs(c.w - d.w) === 1) c.links.push(j); }); }); }
         for (const c of cells)
-            sko.cubes.push(spawn({ ring: c.ring, core: c.core, hf: c.hf, s: c.s, t: c.t, k: c.k, r: c.r, pet: c.pet, j: c.j, i: c.i, n: c.n, links: c.links, sk: sko, u: c.u * e, v: c.v * e, w: c.w * e, a0: c.a0, h: (c.h || 0) * e, size: e, flip: c.flip, color: c.color, eye: c.eye && spec.eyes, jaw: c.jaw && spec.jaw,
+            sko.cubes.push(spawn({ ring: c.ring, core: c.core, hf: c.hf, hand: c.hand, alt: c.alt, s: c.s, t: c.t, k: c.k, r: c.r, pet: c.pet, j: c.j, i: c.i, n: c.n, links: c.links, sk: sko, u: c.u * e, v: c.v * e, w: c.w * e, a0: c.a0, h: (c.h || 0) * e, size: e, flip: c.flip, color: c.color, eye: c.eye && spec.eyes, jaw: c.jaw && spec.jaw,
                 life: 99, max: 99, gatherIn: rand(spec.gather[0], spec.gather[1]) }));
         if (spec.start === 'sky') for (const c of sko.cubes) {
             // Meteor: the pieces come down out of the sky onto the spot instead of bursting out of the body
@@ -7102,7 +7202,7 @@ function skullSpot(c) {
     const sko = c.sk;
     if (sko.spec.shape === 'twister') {
         // Round and round up the funnel, faster near the top; it grows as it gets going
-        const a = c.a0 + sko.age * sko.spec.spin * (1 + c.h / (sko.e * 30)), r = (sko.e * 1.2 + c.h * 0.42) * (0.4 + 0.6 * sko.build);
+        const a = c.a0 + sko.age * sko.spec.spin * (1 + c.h / (sko.e * 30)), r = (sko.e * 1.2 + c.h * 0.42) * (0.4 + 0.6 * sko.build) * sko.scale;
         c.depth = -Math.sin(a) * r;
         return { x: sko.x + Math.cos(a) * r, y: sko.y + Math.sin(a) * r * 0.5, z: 4 + c.h * (0.5 + 0.5 * sko.build) };
     }
@@ -7129,7 +7229,9 @@ function skullSpot(c) {
         }
         case 'atom': {
             if (c.core) { lx = c.u; ly = c.v; lz = c.w; break; }
-            const a = c.a0 + A * sp.spin * (1 + c.ring * 0.25), R = sp.R * e, tilt = [0.25, 1.15, -1.15][c.ring], turn = c.ring * TAU / 3;
+            // (solar system: flat orbits further out, the outer ones slower)
+            const a = c.a0 + A * sp.spin * (sp.solar ? 1.7 - c.ring * 0.45 : 1 + c.ring * 0.25), R = sp.solar ? (2.6 + c.ring * 2.3) * e : sp.R * e,
+                tilt = sp.solar ? 0.15 + c.ring * 0.05 : [0.25, 1.15, -1.15][c.ring], turn = sp.solar ? c.ring * 0.4 : c.ring * TAU / 3;
             let x = Math.cos(a) * R, y = 0, z = Math.sin(a) * R;
             [y, z] = [y * Math.cos(tilt) - z * Math.sin(tilt), y * Math.sin(tilt) + z * Math.cos(tilt)];
             [x, z] = [x * Math.cos(turn) + z * Math.sin(turn), -x * Math.sin(turn) + z * Math.cos(turn)];
@@ -7156,6 +7258,27 @@ function skullSpot(c) {
             // Each wing flaps about the middle
             const flap = Math.sin(A * 11) * 0.75 * (c.u < 0 ? 1 : -1), x = c.u, z = c.w;
             lx = x * Math.cos(flap) - z * Math.sin(flap); lz = x * Math.sin(flap) + z * Math.cos(flap); ly = c.v; break;
+        }
+        case 'glitch': {
+            // A glitchy block: rows tear sideways and the whole thing jumps
+            const step = Math.floor(A * 14), rr = seededRand(step * 131 + Math.round(c.v / e) * 7 + 3), rj = seededRand(step * 17 + 5);
+            const tear = rr() > 0.72 ? (rr() - 0.5) * e * 5 : 0, jump = rj() > 0.75 ? (rj() - 0.5) * e * 6 : 0;
+            lx = c.u + tear + jump; ly = c.v; lz = c.w; break;
+        }
+        case 'clock': {
+            // The hands spin faster and faster
+            if (c.hand !== undefined) { const ang = -Math.PI / 2 + A * (c.hand ? 9 : 2.5) * (1 + A * 1.5); lx = Math.cos(ang) * c.j * e; ly = Math.sin(ang) * c.j * e; lz = -e * 0.5; }
+            else { lx = c.u; ly = c.v; lz = c.w; }
+            break;
+        }
+        case 'eye': {
+            // It looks around and blinks
+            const blink = (A % 0.85) < 0.1 ? 0.12 : 1;
+            lx = c.u + (c.alt ? Math.sin(A * 3.2) * e * 1.4 : 0); ly = (c.v + (c.alt ? Math.cos(A * 2.1) * e * 0.5 : 0)) * blink; lz = c.w; break;
+        }
+        case 'hop': {
+            // Hops off to the side
+            lx = c.u + A * 32; ly = c.v - Math.abs(Math.sin(A * 9)) * e * 2.5; lz = c.w; break;
         }
         default: lx = c.u; ly = c.v + (c.jaw ? sko.jaw : 0); lz = c.w;
     }
@@ -7197,6 +7320,9 @@ function updateSkull(p, dt) {
     }
     if (sko.age < spec.explode) return;
     p.life = 0;
+    // Some set off a second little effect when they go, or pop up a word
+    if (spec.word) fxWord(sko.x, sko.y - sko.hover - sko.e * 4, spec.word, sko.PA);
+    if (spec.after) cubeDeath({ x: sko.x, y: sko.y, r: CONFIG.RADIUS * sko.k, killedBy: null }, null, Object.assign({ kind: 'pop', intro: 1, sparks: 0, twinkle: 0, pal: spec.pal, piece: spec.afterPiece || spec.piece }, spec.after));
     const cx = sko.x, cy = sko.y - sko.hover, live = sko.cubes.filter(c => c.life > 0), n = live.length;
     if (spec.end === 'drop') {
         // Uncommon: it just falls apart
@@ -7302,6 +7428,14 @@ function drawSkull(sko) {
         ctx.globalAlpha = 1;
     }
     set.sort((a, b) => b.depth - a.depth);
+    if (spec.beam) {
+        // UFO: a beam of light down to the ground
+        const top = sko.y - sko.hover, g = ctx.createLinearGradient(0, top, 0, sko.y);
+        g.addColorStop(0, sko.PA + 'aa'); g.addColorStop(1, sko.PA + '11');
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5 + 0.2 * Math.sin(sko.age * 20); ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(sko.x - sko.e * 2, top); ctx.lineTo(sko.x + sko.e * 2, top); ctx.lineTo(sko.x + sko.e * 7, sko.y + 4); ctx.lineTo(sko.x - sko.e * 7, sko.y + 4); ctx.closePath(); ctx.fill();
+        ctx.restore();
+    }
     if (spec.links) {
         // The electric cage: crackling lines between the pieces next to each other
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = sko.PB; ctx.lineWidth = 1.2;
@@ -14198,6 +14332,17 @@ function drawParticles() {
         switch (p.type) {
             case 'cube': if (!(p.sk && p.set)) drawCube(p); break;
             case 'cubeskull': drawSkull(p.sk); break;
+            case 'word': {
+                // Comic word: pops in big, wobbles, fades
+                const age = p.max - p.life, sc = age < 0.12 ? age / 0.12 * 1.3 : 1.3 - Math.min(0.3, (age - 0.12) * 1.5);
+                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.sin(age * 14) * 0.08); ctx.scale(sc, sc);
+                ctx.globalAlpha = Math.min(1, p.life / 0.3);
+                ctx.font = '900 22px "Black Ops One", Impact, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.lineWidth = 6; ctx.strokeStyle = '#1a1030'; ctx.strokeText(p.text, 0, 0);
+                ctx.fillStyle = p.color; ctx.fillText(p.text, 0, 0);
+                ctx.restore(); ctx.globalAlpha = 1;
+                break;
+            }
             case 'twinkle': {
                 // A four-point sparkle that grows then shrinks
                 const k = Math.sin(t * Math.PI), r = p.size * k, w = r * 0.22;
