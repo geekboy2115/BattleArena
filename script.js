@@ -6796,6 +6796,7 @@ const FX_LIST = [
     ['jigsaw', 'Jigsaw', 'uncommon', 0, 'flat', { cells: 'm:block:flat', pal: 'candy', piece: 'chip', wobble: 0 }, 'Falls apart like a jigsaw puzzle.'],
     ['crop_s', 'Crop Circle', 'uncommon', 0, 'ripple', { cells: 'ripple2', pal: 'toxic', piece: 'chip' }, 'Glowing rings burn into the ground.'],
     ['cloud', 'Cartoon Cloud', 'uncommon', 0, 'pop', { loose: 'bubbles', n: 26, pal: 'ice', piece: 'orb', word: 'POW!' }, 'A cartoon fight cloud: POW!'],
+    ['steamgeyser', 'Steam Geyser', 'uncommon', 0, 'pop', { loose: 'geyser', n: 26, pal: 'ice', piece: 'orb' }, 'The ground rumbles and a geyser of steam blasts up.'],
     // Rare: whole shapes and proper moves
     ['flat', 'Flat Skull', 'rare', 0, 'flat', {}, 'A whole flat skull of cubes, which breaks apart.'],
     ['firework', 'Firework', 'rare', 0, 'firework', {}, 'A ball of cubes rockets up and bursts, raining down.'],
@@ -6818,6 +6819,7 @@ const FX_LIST = [
     ['pinata', 'Pinata', 'rare', 0, 'flat', { cells: 'm:star:flat', pal: 'candy', piece: 'chip', after: { loose: 'candy', n: 24 }, afterPiece: 'orb' }, 'A pinata bursts open and sweets spill out.'],
     ['comet', 'Comet', 'rare', 0, 'meteor', { cells: 'ball3', pal: 'ice', piece: 'octa', end: 'circle' }, 'A glowing comet slams down and explodes.'],
     ['domino', 'Domino Ring', 'rare', 0, 'ripple', { cells: 'ripple2', pal: 'gold', end: 'break' }, 'A ring of dominoes that topples outwards.'],
+    ['toxicgeyser', 'Toxic Geyser', 'rare', 0, 'pop', { loose: 'geyser', n: 50, pal: 'toxic', piece: 'orb', power: 1.2, word: 'SPLOOSH!' }, 'A toxic geyser erupts and rains green goo.'],
     // Epic: big moving things
     ['skull', 'Cube Skull', 'epic', 0, 'skull', {}, 'A skull of cubes that turns, laughs and explodes in a circle.'],
     ['tornado', 'Cube Tornado', 'epic', 0, 'tornado', {}, 'A spinning tornado of cubes that flings them out in a spiral.'],
@@ -6839,6 +6841,7 @@ const FX_LIST = [
     ['castle', 'Castle', 'epic', 0, 'skull', { cells: 'm:castle:thick', eyes: false, jaw: false, wobble: 0.4, pal: 'shadow', piece: 'cube' }, 'A castle rises up, then the walls come crashing out.'],
     ['lavaskull', 'Lava Skull', 'epic', 0, 'skull', { pal: 'fire', piece: 'tetra', after: { loose: 'embers', n: 30 } }, 'A skull of fire that laughs, explodes and leaves embers.'],
     ['unicorn', 'Unicorn', 'epic', 0, 'skull', { cells: 'm:unicorn:thick', eyes: false, jaw: false, wobble: 0.5, pal: 'rainbow', piece: 'orb', after: { loose: 'dust', n: 50 }, afterPiece: 'octa' }, 'A rainbow unicorn appears, then bursts into glitter.'],
+    ['rainbowgeyser', 'Rainbow Geyser', 'epic', 0, 'pop', { loose: 'geyser', n: 80, pal: 'rainbow', piece: 'octa', power: 1.4 }, 'A huge rainbow geyser shoots up and rains diamonds.'],
     // Legendary: cost kills
     ['skull3d', '3D Skull', 'legendary', 2500, 'skull3d', {}, 'A solid 3D skull of cubes that spins right round and explodes.'],
     ['skull3d_fire', 'Inferno Skull', 'legendary', 2600, 'skull3d', { pal: 'fire', piece: 'tetra' }, 'A solid 3D skull of fire.'],
@@ -6858,6 +6861,7 @@ const FX_LIST = [
     ['solar_ice', 'Ice Planets', 'legendary', 2600, 'atom', { cells: 'solar', solar: true, pal: 'ice', piece: 'octa', spin: 5, explode: 3.4 }, 'A frozen solar system spins round, then shatters.'],
     ['skull3d_candy', 'Candy Skull', 'legendary', 2700, 'skull3d', { pal: 'candy', piece: 'orb' }, 'A solid 3D skull of candy.'],
     ['skull3d_shadow', 'Shadow Skull', 'legendary', 2800, 'skull3d', { pal: 'shadow', piece: 'tetra' }, 'A solid 3D skull of shadow.'],
+    ['volcano', 'Volcano', 'legendary', 2700, 'crystal', { cells: 'cone', divine: false, pillar: false, pal: 'fire', piece: 'cube', end: 'erupt', power: 1.7, twinkle: 0.2 }, 'A volcano builds up out of the ground and erupts with lava and rocks.'],
     // Mythic: cost the most
     ['nova', 'Supernova', 'mythic', 3500, 'nova', {}, 'A ball of cubes collapses to a white-hot point, then blows out in a huge ring.'],
     ['blackhole', 'Black Hole', 'mythic', 3800, 'galaxy', { pal: 'candy', piece: 'tetra', dark: true, spin: 4, collapse: 0.9, charge: 0.9, end: 'nova', explode: 3.6 }, 'A galaxy swirls round a black hole, gets sucked in, then blows.'],
@@ -6874,6 +6878,7 @@ const FX_LIST = [
     ['stormnova', 'Storm Nova', 'mythic', 3750, 'tornado', { pal: 'ocean', piece: 'octa', collapse: 0.8, charge: 0.8, end: 'nova', explode: 3.6 }, 'A tornado squeezes into a point and explodes.'],
     ['timebomb', 'Time Bomb', 'mythic', 3850, 'nova', { shape: 'clock', cells: 'clock', pal: 'blood', piece: 'cube', spin: 0, word: 'TICK... BOOM!' }, 'A clock ticks faster and faster, then blows.'],
     ['kingdom', 'Mythical Kingdom', 'mythic', 3950, 'nova', { cells: 'm:castle:thick', pal: 'rainbow', piece: 'octa', spin: 1.6, after: { loose: 'dust', n: 60 }, afterPiece: 'octa' }, 'A rainbow castle spins, collapses into a star and showers glitter.'],
+    ['supervolcano', 'Supervolcano', 'mythic', 3600, 'crystal', { cells: 'cone', divine: false, pillar: false, pal: 'blood', piece: 'tetra', end: 'erupt', power: 2.4, e: 7, twinkle: 0.2 }, 'A giant volcano rises and erupts in a massive blast of lava.'],
     // Divine: the best of all - huge, detailed, and each one ends its own way
     ['dvortex', 'Divine Vortex', 'divine', 5000, 'dvortex', { pal: 'ocean', piece: 'octa' }, 'A huge vortex of ten spinning rings drains into the ground, and everything rises up a pillar of light.'],
     ['qatom', 'Quantum Atom', 'divine', 5200, 'qatom', { pal: 'neon', piece: 'orb' }, 'A detailed atom: a jiggling nucleus, four electrons with glowing trails on their orbits. It collapses and blinks out of existence.'],
@@ -6884,7 +6889,8 @@ const FX_LIST = [
     ['timefreeze', 'Time Freeze', 'divine', 6300, 'timefreeze', { pal: 'ice', piece: 'cube' }, 'Time stops: a frozen orb with a clock ring running backwards, then everything rewinds back into the body.'],
     ['crystal', 'Crystal Cathedral', 'divine', 6600, 'crystal', { pal: 'ice', piece: 'octa' }, 'Crystal spires grow up out of the ground, shimmer, then shatter into glass.'],
     ['infinity', 'Infinity', 'divine', 7000, 'infinity', { pal: 'rainbow', piece: 'orb' }, 'A rainbow figure of eight loops round and round, then folds into nothing.'],
-    ['creation', 'Creation', 'divine', 7500, 'creation', { pal: 'rainbow', piece: 'octa' }, 'A galaxy is born, spins, curls up into a star and rises into the heavens.']
+    ['creation', 'Creation', 'divine', 7500, 'creation', { pal: 'rainbow', piece: 'octa' }, 'A galaxy is born, spins, curls up into a star and rises into the heavens.'],
+    ['holyspring', 'Holy Spring', 'divine', 6800, 'pop', { loose: 'geyser', n: 120, pal: 'gold', piece: 'octa', power: 2.1 }, 'A holy spring bursts out of the ground: a towering golden geyser that rains light.']
 ];
 // Effects are quick (it's a kill, not a show): how long each rarity takes before it blows
 const FX_TIME = { uncommon: 1.0, rare: 1.3, epic: 1.6, legendary: 1.9, mythic: 2.1, divine: 2.6 };
@@ -6967,7 +6973,7 @@ const LOOSE = {
     confetti: { n: 40, sp: [60, 180], vz: [380, 560], life: [1.1, 1.5], size: [4, 6], grav: 300, flutter: 300, drag: 0.6 },
     bubbles: { n: 18, sp: [20, 80], vz: [40, 100], life: [0.8, 1.3], size: [4, 7], grav: -140, flutter: 120 },
     dust: { n: 60, sp: [0, 0], vz: [20, 50], life: [0.6, 0.9], size: [2.2, 3.4], grav: -60, sweep: 0.45, wind: [70, 130], quiet: true },
-    geyser: { n: 40, sp: [20, 80], vz: [450, 650], life: [0.8, 1.1], size: [3.5, 5.5], wait: 0.7, fromCenter: true },
+    geyser: { n: 40, sp: [20, 80], vz: [450, 650], life: [0.8, 1.1], size: [3.5, 5.5], wait: 0.7, fromCenter: true, jet: true },
     snow: { n: 30, sp: [0, 20], vz: [-40, -10], life: [1.2, 1.6], size: [3, 5], grav: 160, flutter: 60, sky: true },
     up: { n: 24, sp: [30, 120], vz: [40, 120], life: [0.8, 1.2], size: [3.5, 6], grav: -900 },
     meteors: { n: 30, sp: [0, 30], vz: [-700, -500], life: [0.9, 1.3], size: [4, 7], grav: 900, sky: true, spread: 90 },
@@ -7044,6 +7050,12 @@ function skullCells(kind) {
         pill(0, 0, 10, 0);
         for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; pill(Math.cos(a) * 2.4, Math.sin(a) * 2.4, 5 + (i % 3), 1 + i % 3); }
         for (let i = 0; i < 10; i++) { const a = i / 10 * TAU + 0.3; pill(Math.cos(a) * 4.6, Math.sin(a) * 4.6, 2 + (i % 3), 3 + i % 3); }
+        return (skullCellCache[kind] = out);
+    }
+    if (kind === 'cone') {
+        // A volcano: rings of pieces, smaller as they go up, with a hole at the top
+        for (let j = 0; j < 6; j++) { const R = (5.6 - j * 0.85), m = Math.round(R * 5); for (let i = 0; i < m; i++) { const a = i / m * TAU + j * 0.4;
+            out.push({ u: 0, v: 0, w: 0, px: Math.cos(a) * R, py: Math.sin(a) * R, j, k: j, flip: j % 2 === 0, color: j > 3 ? '#00ffe8' : '#ffff46', eye: false, jaw: false }); } }
         return (skullCellCache[kind] = out);
     }
     if (kind === 'infinity') {
@@ -7177,6 +7189,43 @@ function playDeathFx(t, fx) {
     } else cubeDeath(t, fx);
 }
 
+// A big explosion in the effect's colours: fireball, shockwave, shrapnel, smoke, a scorch mark,
+// and (for the big ones) a chain of smaller blasts going off round it
+const hexA = (hex, a) => hex.slice(0, 7) + Math.round(clamp(a, 0, 1) * 255).toString(16).padStart(2, '0');
+function fxBlast(x, y, size, A, B, big) {
+    G.particles.push({ type: 'fireball', x, y, vx: 0, vy: 0, life: 0.5, max: 0.5, size, color: A, color2: B });
+    G.particles.push({ type: 'glow', x, y, vx: 0, vy: 0, life: 0.08, max: 0.08, size: size * 0.35, color: '#ffffff' });
+    G.particles.push({ type: 'shock', x, y, vx: 0, vy: 0, life: 0.55, max: 0.55, size: size * 2.6, color: B });
+    G.particles.push({ type: 'shock', x, y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: size * 1.7, color: '#ffffff' });
+    for (let i = 0; i < 22; i++) { const a = rand(0, TAU), sp = rand(500, 1000); G.particles.push({ type: 'streak', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.7, life: rand(0.18, 0.32), max: 0.32, size: 2 }); }
+    for (let i = 0; i < 9; i++) { const a = rand(0, TAU), sp = rand(60, 200); G.particles.push({ type: 'smoke', x: x + rand(-10, 10), y: y + rand(-10, 10), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30, life: rand(0.8, 1.4), max: 1.4, size: rand(10, 18) * size / 50, color: '50,44,60' }); }
+    addDecal({ kind: 'scorch', x, y: y + size * 0.6, r: size * 1.1, tint: hexRgb(A).join(','), life: 7000 });
+    if (big) for (let i = 0; i < 6; i++) {
+        const a = rand(0, TAU), d = rand(0.6, 1.5) * size, w = rand(0.06, 0.35), s2 = size * rand(0.3, 0.5);
+        G.particles.push({ type: 'fireball', x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.7, vx: 0, vy: 0, life: 0.35, max: 0.35, size: s2, color: A, color2: B, wait: w });
+        G.particles.push({ type: 'shock', x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.7, vx: 0, vy: 0, life: 0.3, max: 0.3, size: s2 * 2, color: B, wait: w });
+        setTimeout(() => { const v = Sound.volAt(x, y); if (v > 0.05 && G) Sound.boom(v * 0.25, 0.35); }, w * 1000);
+    }
+}
+// A geyser: the ground glows and rumbles and steams, then a jet blasts up and the pieces rain down with splashes
+function fxGeyser(x, y, opt) {
+    const { n, A, B, jetT, rumble, power, spawn } = opt;
+    G.particles.push({ type: 'vent', x, y, vx: 0, vy: 0, life: rumble + jetT + 0.6, max: rumble + jetT + 0.6, size: 26 * power, color: A, rumble });
+    G.particles.push({ type: 'jet', x, y, vx: 0, vy: 0, life: jetT, max: jetT, size: 22 * power, h: 230 * power, color: A, color2: B, wait: rumble });
+    for (let i = 0; i < n; i++) spawn(i, rumble + (i / n) * jetT * 0.9);
+    const v = Sound.volAt(x, y);
+    if (v > 0.03) { Sound.tone(55, rumble + 0.2, 'sawtooth', 0.12 * v, 40); setTimeout(() => { Sound.noiseBurst(2500, jetT, 0.45 * v); Sound.tone(180, jetT, 'sine', 0.1 * v, 600); }, rumble * 1000); }
+    const near = G.player && !G.player.dead ? Math.hypot(x - G.player.x, y - G.player.y) : 9999;
+    if (near < 600) setTimeout(() => { if (G) G.shake = Math.max(G.shake || 0, 6 * (1 - near / 600) * power); }, rumble * 1000);
+}
+// The jet itself: while it's going, mist blows off the top and spray flies out
+function updateJet(p, dt) {
+    const k = Math.sin(Math.min(1, (p.max - p.life) / p.max) * Math.PI), top = p.y - p.h * (0.4 + 0.6 * k);
+    if (G.particles.length < 3000) {
+        if (Math.random() < dt * 30) G.particles.push({ type: 'smoke', x: p.x + rand(-p.size, p.size), y: top + rand(-10, 10), vx: rand(-60, 60), vy: rand(-60, 10), life: rand(0.6, 1.1), max: 1.1, size: rand(10, 18), color: '220,235,255' });
+        if (Math.random() < dt * 40) G.particles.push({ type: 'glow', x: p.x + rand(-p.size * 0.5, p.size * 0.5), y: top + rand(0, p.h * 0.5), vx: rand(-120, 120), vy: rand(-80, 80), life: rand(0.25, 0.45), max: 0.45, size: rand(2, 4), color: Math.random() < 0.5 ? p.color : '#ffffff' });
+    }
+}
 // A comic word that pops up (BONK!, POP!...)
 function fxWord(x, y, text, color) { G.particles.push({ type: 'word', x, y, vx: 0, vy: -40, life: 0.9, max: 0.9, text, color }); }
 function cubeDeath(t, fx, given) {
@@ -7217,11 +7266,14 @@ function cubeDeath(t, fx, given) {
                 vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.8, vz: rand(L.vz[0], L.vz[1]), grav: L.grav, flutter: L.flutter, drag: L.drag };
             if (L.spin) Object.assign(o, { wx: rand(-L.spin, L.spin), wy: rand(-L.spin, L.spin), wz: rand(-L.spin, L.spin) });
             if (L.fromCenter) Object.assign(o, { x: t.x + rand(-4, 4), y: t.y + rand(-3, 3), z: 0, wait: (i / n) * L.wait });
+            // (geyser: a tight, fast column that goes off after the ground has rumbled, and splashes where it lands)
+            if (L.jet) { const pw = spec.power || 1; Object.assign(o, { vx: Math.cos(a) * rand(10, 70) * pw, vy: Math.sin(a) * rand(10, 50) * pw, vz: rand(650, 950) * Math.sqrt(pw), wait: 0.45 + (i / n) * 0.75, lite: false, life: rand(1.1, 1.5), max: 1.5 }); }
             if (L.sky) { const sp2 = L.spread || 60; Object.assign(o, { x: t.x + rand(-sp2, sp2), y: t.y + rand(-sp2 * 0.66, sp2 * 0.66), z: rand(150, 330), vx: rand(-10, 10), vy: 0, wait: L.spread ? rand(0, 0.6) : 0 }); }
             if (L.sweep) { const x = t.x + Math.cos(a) * d; Object.assign(o, { x, y: t.y + Math.sin(a) * d * 0.8, z: rand(2, 22), vx: rand(L.wind[0], L.wind[1]), vy: rand(-20, 20), wait: ((x - t.x) / t.r + 1) / 2 * L.sweep }); }
             spawn(o);
         }
         G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 45 * k, color: PA });
+        if (L.jet) fxGeyser(t.x, t.y, { n: 0, A: PA, B: PB, jetT: 0.8, rumble: 0.45, power: spec.power || 1, spawn: () => {} });
         if (spec.word) fxWord(t.x, t.y - 30, spec.word, PA);
         if (spec.scorch) addDecal({ kind: 'scorch', x: t.x, y: t.y, r: 60 * k, tint: spec.scorch, life: 6000 });
         if (Sound.volAt(t.x, t.y) > 0.03) Sound.pop();
@@ -7533,6 +7585,16 @@ function updateSkull(p, dt) {
         if (v > 0.03) { Sound.shatter(v); for (let i = 0; i < 5; i++) setTimeout(() => Sound.tink(v, true), 80 + i * 60); }
         return;
     }
+    if (spec.end === 'erupt') {
+        // Volcano: the cone blows its top - a geyser of lava and rocks
+        const pw = spec.power || 1.5;
+        live.forEach((c, i) => { const s = skullSpot(c), a = rand(0, TAU);
+            Object.assign(c, s, { sk: null, set: false, landed: false, x: sko.x + rand(-4, 4), y: sko.y + rand(-3, 3), z: 4, vx: Math.cos(a) * rand(20, 110) * pw, vy: Math.sin(a) * rand(15, 80) * pw, vz: rand(650, 980) * Math.sqrt(pw),
+                wait: 0.2 + (i / live.length) * 0.5, wx: rand(-14, 14), wy: rand(-14, 14), wz: rand(-10, 10), life: rand(1.1, 1.6), max: 1.6, zapT: rand(0.2, 0.5) }); });
+        fxGeyser(sko.x, sko.y, { n: 0, A: sko.PA, B: sko.PB, jetT: 1.0, rumble: 0.25, power: pw, spawn: () => {} });
+        fxBlast(sko.x, sko.y - 20, sko.e * 8, sko.PA, sko.PB, false);
+        return;
+    }
     if (spec.end === 'fountain') {
         // Everything shoots straight up like a fountain and rains back down
         for (const c of live) {
@@ -7565,6 +7627,8 @@ function updateSkull(p, dt) {
         }
         G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.25, max: 0.25, size: sko.e * 10, color: '#ffffff' });
         G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.5, max: 0.5, size: sko.e * 24, color: sko.PA });
+        G.particles.push({ type: 'fireball', x: cx, y: cy, vx: 0, vy: 0, life: 0.45, max: 0.45, size: sko.e * 8, color: sko.PA, color2: sko.PB });
+        G.particles.push({ type: 'shock', x: cx, y: cy, vx: 0, vy: 0, life: 0.5, max: 0.5, size: sko.e * 20, color: sko.PB });
         G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.4, max: 0.4, size: sko.e * 16, color: sko.PB });
         for (let i = 0; i < 26; i++) { const a = rand(0, TAU), sp = rand(80, 300); G.particles.push({ type: 'twinkle', x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.4, 1), max: 1, size: rand(5, 9), color: i % 3 ? '#fdffb0' : '#b6fff2' }); }
         Sound.boom(v * 0.5, 0.5);
@@ -7591,7 +7655,7 @@ function updateSkull(p, dt) {
     if (nova) {
         for (const [life, size, col] of [[0.9, sko.e * 60, '#ffffff'], [1.1, sko.e * 48, '#ff5a5f'], [0.8, sko.e * 36, sko.PA]])
             G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life, max: life, size, color: col });
-        G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.4, max: 0.4, size: sko.e * 22, color: '#ffffff' });
+        G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.2, max: 0.2, size: sko.e * 8, color: '#ffffff' });
         const near = G.player && !G.player.dead ? Math.hypot(sko.x - G.player.x, sko.y - G.player.y) : 9999;
         if (near < 900) { G.shake = Math.max(G.shake || 0, 16 * (1 - near / 900)); G.flash = Math.max(G.flash || 0, 0.35 * (1 - near / 900)); G.flashColor = '255,255,255'; }
         Sound.boom(v, 1);
@@ -7603,7 +7667,8 @@ function updateSkull(p, dt) {
     });
     for (const [life, size, col] of [[0.55, sko.e * 30, '#ffffff'], [0.7, sko.e * 26, sko.PB], [0.8, sko.e * 20, sko.PA]])
         G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life, max: life, size, color: col });
-    G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.25, max: 0.25, size: sko.e * 9, color: '#ffffff' });
+    fxBlast(cx, cy, sko.e * (nova ? 14 : 9) * Math.sqrt(sko.k), sko.PA, sko.PB, nova || spec.intro >= 3);
+    G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.15, max: 0.15, size: sko.e * 4, color: '#ffffff' });
     for (let i = 0; i < 14; i++) { const a = rand(0, TAU), sp = rand(150, 420); G.particles.push({ type: 'twinkle', x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.6), max: 0.6, size: rand(6, 10), color: i % 2 ? '#ffffff' : '#fdffb0' }); }
     burst(cx, cy, 20, sko.PB, 420, 'glow'); burst(cx, cy, 16, sko.PA, 380, 'glow');
     const near = G.player && !G.player.dead ? Math.hypot(sko.x - G.player.x, sko.y - G.player.y) : 9999;
@@ -9634,7 +9699,8 @@ function drawLighting(camX, camY, zoom) {
     if (G.world.glows) for (const q of G.world.glows) light(q.x, q.y, q.lava ? q.r * 3.2 : q.r * 6, q.lava ? 0.9 : 0.75);
     for (const q of G.particles) {
         if (q.type === 'flash') light(q.x, q.y, 170, 0.9);
-        else if (q.type === 'boom') light(q.x, q.y, q.size * 2.2, 1);
+        else if (q.type === 'boom' || q.type === 'fireball') { if (!(q.wait > 0)) light(q.x, q.y, q.size * 2.2, 1); }
+        else if (q.type === 'jet') { if (!(q.wait > 0)) light(q.x, q.y - 120, 220, 0.9); }
         else if (q.type === 'glow' && q.size > 5) light(q.x, q.y, q.size * 5, 0.5);
         else if (q.type === 'cube' && !(q.set && !q.eye)) light(q.x, q.y - q.z, q.size * 5, 0.55 * Math.min(1, q.life / 0.9));
     }
@@ -12840,8 +12906,10 @@ function updateBullets(dt) {
 
 function updateParticles(dt) {
     for (const p of G.particles) {
+        if (p.wait > 0 && p.type !== 'cube') { p.wait -= dt; continue; }   // (waiting its turn to appear)
         p.life -= dt;
         if (p.type === 'cube') { updateCube(p, dt); continue; }
+        if (p.type === 'jet') { updateJet(p, dt); continue; }
         if (p.type === 'cubeskull') { if (p.life > 0) updateSkull(p, dt); continue; }
         if (p.type === 'shell' && p.life <= 0) addCasing(p.x, p.y);
         p.x += p.vx * dt;
@@ -14539,10 +14607,50 @@ function drawRocket(b) {
 
 function drawParticles() {
     for (const p of G.particles) {
+        if (p.wait > 0) continue;
         const t = p.life / p.max;
         switch (p.type) {
             case 'cube': if (!(p.sk && p.set)) drawCube(p); break;
             case 'cubeskull': drawSkull(p.sk); break;
+            case 'fireball': {
+                // A fireball in the effect's colours, swelling and fading
+                const k = 1 - t, r = p.size * (0.35 + k * 0.85), g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+                g.addColorStop(0, hexA('#ffffff', 0.85 * t)); g.addColorStop(0.15, hexA(p.color, 0.95 * t)); g.addColorStop(0.65, hexA(p.color2, 0.6 * t)); g.addColorStop(1, hexA(p.color2, 0));
+                ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill(); ctx.restore();
+                break;
+            }
+            case 'shock': {
+                // A thick shockwave ring rolling outwards
+                const r = p.size * (0.15 + 0.85 * (1 - t * t)), g = ctx.createRadialGradient(p.x, p.y, r * 0.6, p.x, p.y, r);
+                g.addColorStop(0, hexA(p.color, 0)); g.addColorStop(0.75, hexA(p.color, 0.55 * t)); g.addColorStop(0.92, hexA('#ffffff', 0.7 * t)); g.addColorStop(1, hexA(p.color, 0));
+                ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(p.x, p.y, r, r * 0.75, 0, 0, TAU); ctx.fill(); ctx.restore();
+                break;
+            }
+            case 'vent': {
+                // The geyser's vent: a glowing crack in the ground that pulses (and shakes while it rumbles)
+                const age = p.max - p.life, rumbling = age < p.rumble, j = rumbling ? rand(-1.5, 1.5) : 0, a = Math.min(1, t * 3);
+                ctx.save(); ctx.globalCompositeOperation = 'lighter';
+                const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 1.6);
+                g.addColorStop(0, hexA('#ffffff', 0.8 * a)); g.addColorStop(0.35, hexA(p.color, (0.55 + 0.35 * Math.sin(age * 25)) * a)); g.addColorStop(1, hexA(p.color, 0));
+                ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(p.x + j, p.y, p.size * 1.6, p.size * 0.7, 0, 0, TAU); ctx.fill();
+                ctx.strokeStyle = hexA(p.color, 0.9 * a); ctx.lineWidth = 2; ctx.beginPath();
+                for (let i = 0; i < 6; i++) { const an = i / 6 * TAU + 0.3, L = p.size * (1.1 + 0.5 * Math.sin(i * 7.3)); ctx.moveTo(p.x + j, p.y); ctx.lineTo(p.x + j + Math.cos(an) * L * 0.5, p.y + Math.sin(an) * L * 0.2); ctx.lineTo(p.x + j + Math.cos(an + 0.2) * L, p.y + Math.sin(an + 0.2) * L * 0.4); }
+                ctx.stroke(); ctx.restore();
+                if (rumbling && Math.random() < 0.5) G.particles.push({ type: 'smoke', x: p.x + rand(-p.size, p.size), y: p.y, vx: rand(-15, 15), vy: rand(-70, -30), life: 0.8, max: 0.8, size: rand(6, 10), color: '230,235,245' });
+                break;
+            }
+            case 'jet': {
+                // The jet of the geyser: a tall flickering column, wider and brighter at the bottom
+                const k = Math.sin(Math.min(1, (p.max - p.life) / p.max) * Math.PI), h = p.h * (0.4 + 0.6 * k), w = p.size * (0.7 + 0.3 * k) * (0.9 + 0.1 * Math.sin(G.time / 25));
+                const g = ctx.createLinearGradient(0, p.y, 0, p.y - h);
+                g.addColorStop(0, hexA('#ffffff', 0.95)); g.addColorStop(0.25, hexA(p.color, 0.85)); g.addColorStop(0.8, hexA(p.color2, 0.45)); g.addColorStop(1, hexA(p.color2, 0));
+                ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g;
+                ctx.beginPath(); ctx.moveTo(p.x - w * 0.6, p.y); ctx.quadraticCurveTo(p.x - w * 0.25, p.y - h * 0.5, p.x - w * (0.4 + 0.15 * Math.sin(G.time / 40)), p.y - h);
+                ctx.lineTo(p.x + w * (0.4 + 0.15 * Math.cos(G.time / 37)), p.y - h); ctx.quadraticCurveTo(p.x + w * 0.25, p.y - h * 0.5, p.x + w * 0.6, p.y); ctx.closePath(); ctx.fill();
+                ctx.globalAlpha = 0.9; ctx.fillStyle = hexA('#ffffff', 0.7); ctx.fillRect(p.x - w * 0.12, p.y - h * 0.85, w * 0.24, h * 0.85);
+                ctx.restore();
+                break;
+            }
             case 'pillar': {
                 // A pillar of light from the ground up into the sky
                 const w = p.size * (0.6 + 0.4 * Math.sin((1 - t) * Math.PI)), top = p.y - 900;
