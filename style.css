@@ -995,3 +995,6 @@ body.fs #fs-btn { opacity: 0.55; }
 .fx-item.lock .fx-in { opacity: 0.75; }
 .fx-item .fx-check { white-space: nowrap; font-size: 13px; font-weight: 700; }
 .fx-item.lock .fx-check { opacity: 1; color: #ffb3b3; }
+
+.fx-bar { margin-top: 6px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; max-width: 220px; }
+.fx-bar i { display: block; height: 100%; width: 0; background: var(--rc); box-shadow: 0 0 6px var(--rc); }

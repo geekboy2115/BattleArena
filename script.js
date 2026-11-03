@@ -6804,7 +6804,12 @@ const FX_LIST = [
 // Effects are quick (it's a kill, not a show): how long each rarity takes before it blows
 const FX_TIME = { uncommon: 1.0, rare: 1.3, epic: 1.6, legendary: 1.9, mythic: 2.1 };
 const FX_SPECS = {}, DEATH_FX = [];
-for (const [id, name, rarity, cost, base, o, desc] of FX_LIST) {
+// What the cheaper rarities cost (legendary and mythic have their own prices in the list): it goes up through each rarity
+const FX_PRICE = { uncommon: [100, 300], rare: [400, 900], epic: [1000, 1800] }, fxTierN = {}, fxTierI = {};
+for (const f of FX_LIST) fxTierN[f[2]] = (fxTierN[f[2]] || 0) + 1;
+for (let [id, name, rarity, cost, base, o, desc] of FX_LIST) {
+    const pr = FX_PRICE[rarity];
+    if (pr && !cost) { const i = fxTierI[rarity] = (fxTierI[rarity] || 0) + 1; cost = Math.round((pr[0] + (pr[1] - pr[0]) * (i - 1) / Math.max(1, fxTierN[rarity] - 1)) / 50) * 50; }
     DEATH_FX.push({ id, name, rarity, cost, desc });
     if (!base) continue;
     if (base === 'pop') { FX_SPECS[id] = Object.assign({ kind: 'pop', loose: 'pop', intro: 1, sparks: 0, twinkle: 0, pal: 'neon', piece: 'cube' }, o); continue; }
@@ -6813,14 +6818,17 @@ for (const [id, name, rarity, cost, base, o, desc] of FX_LIST) {
     sp.gather = sp.gather.map(g => g * r);
     FX_SPECS[id] = sp;
 }
-let deathFx = 'skull';
+let deathFx = 'classic';
 let fxOwned = {}, killBank = 0;
 try { deathFx = localStorage.getItem('ba_deathfx') || 'skull'; fxOwned = JSON.parse(localStorage.getItem('ba_fxowned') || '{}') || {}; killBank = parseInt(localStorage.getItem('ba_killbank'), 10) || 0; } catch (e) {}
 const fxCost = id => (DEATH_FX.find(f => f.id === id) || { cost: 0 }).cost;
 const fxHave = id => !fxCost(id) || !!fxOwned[id];
-if (!DEATH_FX.some(f => f.id === deathFx) || !fxHave(deathFx)) deathFx = 'skull';
+if (!DEATH_FX.some(f => f.id === deathFx) || !fxHave(deathFx)) deathFx = 'classic';
 // Every kill you make goes in the bank, to spend on effects
-function bankKill() { killBank++; try { localStorage.setItem('ba_killbank', String(killBank)); } catch (e) {} }
+function saveFx() { try { localStorage.setItem('ba_killbank', String(killBank)); localStorage.setItem('ba_fxowned', JSON.stringify(fxOwned)); localStorage.setItem('ba_deathfx', deathFx); } catch (e) {} }
+function bankKill() { killBank++; saveFx(); }
+window.addEventListener('pagehide', saveFx);
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveFx(); });
 const hexRgb = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 const hslHex = (h, s, l) => { const f = n => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0'); }; return '#' + f(0) + f(8) + f(4); };
 // The pieces: cubes, triangle pyramids, diamonds (octahedra) and orbs. Faces: [normal, corners, colour side]
@@ -15151,10 +15159,13 @@ function showDeathFx() {
         b.classList.toggle('on', id === deathFx); b.classList.toggle('view', id === fxView);
         b.querySelector('.fx-check').innerHTML = id === deathFx ? '&#10003;' : fxHave(id) ? '' : `&#128274; ${fmtK(fxCost(id))}`;
         b.classList.toggle('lock', !fxHave(id));
+        // How close you are to affording it
+        const bar = b.querySelector('.fx-bar');
+        if (bar) { bar.style.display = fxHave(id) ? 'none' : ''; bar.firstChild.style.width = Math.min(100, killBank / fxCost(id) * 100).toFixed(1) + '%'; }
     });
 }
-$('fx-list').innerHTML = DEATH_FX.map(f => `<button class="fx-item" data-fx="${f.id}" style="--rc:${RARITY[f.rarity].color}"><div><div class="fx-ir">${f.rarity.toUpperCase()}</div><div class="fx-in">${f.name}</div><div class="fx-id">${f.desc}</div></div><span class="fx-check"></span></button>`).join('');
-function equipFx(id) { deathFx = id; try { localStorage.setItem('ba_deathfx', deathFx); } catch (e) {} }
+$('fx-list').innerHTML = DEATH_FX.map(f => `<button class="fx-item" data-fx="${f.id}" style="--rc:${RARITY[f.rarity].color}"><div><div class="fx-ir">${f.rarity.toUpperCase()}</div><div class="fx-in">${f.name}</div><div class="fx-id">${f.desc}</div>${f.cost ? '<div class="fx-bar"><i></i></div>' : ''}</div><span class="fx-check"></span></button>`).join('');
+function equipFx(id) { deathFx = id; saveFx(); }
 document.querySelectorAll('.fx-item').forEach(b => b.addEventListener('click', () => {
     // Tap one to see it; if it's yours it's put on straight away
     fxView = b.dataset.fx;
@@ -15168,7 +15179,7 @@ $('fx-action').addEventListener('click', () => {
     if (!fxHave(f.id)) {
         if (killBank < f.cost) return;
         killBank -= f.cost; fxOwned[f.id] = true;
-        try { localStorage.setItem('ba_killbank', String(killBank)); localStorage.setItem('ba_fxowned', JSON.stringify(fxOwned)); } catch (e) {}
+        saveFx();
         Sound.init(); Sound.fanfare && Sound.fanfare();
     }
     equipFx(f.id); showDeathFx();
