@@ -6739,16 +6739,16 @@ const SKULLS = {
     meteor: { shape: 'ground', start: 'sky', cells: 'm:tomb:thick', e: 5, hover: 0, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.5, twinkle: 0.2, gather: [0, 0.5], formBy: 1.1, explode: 2.2, charge: 0.2, end: 'break', loose: 0, intro: 2 },
     ghostrise: { cells: 'm:ghost:flat', e: 4.5, hover: 30, rise: 90, spin: 0, wobble: 0.3, jaw: false, eyes: false, sparks: 0, twinkle: 0.3, gather: [0.2, 0.5], formBy: 0.9, explode: 2.0, charge: 0, end: 'dissolve', loose: 0, intro: 1 },
     // Divine: big, multi-part, and each ends its own way (not just a bang)
-    dvortex: { shape: 'funnel', cells: 'funnel', e: 7, hover: 0, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.6, twinkle: 0.3, gather: [0.2, 0.8], formBy: 1.3, explode: 3.2, drainT: 0.9, charge: 0.5, end: 'ascend', loose: 0, intro: 3, divine: true },
-    qatom: { shape: 'qatom', cells: 'qatom', e: 7, hover: 62, spin: 0.6, wobble: 0, jaw: false, eyes: false, sparks: 0.5, twinkle: 0.2, gather: [0.2, 0.7], formBy: 1.2, explode: 3.2, collapse: 0.8, charge: 0.8, end: 'implode', orbits: true, loose: 0, intro: 3, divine: true },
-    ascend: { shape: 'wings', cells: 'angel', e: 6, hover: 46, rise: 60, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.3, twinkle: 0.6, gather: [0.2, 0.7], formBy: 1.2, explode: 2.9, charge: 0, end: 'ascend', loose: 0, intro: 3, divine: true, pillar: true },
-    portal: { shape: 'portal', cells: 'portal', e: 7, hover: 58, spin: 0, wobble: 0.2, jaw: false, eyes: false, sparks: 0.8, twinkle: 0.3, gather: [0.2, 0.8], formBy: 1.3, explode: 3.1, collapse: 0.6, charge: 0.6, end: 'implode', loose: 0, intro: 3, divine: true },
-    judgement: { start: 'sky', cells: 'm:sword:thick', e: 6.5, hover: 30, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 1, twinkle: 0.3, gather: [0.05, 0.25], formBy: 0.9, explode: 2.7, charge: 0.4, end: 'shatter', loose: 0, intro: 3, divine: true, strike: true },
-    sungod: { shape: 'sun', cells: 'sun', e: 7, hover: 64, spin: 0, wobble: 0.3, jaw: false, eyes: false, sparks: 0.8, twinkle: 0.4, gather: [0.2, 0.8], formBy: 1.3, explode: 3.1, charge: 0.7, end: 'circle', loose: 10, intro: 3, divine: true },
-    timefreeze: { shape: 'timefreeze', cells: 'timefreeze', e: 6.5, hover: 58, spin: 0.4, wobble: 0, jaw: false, eyes: false, sparks: 0.4, twinkle: 0.5, gather: [0.15, 0.6], formBy: 1.0, explode: 2.9, charge: 0.3, end: 'rewind', loose: 0, intro: 3, divine: true },
-    crystal: { shape: 'crystal', cells: 'crystal', e: 7, hover: 0, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.4, twinkle: 0.8, gather: [0.1, 0.5], formBy: 1.2, explode: 2.9, charge: 0.4, end: 'shatter', loose: 0, intro: 3, divine: true },
-    infinity: { shape: 'infinity', cells: 'infinity', e: 6.5, hover: 58, spin: 0, wobble: 0.3, jaw: false, eyes: false, sparks: 0.5, twinkle: 0.5, gather: [0.2, 0.8], formBy: 1.3, explode: 3.0, collapse: 0.6, charge: 0.6, end: 'implode', loose: 0, intro: 3, divine: true },
-    creation: { shape: 'galaxy', cells: 'disc', e: 7, hover: 54, spin: 3, wobble: 0, jaw: false, eyes: false, sparks: 0.6, twinkle: 0.8, gather: [0.2, 0.9], formBy: 1.4, explode: 3.0, collapse: 0.7, charge: 0.7, end: 'ascend', loose: 0, intro: 3, divine: true, pillar: true },
+    dvortex: { shape: 'funnel', cells: 'funnel', e: 7.5, hover: 0, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.6, twinkle: 0.3, gather: [0.2, 0.8], formBy: 1.3, explode: 3.2, drainT: 0.9, charge: 0.5, end: 'ascend', loose: 0, intro: 3, divine: true },
+    qatom: { shape: 'qatom', cells: 'qatom', e: 8, hover: 62, spin: 0.6, wobble: 0, jaw: false, eyes: false, sparks: 0.5, twinkle: 0.2, gather: [0.2, 0.7], formBy: 1.2, explode: 3.2, collapse: 0.8, charge: 0.8, end: 'implode', orbits: true, loose: 0, intro: 3, divine: true },
+    ascend: { shape: 'wings', cells: 'angel', e: 7, hover: 46, rise: 60, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.3, twinkle: 0.6, gather: [0.2, 0.7], formBy: 1.2, explode: 2.9, charge: 0, end: 'ascend', loose: 0, intro: 3, divine: true, pillar: true },
+    portal: { shape: 'portal', cells: 'portal', e: 8, hover: 58, spin: 0, wobble: 0.2, jaw: false, eyes: false, sparks: 0.8, twinkle: 0.3, gather: [0.2, 0.8], formBy: 1.3, explode: 3.1, collapse: 0.6, charge: 0.6, end: 'implode', loose: 0, intro: 3, divine: true },
+    judgement: { start: 'sky', cells: 'm:sword:thick', e: 8, hover: 30, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 1, twinkle: 0.3, gather: [0.05, 0.25], formBy: 0.9, explode: 2.7, charge: 0.4, end: 'shatter', loose: 0, intro: 3, divine: true, strike: true },
+    sungod: { shape: 'sun', cells: 'sun', e: 8, hover: 64, spin: 0, wobble: 0.3, jaw: false, eyes: false, sparks: 0.8, twinkle: 0.4, gather: [0.2, 0.8], formBy: 1.3, explode: 3.1, charge: 0.7, end: 'circle', loose: 10, intro: 3, divine: true },
+    timefreeze: { shape: 'timefreeze', cells: 'timefreeze', e: 7.5, hover: 58, spin: 0.4, wobble: 0, jaw: false, eyes: false, sparks: 0.4, twinkle: 0.5, gather: [0.15, 0.6], formBy: 1.0, explode: 2.9, charge: 0.3, end: 'rewind', loose: 0, intro: 3, divine: true },
+    crystal: { shape: 'crystal', cells: 'crystal', e: 8, hover: 0, spin: 0, wobble: 0, jaw: false, eyes: false, sparks: 0.4, twinkle: 0.8, gather: [0.1, 0.5], formBy: 1.2, explode: 2.9, charge: 0.4, end: 'shatter', loose: 0, intro: 3, divine: true },
+    infinity: { shape: 'infinity', cells: 'infinity', e: 8, hover: 58, spin: 0, wobble: 0.3, jaw: false, eyes: false, sparks: 0.5, twinkle: 0.5, gather: [0.2, 0.8], formBy: 1.3, explode: 3.0, collapse: 0.6, charge: 0.6, end: 'implode', loose: 0, intro: 3, divine: true },
+    creation: { shape: 'galaxy', cells: 'disc', e: 8, hover: 54, spin: 3, wobble: 0, jaw: false, eyes: false, sparks: 0.6, twinkle: 0.8, gather: [0.2, 0.9], formBy: 1.4, explode: 3.0, collapse: 0.7, charge: 0.7, end: 'ascend', loose: 0, intro: 3, divine: true, pillar: true },
     tornado: { shape: 'twister', cells: 'twister', e: 5, hover: 0, spin: 6, wobble: 0, jaw: false, eyes: false, sparks: 0.8, twinkle: 0.3, gather: [0.3, 0.9], formBy: 1.6, explode: 3.3, charge: 0.4, end: 'spiral', loose: 10, intro: 3 },
     nova: { shape: 'ball', cells: 'ball4', e: 5, hover: 58, spin: 1.6, wobble: 0, jaw: false, eyes: false, sparks: 1, twinkle: 0.3, gather: [0.45, 1.2], formBy: 2.1, collapse: 0.75, explode: 3.7, charge: 0.75, end: 'nova', loose: 20, intro: 3 },
     skull3d: { cells: 'solid', e: 5, hover: 62, spin: 2.1, wobble: 0, jaw: true, eyes: true, eyeW: -2, sparks: 1, twinkle: 0.25, gather: [0.5, 1.3], formBy: 2.3, explode: 4.0, charge: 0.6, end: 'circle', loose: 18, intro: 3 }
@@ -7243,7 +7243,7 @@ function cubeDeath(t, fx, given) {
     const k = t.r / CONFIG.RADIUS, sk = Math.min(2.2, Math.sqrt(k));
     // Which way the hit came from, so the pieces get knocked away from the killer
     const ka = t.killedBy && t.killedBy !== t ? Math.atan2(t.y - t.killedBy.y, t.x - t.killedBy.x) : rand(0, TAU);
-    const group = [], soft = intro === 1 ? 0.55 : intro === 2 ? 0.8 : 1;
+    const group = [], soft = spec && spec.divine ? 0.3 : intro === 1 ? 0.55 : intro === 2 ? 0.8 : 1;
     if (intro === 3) addDecal({ kind: 'scorch', x: t.x, y: t.y, r: 70 * k, tint: Math.random() < 0.5 ? '0,255,232' : '255,255,70', life: 9000 });
     const spawn = (o) => {
         const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(40, 200) * sk * soft, kick = rand(20, 90) * soft;
@@ -7308,6 +7308,12 @@ function cubeDeath(t, fx, given) {
     burst(t.x, t.y, 6 * intro, PA, 280, 'glow');
     Sound.zap(v);
     if (intro === 2) return;
+    if (spec && spec.divine) {
+        // Divine: no messy burst - the body lifts softly up into light
+        for (let i = 0; i < 24; i++) G.particles.push({ type: 'glow', x: t.x + rand(-t.r, t.r), y: t.y + rand(-t.r, t.r), vx: rand(-15, 15), vy: rand(-140, -60), life: rand(0.5, 0.9), max: 0.9, size: rand(3, 6), color: i % 2 ? '#ffffff' : PA });
+        G.particles.push({ type: 'pillar', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.6, max: 0.6, size: 40 * k, color: PA });
+        return;
+    }
     G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 120 * k, color: '#ffffff' });
     G.particles.push({ type: 'glow', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 34 * k, color: '#e8ffff' });
     for (let i = 0; i < 5; i++) {
@@ -7487,6 +7493,17 @@ function updateSkull(p, dt) {
         if (spec.pillar || spec.shape === 'funnel') G.particles.push({ type: 'pillar', x: sko.x, y: sko.y, vx: 0, vy: 0, life: 0.9, max: 0.9, size: sko.e * 6, color: sko.PA });
         G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life: 0.8, max: 0.8, size: sko.e * 30, color: '#fff1a8' });
         Sound.choir(v);
+    }
+    if (spec.divine && G.particles.length < 2600) {
+        // Motes of light rising off the magic circle
+        if (Math.random() < dt * 28) { const a = rand(0, TAU), d = rand(0.3, 1) * sko.e * 13; G.particles.push({ type: 'glow', x: sko.x + Math.cos(a) * d, y: sko.y + Math.sin(a) * d * 0.5, vx: 0, vy: rand(-110, -50), life: rand(0.6, 1.1), max: 1.1, size: rand(2, 4), color: Math.random() < 0.5 ? '#ffffff' : sko.PA }); }
+        const live2 = sko.cubes.filter(c => c.set);
+        // Arcs of energy: electrons into the nucleus, crackles round the portal rim, lightning down the sword
+        if (spec.orbits && Math.random() < dt * 8) { const c = live2.find(q => q.electron && Math.random() < 0.3); if (c) G.particles.push({ type: 'zap', x: c.x, y: c.y - c.z, x2: sko.x, y2: sko.y + 2 - sko.hover, vx: 0, vy: 0, life: 0.12, max: 0.12, seed: Math.random(), color: sko.PB }); }
+        if (spec.shape === 'portal' && Math.random() < dt * 14) { const rim = live2.filter(q => q.rim); if (rim.length > 1) { const a = rim[(Math.random() * rim.length) | 0], b = rim[(Math.random() * rim.length) | 0]; if (Math.hypot(a.x - b.x, a.y - b.y) < sko.e * 6) G.particles.push({ type: 'zap', x: a.x, y: a.y - a.z, x2: b.x, y2: b.y - b.z, vx: 0, vy: 0, life: 0.1, max: 0.1, seed: Math.random(), color: '#ffffff' }); } }
+        if (spec.strike && sko.thud && Math.random() < dt * 12) G.particles.push({ type: 'zap', x: sko.x + rand(-sko.e, sko.e), y: sko.y - sko.e * rand(4, 10), x2: sko.x + rand(-sko.e * 2, sko.e * 2), y2: sko.y - sko.e * rand(0, 3), vx: 0, vy: 0, life: 0.1, max: 0.1, seed: Math.random(), color: '#ffffff' });
+        if (spec.shape === 'wings' && Math.random() < dt * 10) G.particles.push({ type: 'chunk', x: sko.x + rand(-60, 60), y: sko.y - sko.hover + rand(-10, 20), vx: rand(-30, 30), vy: rand(20, 60), life: 1.2, max: 1.2, size: 5, color: '#ffffff', rot: rand(0, TAU), spin: rand(-4, 4) });
+        if (spec.shape === 'sun' && Math.random() < dt * 4) { const a = rand(0, TAU), r0 = sko.e * 3.5; G.particles.push({ type: 'flare', x: sko.x, y: sko.y + 2 - sko.hover, vx: 0, vy: 0, life: 0.7, max: 0.7, a, r0, size: sko.e * rand(5, 9), color: sko.PA, color2: sko.PB }); }
     }
     if (spec.orbits && sko.formed && G.particles.length < 2500) for (const c of sko.cubes) if (c.electron && c.set) G.particles.push({ type: 'glow', x: c.x, y: c.y - c.z, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 3, color: sko.PB });
     if (spec.strike && sko.thud && !sko.struck) {
@@ -7677,10 +7694,142 @@ function updateSkull(p, dt) {
 }
 
 // The skull is drawn as one thing, back cubes first, with a shadow under it and its eyes glowing
+// The divine stage: darkness closing in, a turning magic circle on the ground, god rays behind,
+// and each one's own scenery (vortex walls, sun corona, clock face, portal swirl, nebulae...)
+function drawDivineBack(sko, f) {
+    const spec = sko.spec, e = sko.e, A = sko.age, I = Math.min(1, A / 0.35) * (1 - sko.charge * 0.3), cx = sko.x, cy = sko.y + 2 - sko.hover - Math.sin(A * 3) * 2;
+    ctx.save();
+    // Darkness round it, so it glows
+    let g = ctx.createRadialGradient(cx, sko.y - sko.hover / 2, 20, cx, sko.y - sko.hover / 2, 420);
+    g.addColorStop(0, `rgba(8,2,24,${0.5 * I})`); g.addColorStop(0.6, `rgba(8,2,24,${0.3 * I})`); g.addColorStop(1, 'rgba(8,2,24,0)');
+    ctx.fillStyle = g; ctx.fillRect(cx - 420, sko.y - sko.hover / 2 - 420, 840, 840);
+    ctx.globalCompositeOperation = 'lighter';
+    // God rays turning slowly behind it
+    for (let i = 0; i < 12; i++) {
+        const a = i / 12 * TAU + A * 0.25, L = 280 + 40 * Math.sin(A * 2 + i), w = 0.07;
+        const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, L); rg.addColorStop(0, hexA(sko.PA, 0.32 * I)); rg.addColorStop(1, hexA(sko.PA, 0));
+        ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, L, a - w, a + w); ctx.closePath(); ctx.fill();
+    }
+    // The magic circle on the ground
+    const R = e * 13, gx = sko.x, gy = sko.y;
+    ctx.strokeStyle = hexA(sko.PA, 0.8 * I); ctx.lineWidth = 2;
+    ctx.save(); ctx.translate(gx, gy); ctx.scale(1, 0.5);
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(0, 0, R * 0.86, 0, TAU); ctx.stroke();
+    ctx.rotate(A * 0.6);
+    for (let i = 0; i < 24; i++) { const a = i / 24 * TAU; ctx.beginPath(); ctx.moveTo(Math.cos(a) * R * 0.86, Math.sin(a) * R * 0.86); ctx.lineTo(Math.cos(a) * R * (i % 2 ? 0.93 : 1), Math.sin(a) * R * (i % 2 ? 0.93 : 1)); ctx.stroke(); }
+    ctx.rotate(-A * 1.4); ctx.strokeStyle = hexA(sko.PB, 0.75 * I); ctx.lineWidth = 1.5;
+    for (const off of [0, Math.PI]) { ctx.beginPath(); for (let i = 0; i <= 3; i++) { const a = off + i / 3 * TAU - Math.PI / 2; i ? ctx.lineTo(Math.cos(a) * R * 0.82, Math.sin(a) * R * 0.82) : ctx.moveTo(Math.cos(a) * R * 0.82, Math.sin(a) * R * 0.82); } ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.42, 0, TAU); ctx.stroke();
+    ctx.restore();
+    // Each one's own scenery
+    switch (spec.shape) {
+        case 'funnel': {
+            // The vortex's walls: a glowing ring at every level
+            const drain = clamp((A - (spec.explode - spec.drainT)) / spec.drainT, 0, 1);
+            for (let L = 0; L < 10; L++) {
+                const Rr = (1.5 + L * 1.25) * e * (0.3 + 0.7 * sko.build) * (1 - drain * 0.92), z = 3 + L * e * 1.5 * (1 - drain) * sko.build;
+                ctx.strokeStyle = hexA(L % 2 ? sko.PA : sko.PB, 0.35 * I); ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.ellipse(sko.x, sko.y - z, Rr, Rr * 0.5, 0, 0, TAU); ctx.stroke();
+            }
+            break;
+        }
+        case 'qatom': {
+            g = ctx.createRadialGradient(cx, cy, 0, cx, cy, e * 5 * sko.scale); g.addColorStop(0, hexA('#ffffff', 0.7 * I)); g.addColorStop(0.4, hexA(sko.PA, 0.45 * I)); g.addColorStop(1, hexA(sko.PA, 0));
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, e * 5 * sko.scale, 0, TAU); ctx.fill();
+            break;
+        }
+        case 'sun': {
+            // The corona
+            const r = e * 11 * (1 + 0.08 * Math.sin(A * 9));
+            g = ctx.createRadialGradient(cx, cy, e * 2, cx, cy, r); g.addColorStop(0, hexA('#ffffff', 0.8 * I)); g.addColorStop(0.3, hexA(sko.PA, 0.6 * I)); g.addColorStop(0.7, hexA(sko.PB, 0.25 * I)); g.addColorStop(1, hexA(sko.PB, 0));
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+            break;
+        }
+        case 'portal': {
+            // The inside of the portal: a dark swirl with spiral arms
+            const r = 6.3 * e * sko.scale;
+            g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.15, hexA(sko.PB, 0.6 * I)); g.addColorStop(0.8, hexA(sko.PA, 0.25 * I)); g.addColorStop(1, hexA(sko.PA, 0));
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+            ctx.lineWidth = 3;
+            for (let k = 0; k < 4; k++) {
+                ctx.strokeStyle = hexA(k % 2 ? sko.PA : '#ffffff', 0.5 * I); ctx.beginPath();
+                for (let i = 0; i <= 30; i++) { const q = i / 30, a = k * TAU / 4 + q * 4 - A * 5, rr = q * r; i ? ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : ctx.moveTo(cx, cy); }
+                ctx.stroke();
+            }
+            ctx.strokeStyle = hexA('#ffffff', 0.8 * I); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+            break;
+        }
+        case 'timefreeze': {
+            // A clock face behind it, its hands running backwards; the world goes blue
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = `rgba(120,180,255,${0.12 * I})`; ctx.beginPath(); ctx.arc(cx, cy, 300, 0, TAU); ctx.fill();
+            ctx.globalCompositeOperation = 'lighter';
+            const r = e * 9.5; ctx.strokeStyle = hexA(sko.PB, 0.85 * I); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r * 0.84, cy + Math.sin(a) * r * 0.84); ctx.lineTo(cx + Math.cos(a) * r * 0.97, cy + Math.sin(a) * r * 0.97); ctx.stroke(); }
+            for (const [len, sp, lw] of [[0.55, 1.2, 4], [0.85, 7, 2]]) { const a = -Math.PI / 2 - A * sp; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r * len, cy + Math.sin(a) * r * len); ctx.stroke(); }
+            break;
+        }
+        case 'infinity': {
+            // The infinity path, glowing
+            ctx.lineWidth = 6; ctx.strokeStyle = hexA(sko.PA, 0.25 * I); ctx.beginPath();
+            for (let i = 0; i <= 80; i++) { const t2 = i / 80 * TAU, d = 1 + Math.sin(t2) ** 2, Rr = 7.5 * e * sko.scale, [X, Y] = skullRot(sko, Rr * Math.cos(t2) / d, Rr * Math.sin(t2) * Math.cos(t2) / d, Math.sin(t2) * Rr * 0.35); i ? ctx.lineTo(cx + X, cy + Y) : ctx.moveTo(cx + X, cy + Y); }
+            ctx.stroke(); ctx.lineWidth = 2; ctx.strokeStyle = hexA('#ffffff', 0.4 * I); ctx.stroke();
+            break;
+        }
+        case 'galaxy': {
+            // Nebula clouds round the young galaxy
+            for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + A * 0.5, d = e * 6, nx = cx + Math.cos(a) * d, ny = cy + Math.sin(a) * d * 0.5, r = e * 6;
+                g = ctx.createRadialGradient(nx, ny, 0, nx, ny, r); const col = hslHex((i * 70 + A * 60) % 360, 0.9, 0.6); g.addColorStop(0, hexA(col, 0.3 * I)); g.addColorStop(1, hexA(col, 0));
+                ctx.fillStyle = g; ctx.beginPath(); ctx.arc(nx, ny, r, 0, TAU); ctx.fill(); }
+            break;
+        }
+        case 'wings': {
+            // A beam of light the whole time it rises
+            const w = e * 7, top = cy - 600; g = ctx.createLinearGradient(0, sko.y, 0, top); g.addColorStop(0, hexA(sko.PA, 0.45 * I)); g.addColorStop(1, hexA('#ffffff', 0));
+            ctx.fillStyle = g; ctx.fillRect(cx - w / 2, top, w, sko.y - top);
+            break;
+        }
+        case 'crystal': {
+            // Frost on the ground, and light glowing up through the spires
+            g = ctx.createRadialGradient(sko.x, sko.y, 0, sko.x, sko.y, e * 9); g.addColorStop(0, hexA('#ffffff', 0.55 * I)); g.addColorStop(0.5, hexA(sko.PB, 0.3 * I)); g.addColorStop(1, hexA(sko.PB, 0));
+            ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sko.x, sko.y, e * 9, e * 4.5, 0, 0, TAU); ctx.fill();
+            break;
+        }
+        default:
+            if (spec.strike && sko.thud) {
+                // The sword's holy glow, and cracks in the ground round it
+                g = ctx.createRadialGradient(sko.x, sko.y - e * 5, 0, sko.x, sko.y - e * 5, e * 9); g.addColorStop(0, hexA('#ffffff', 0.5 * I)); g.addColorStop(1, hexA(sko.PA, 0));
+                ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sko.x, sko.y - e * 5, e * 9, 0, TAU); ctx.fill();
+                ctx.strokeStyle = hexA(sko.PA, 0.9 * I); ctx.lineWidth = 2; ctx.beginPath();
+                for (let i = 0; i < 9; i++) { const a = i / 9 * TAU + 0.2, L = e * (5 + 3 * Math.sin(i * 5.1)); ctx.moveTo(sko.x, sko.y); ctx.lineTo(sko.x + Math.cos(a) * L * 0.5, sko.y + Math.sin(a) * L * 0.25 + 3); ctx.lineTo(sko.x + Math.cos(a + 0.25) * L, sko.y + Math.sin(a + 0.25) * L * 0.5); }
+                ctx.stroke();
+            }
+    }
+    ctx.restore();
+}
+function drawDivineFront(sko) {
+    const spec = sko.spec;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    if (spec.orbits) for (const c of sko.cubes) if (c.electron && c.set) {
+        // Each electron glows
+        const g = ctx.createRadialGradient(c.x, c.y - c.z, 0, c.x, c.y - c.z, sko.e * 2.2); g.addColorStop(0, hexA('#ffffff', 0.9)); g.addColorStop(0.3, hexA(sko.PB, 0.6)); g.addColorStop(1, hexA(sko.PB, 0));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y - c.z, sko.e * 2.2, 0, TAU); ctx.fill();
+    }
+    if (spec.shape === 'wings') {
+        // The halo glows
+        const h = sko.cubes.filter(c => c.halo && c.set);
+        if (h.length) { const x = h.reduce((a, c) => a + c.x, 0) / h.length, y = h.reduce((a, c) => a + c.y - c.z, 0) / h.length; ctx.strokeStyle = hexA('#ffffff', 0.8); ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y, sko.e * 2.8, sko.e * 1, 0, 0, TAU); ctx.stroke(); }
+    }
+    ctx.restore();
+}
 function drawSkull(sko) {
     const set = sko.cubes.filter(c => c.set && c.life > 0);
+    const spec = sko.spec;
+    if (spec.divine) drawDivineBack(sko, set.length / sko.cubes.length);
     if (!set.length) return;
-    const f = set.length / sko.cubes.length, spec = sko.spec;
+    const f = set.length / sko.cubes.length;
     if (sko.hover > 4) {
         ctx.globalAlpha = 0.3 * f / (1 + sko.hover / 150); ctx.fillStyle = '#000';
         ctx.beginPath(); ctx.ellipse(sko.x, sko.y + 4, sko.e * 5.5, sko.e * 2.4, 0, 0, TAU); ctx.fill();
@@ -7748,6 +7897,7 @@ function drawSkull(sko) {
         ctx.restore();
     }
     for (const c of set) drawCube(c);
+    if (spec.divine) drawDivineFront(sko);
 }
 
 // Tumbling through the air: gravity, bounces, skids
@@ -14612,6 +14762,15 @@ function drawParticles() {
         switch (p.type) {
             case 'cube': if (!(p.sk && p.set)) drawCube(p); break;
             case 'cubeskull': drawSkull(p.sk); break;
+            case 'flare': {
+                // A solar flare: a loop of fire arcing up off the sun and back
+                const k = 1 - t, a = p.a, a2 = p.a + 0.7, r0 = p.r0, h = p.size * Math.sin(k * Math.PI);
+                const x1 = p.x + Math.cos(a) * r0, y1 = p.y + Math.sin(a) * r0, x2 = p.x + Math.cos(a2) * r0, y2 = p.y + Math.sin(a2) * r0, mx = p.x + Math.cos(a + 0.35) * (r0 + h * 2), my = p.y + Math.sin(a + 0.35) * (r0 + h * 2);
+                ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+                for (const [col, lw] of [[hexA(p.color2, 0.5 * t), 7], [hexA(p.color, 0.9 * t), 3], [hexA('#ffffff', 0.8 * t), 1.2]]) { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke(); }
+                ctx.restore();
+                break;
+            }
             case 'fireball': {
                 // A fireball in the effect's colours, swelling and fading
                 const k = 1 - t, r = p.size * (0.35 + k * 0.85), g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
@@ -15693,7 +15852,7 @@ $('fxsel-back').addEventListener('click', () => { $('fxsel').classList.add('hidd
 // code on its own little world and canvas (the game's globals are swapped over just while it draws).
 const fxClip = {
     on: false, last: 0, S: null,
-    restart() { this.S = { mode: 'demo', time: 0, t: 0, dead: false, particles: [], floats: [], fighters: [], cam: { x: 0, y: ((FX_SPECS[fxView] || {}).launch || (FX_SPECS[fxView] || {}).rise) ? -80 : -44 }, zoom: ((FX_SPECS[fxView] || {}).launch || (FX_SPECS[fxView] || {}).rise) ? 1.15 : 1.35, shake: 0, player: null, world: { decals: [] } }; },
+    restart() { this.S = { mode: 'demo', time: 0, t: 0, dead: false, particles: [], floats: [], fighters: [], cam: { x: 0, y: ((FX_SPECS[fxView] || {}).launch || (FX_SPECS[fxView] || {}).rise) ? -80 : (FX_SPECS[fxView] || {}).divine ? -60 : -44 }, zoom: ((FX_SPECS[fxView] || {}).launch || (FX_SPECS[fxView] || {}).rise) ? 1.15 : (FX_SPECS[fxView] || {}).divine ? 1.05 : 1.35, shake: 0, player: null, world: { decals: [] } }; },
     start() { if (this.on) return; this.on = true; this.restart(); this.last = performance.now(); requestAnimationFrame(t => this.frame(t)); },
     stop() { this.on = false; },
     frame(now) {
