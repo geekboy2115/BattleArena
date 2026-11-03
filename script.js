@@ -6500,14 +6500,7 @@ function killFighter(t, killer, weapon) {
 
     dropDeathWeapons(t);
     if (!t.escaped && !t.vaporized) {
-        if (G.mode === 'demo' || deathFx === 'classic') {
-            addCorpse(t);
-            if (inView(t.x, t.y, 100)) {
-                burst(t.x, t.y, 22, t.color, 260, 'blood');
-                burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
-                G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 50, color: t.color });
-            }
-        } else cubeDeath(t);
+        playDeathFx(t, G.mode === 'demo' ? 'classic' : deathFx);
     }
 
     if (G.mode !== 'demo') addKillfeed(t, killer, weapon);
@@ -6738,6 +6731,71 @@ const CUBE_FACES = [
     [[0, 1, 0], [[-1, 1, -1], [-1, 1, 1], [1, 1, 1], [1, 1, -1]], 0], [[0, -1, 0], [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]], 1],
     [[0, 0, 1], [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]], 0], [[0, 0, -1], [[-1, -1, -1], [-1, 1, -1], [1, 1, -1], [1, -1, -1]], 1]
 ];
+// Plays a death effect (also used by the clip on the Effects page)
+function playDeathFx(t, fx) {
+    if (fx === 'classic') {
+        addCorpse(t);
+        if (inView(t.x, t.y, 100)) {
+            burst(t.x, t.y, 22, t.color, 260, 'blood');
+            burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
+            G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 50, color: t.color });
+        }
+    } else if (fx === 'sketch' || fx === 'flat') {
+        if (!inView(t.x, t.y, 160)) return;
+        const k = t.r / CONFIG.RADIUS;
+        G.particles.push({ type: fx === 'sketch' ? 'sketchskull' : 'pixskull', x: t.x, y: t.y, vx: 0, vy: 0, life: fx === 'sketch' ? 1.5 : 1.7, max: fx === 'sketch' ? 1.5 : 1.7, k, seed: Math.random(), color: t.color });
+        G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 60 * k, color: fx === 'sketch' ? '#ffffff' : '#ffff46' });
+        burst(t.x, t.y, fx === 'sketch' ? 8 : 14, fx === 'sketch' ? '#ffffff' : '#ffff46', 220, 'glow');
+        Sound.pop && Sound.volAt(t.x, t.y) > 0.03 && Sound.pop();
+    } else cubeDeath(t);
+}
+
+// Uncommon: a quick sketch of a skull - just the outline of the head, the eyes and nose, drawn in wobbly lines
+function drawSketchSkull(p) {
+    const age = p.max - p.life, k = p.k, pop = age < 0.15 ? 1.25 * Math.sin(age / 0.15 * Math.PI / 2) : 1 + 0.25 * Math.max(0, 1 - (age - 0.15) * 6);
+    const a = Math.min(1, p.life / 0.45), S = 30 * k * pop, cx = p.x, cy = p.y - 34 * k - age * 18;
+    // The lines redraw every so often, so it "boils" like a sketch
+    const rnd = seededRand(Math.floor(p.seed * 1e6) + Math.floor(age * 12)), j = () => (rnd() - 0.5) * 2.2 * k;
+    const line = (pts, close) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(cx + x * S + j(), cy + y * S + j()) : ctx.moveTo(cx + x * S + j(), cy + y * S + j())); if (close) ctx.closePath(); ctx.stroke(); };
+    const ring = (ox, oy, r) => { const pts = []; for (let i = 0; i < 9; i++) { const t = i / 9 * TAU; pts.push([ox + Math.cos(t) * r, oy + Math.sin(t) * r]); } line(pts, true); };
+    // The head: round on top, coming in at the cheeks, and left open at the bottom (no jaw)
+    const head = []; for (let i = 0; i <= 12; i++) { const t = Math.PI * 0.82 + i / 12 * Math.PI * 1.36; head.push([Math.cos(t), Math.sin(t) * 0.95 - 0.05]); }
+    head.push([0.62, 0.62]); head.unshift([-0.62, 0.62]);
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const [col, lw] of [['rgba(0,255,232,0.5)', 5 * k], ['#ffffff', 2 * k]]) {
+        ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = lw;
+        line(head); ring(-0.38, 0.05, 0.22); ring(0.38, 0.05, 0.22);
+        line([[-0.08, 0.42], [0, 0.3], [0.08, 0.42]]);
+    }
+    ctx.restore();
+}
+
+// Rare: the whole skull, flat - plain squares, no depth and no shading. It pops up, holds, then breaks apart
+function drawPixSkull(p) {
+    const age = p.max - p.life, F = SKULL.face, H = F.length, W = F[0].length, e = 4.6 * p.k;
+    const pop = age < 0.14 ? Math.sin(age / 0.14 * Math.PI / 2) * 1.15 : 1 + 0.15 * Math.max(0, 1 - (age - 0.14) * 7);
+    const cx = p.x, cy = p.y - 36 * p.k - age * 6, s = e * pop;
+    ctx.globalAlpha = Math.min(1, p.life / 0.3);
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+        const ch = F[r][c]; if (ch === '.') continue;
+        ctx.fillStyle = ch === 'T' ? '#00ffe8' : '#ffff46';
+        ctx.fillRect(cx + (c - W / 2) * s, cy + (r - H / 2) * s, s + 0.5, s + 0.5);
+    }
+    // Eyes
+    ctx.fillStyle = '#00ffe8';
+    for (const c0 of [2, 6]) ctx.fillRect(cx + (c0 + 1 - W / 2) * s, cy + (5 - H / 2) * s, s, s);
+    ctx.globalAlpha = 1;
+}
+function pixSkullBreak(p) {
+    const F = SKULL.face, H = F.length, W = F[0].length, e = 4.6 * p.k, cx = p.x, cy = p.y - 36 * p.k - p.max * 6;
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+        if (F[r][c] === '.' || G.particles.length > 3000) continue;
+        const x = cx + (c - W / 2 + 0.5) * e, y = cy + (r - H / 2 + 0.5) * e, a = Math.atan2(y - cy, x - cx), sp = rand(80, 220);
+        G.particles.push({ type: 'chunk', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.4, 0.8), max: 0.8, size: e, color: F[r][c] === 'T' ? '#00ffe8' : '#ffff46', rot: 0, spin: rand(-8, 8) });
+    }
+    G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 70 * p.k, color: '#ffff46' });
+}
+
 function cubeDeath(t) {
     if (!inView(t.x, t.y, 160) || G.particles.length > 3600) return;
     const k = t.r / CONFIG.RADIUS, sk = Math.min(2.2, Math.sqrt(k));
@@ -12010,6 +12068,7 @@ function updateParticles(dt) {
         p.life -= dt;
         if (p.type === 'cube') { updateCube(p, dt); continue; }
         if (p.type === 'cubeskull') { if (p.life > 0) updateSkull(p, dt); continue; }
+        if (p.type === 'pixskull' && p.life <= 0 && !p.broke) { p.broke = true; pixSkullBreak(p); continue; }
         if (p.type === 'shell' && p.life <= 0) addCasing(p.x, p.y);
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -13710,6 +13769,8 @@ function drawParticles() {
         switch (p.type) {
             case 'cube': if (!(p.sk && p.set)) drawCube(p); break;
             case 'cubeskull': drawSkull(p.sk); break;
+            case 'sketchskull': drawSketchSkull(p); break;
+            case 'pixskull': drawPixSkull(p); break;
             case 'twinkle': {
                 // A four-point sparkle that grows then shrinks
                 const k = Math.sin(t * Math.PI), r = p.size * k, w = r * 0.22;
@@ -14651,6 +14712,8 @@ $('mode-go').addEventListener('click', () => menuStep('setup'));
 // with the one you've picked on top (rarity, name and a clip of it playing) and all of them in a list below.
 const DEATH_FX = [
     { id: 'classic', name: 'Classic', rarity: 'common', desc: 'A body and blood.' },
+    { id: 'sketch', name: 'Skull Sketch', rarity: 'uncommon', desc: 'A quick, wobbly sketch of a skull pops up and fades.' },
+    { id: 'flat', name: 'Flat Skull', rarity: 'rare', desc: 'A whole skull of flat squares pops up, then breaks apart.' },
     { id: 'burst', name: 'Cube Burst', rarity: 'epic', desc: 'Bursts into neon cubes that crackle and pop.' },
     { id: 'skull', name: 'Cube Skull', rarity: 'legendary', desc: 'The cubes pull together into a 3D skull that laughs and explodes.' }
 ];
@@ -14687,13 +14750,12 @@ const fxClip = {
         const keep = { G, ctx, viewW, viewH };
         G = this.S; ctx = cv.getContext('2d'); viewW = w; viewH = h;
         try {
-            const S = this.S, cycle = deathFx === 'skull' ? 5.6 : deathFx === 'burst' ? 4.2 : 3.2;
+            const S = this.S, cycle = { skull: 5.6, burst: 4.2, flat: 3.2, sketch: 3, classic: 3.2 }[deathFx] || 3.2;
             S.t += dt; S.time += dt * 1000;
             const f = { x: 0, y: 0, r: CONFIG.RADIUS, angle: -0.4, color: '#ff8a3d', dark: shade('#ff8a3d', -0.35), light: shade('#ff8a3d', 0.25), soldier: false, killedBy: null };
             if (!S.dead && S.t > 0.8) {
                 S.dead = true;
-                if (deathFx === 'classic') { addCorpse(f); burst(0, 0, 22, f.color, 260, 'blood'); burst(0, 0, 10, '#ff4f6d', 180, 'blood'); S.particles.push({ type: 'ring', x: 0, y: 0, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 50, color: f.color }); }
-                else cubeDeath(f);
+                playDeathFx(f, deathFx);
             }
             updateParticles(dt);
             if (S.t > cycle) this.restart();
