@@ -966,7 +966,7 @@ body.fs #fs-btn { opacity: 0.55; }
 .fx-label { font-family: 'Black Ops One', sans-serif; font-size: 13px; letter-spacing: 2px; color: #00ffe8; text-shadow: 0 0 8px rgba(0,255,232,0.6); }
 .fx-cur { font-size: 13px; font-weight: 700; letter-spacing: 1px; }
 .fx-go { font-size: 20px; line-height: 1; color: #00ffe8; }
-.fx-card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+#fxsel .fx-card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 24px) !important; max-height: calc(100dvh - 24px) !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .fx-top { text-align: center; margin-bottom: 14px; }
 .fx-rarity { font-family: 'Black Ops One', sans-serif; font-size: 30px; letter-spacing: 3px; line-height: 1.1; }
 .fx-name { font-size: 15px; font-weight: 700; letter-spacing: 1px; opacity: 0.85; margin-bottom: 8px; }
