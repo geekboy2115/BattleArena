@@ -6704,9 +6704,9 @@ function cubeDeath(t) {
         G.particles.push({
             type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(260, 680),
             vx: Math.cos(a) * sp + Math.cos(ka) * kick, vy: Math.sin(a) * sp + Math.sin(ka) * kick,
-            size: rand(5, 10) * Math.min(2, Math.sqrt(k) * 1.1),
+            size: rand(3.5, 7) * Math.min(2, Math.sqrt(k) * 1.1),
             ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-12, 12), wy: rand(-12, 12), wz: rand(-8, 8),
-            life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], zapT: rand(0.1, 0.6), seedT: rand(0, 10),
+            life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], zapT: rand(0.02, 0.15), seedT: rand(0, 10),
             color: i % 2 ? '#00f5d4' : '#f4ff3a'
         });
     }
@@ -6741,10 +6741,10 @@ function updateCube(p, dt) {
     p.ax += p.wx * dt; p.ay += p.wy * dt; p.az += p.wz * dt;
     // Electricity: little arcs jump off it
     if ((p.zapT -= dt) <= 0) {
-        p.zapT = rand(0.15, 0.7) * (p.life / p.max + 0.3);
-        const a = rand(0, TAU), L = rand(8, 22);
+        p.zapT = rand(0.04, 0.16) * (p.life / p.max + 0.4);
+        const a = rand(0, TAU), L = rand(6, 16);
         G.particles.push({ type: 'zap', x: p.x, y: p.y - p.z, x2: p.x + Math.cos(a) * L, y2: p.y + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: rand(0.06, 0.14), max: 0.14, seed: Math.random(), color: Math.random() < 0.5 ? '#e8ffff' : p.color });
-        if (Math.random() < 0.2) Sound.zap(Sound.volAt(p.x, p.y) * 0.25);
+        if (Math.random() < 0.04) Sound.zap(Sound.volAt(p.x, p.y) * 0.25);
     }
     // Sparkles: a glint pops up on it now and then
     if (Math.random() < dt * 3) G.particles.push({ type: 'twinkle', x: p.x + rand(-p.size, p.size), y: p.y - p.z + rand(-p.size, p.size), vx: 0, vy: -20, life: rand(0.2, 0.4), max: 0.4, size: rand(4, 8), color: Math.random() < 0.5 ? '#ffffff' : p.color });
