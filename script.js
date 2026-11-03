@@ -6700,13 +6700,13 @@ function cubeDeath(t) {
     // Which way the hit came from, so the pieces get knocked away from the killer
     const ka = t.killedBy && t.killedBy !== t ? Math.atan2(t.y - t.killedBy.y, t.x - t.killedBy.x) : rand(0, TAU);
     for (let i = 0; i < n; i++) {
-        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(120, 620) * Math.sqrt(k), kick = rand(60, 320);
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(40, 250) * Math.sqrt(k), kick = rand(20, 120);
         G.particles.push({
-            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(260, 680),
+            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(220, 520),
             vx: Math.cos(a) * sp + Math.cos(ka) * kick, vy: Math.sin(a) * sp + Math.sin(ka) * kick,
             size: rand(3.5, 7) * Math.min(2, Math.sqrt(k) * 1.1),
             ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-12, 12), wy: rand(-12, 12), wz: rand(-8, 8),
-            life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], zapT: rand(0.02, 0.15), seedT: rand(0, 10),
+            life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], zapT: rand(0.3, 0.6), seedT: rand(0, 10),
             color: i % 2 ? '#00f5d4' : '#f4ff3a'
         });
     }
@@ -6731,6 +6731,8 @@ function updateCube(p, dt) {
     const ground = p.z <= 0;
     if (ground) {
         p.z = 0;
+        // The first time it hits the ground it lets out a crackle, and from then on it fizzles hard
+        if (!p.landed) { p.landed = true; p.zapT = 0; }
         if (p.vz < -120) { p.vz = -p.vz * 0.4; p.vx *= 0.65; p.vy *= 0.65; p.wx *= 0.6; p.wy *= 0.6; p.wz *= 0.6; }
         else p.vz = 0;
     }
@@ -6741,7 +6743,7 @@ function updateCube(p, dt) {
     p.ax += p.wx * dt; p.ay += p.wy * dt; p.az += p.wz * dt;
     // Electricity: little arcs jump off it
     if ((p.zapT -= dt) <= 0) {
-        p.zapT = rand(0.04, 0.16) * (p.life / p.max + 0.4);
+        p.zapT = p.landed ? rand(0.03, 0.12) * (p.life / p.max + 0.4) : rand(0.35, 0.8);
         const a = rand(0, TAU), L = rand(6, 16);
         G.particles.push({ type: 'zap', x: p.x, y: p.y - p.z, x2: p.x + Math.cos(a) * L, y2: p.y + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: rand(0.06, 0.14), max: 0.14, seed: Math.random(), color: Math.random() < 0.5 ? '#e8ffff' : p.color });
         if (Math.random() < 0.04) Sound.zap(Sound.volAt(p.x, p.y) * 0.25);
