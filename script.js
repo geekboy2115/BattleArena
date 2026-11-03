@@ -6692,18 +6692,13 @@ function updateVictory(realDt) {
 }
 
 // ---------- Effects ----------
-// Death: the body breaks up into neon yellow and teal cubes that tumble to the ground,
-// crackle with electricity, and fizzle and pop as they fade away
-// Death: the body breaks up into spinning 3D cubes (three neon yellow sides, three teal sides)
-// that blast out, tumble to the ground, crackle with electricity and sparkle, then explode one by one
-// The death effect: the body bursts into neon cubes, which then fly back and stack themselves into a neat
-// checkerboard pyramid where it fell; the pile pulses and crackles, then pops apart from the top down.
-// A few loose cubes scatter around it and fizzle out on their own.
-// Death effects (chosen in EFFECTS on the title screen):
-//  skull   - the body bursts into neon cubes that scatter, then drift back up one by one into a big
-//            3D skull that turns, chatters its jaw, charges up and explodes
-//  burst   - the body bursts into neon cubes that fizzle and pop where they land
-//  classic - a body and blood
+// Death effects (chosen on the Effects page), one for each rarity:
+//  classic (common)    - a body and blood
+//  sketch (uncommon)   - a few cubes come together into the outline of a skull, then just drop
+//  flat (rare)         - a whole flat skull of cubes, which breaks apart
+//  skull (epic)        - a skull of cubes with some depth: it turns, chatters its jaw and explodes in a circle
+//  skull3d (legendary) - a solid 3D skull of cubes that spins right round, chatters and explodes in a circle
+// The cubes are real 3D cubes: three neon yellow sides and three teal sides.
 const CUBES = { yellow: [255, 255, 70], teal: [0, 255, 232], loose: 120, life: [1.8, 3.2], grav: 1100, tilt: -0.55 };
 const SKULL = {
     // Front view, 11 wide: X bone, T teeth
@@ -6721,10 +6716,65 @@ const SKULL = {
         '..T.T.T.T..',
         '..XXXXXXX..'
     ],
-    gather: [0.5, 1.15], formBy: 2.0, explode: 3.1, charge: 0.5, hover: 52, pitch: 0.32, spring: 60, damp: 10
+    pitch: 0.32, spring: 60, damp: 10
 };
-let deathFx = 'skull';
-try { deathFx = localStorage.getItem('ba_deathfx') || 'skull'; } catch (e) {}
+// How each skull tier behaves (the better the rarity, the more it does)
+const SKULLS = {
+    sketch: { cells: 'outline', e: 5.5, hover: 42, spin: 0, wobble: 0.12, jaw: false, eyes: false, sparks: 0, twinkle: 0, gather: [0.3, 0.6], formBy: 1.1, explode: 1.9, charge: 0, end: 'drop', loose: 0, intro: 1 },
+    flat: { cells: 'flat', e: 5.5, hover: 48, spin: 0, wobble: 0.22, jaw: false, eyes: false, sparks: 0.25, twinkle: 0.1, gather: [0.35, 0.8], formBy: 1.4, explode: 2.5, charge: 0.25, end: 'break', loose: 6, intro: 2 },
+    skull: { cells: 'layered', e: 6, hover: 52, spin: 0, wobble: 0.6, jaw: true, eyes: true, eyeW: 0, sparks: 1, twinkle: 0.25, gather: [0.5, 1.15], formBy: 2.0, explode: 3.1, charge: 0.5, end: 'circle', loose: 14, intro: 3 },
+    skull3d: { cells: 'solid', e: 5, hover: 62, spin: 2.1, wobble: 0, jaw: true, eyes: true, eyeW: -2, sparks: 1, twinkle: 0.25, gather: [0.5, 1.3], formBy: 2.3, explode: 4.0, charge: 0.6, end: 'circle', loose: 18, intro: 3 }
+};
+let deathFx = 'skull3d';
+try { deathFx = localStorage.getItem('ba_deathfx') || 'skull3d'; } catch (e) {}
+if (deathFx === 'burst') deathFx = 'skull';
+
+// The cubes that make up each skull, in cube units: u across, v down, w into the screen (front is w <= 0)
+const skullCellCache = {};
+function skullCells(kind) {
+    if (skullCellCache[kind]) return skullCellCache[kind];
+    const F = SKULL.face, H = F.length, W = F[0].length, out = [];
+    const at = (r, c) => r >= 0 && r < H && c >= 0 && c < W && F[r][c] !== '.';
+    const cell = (r, c, w, o) => out.push(Object.assign({ u: c - (W - 1) / 2, v: r - (H - 1) / 2, w, flip: true, color: '#ffff46', eye: false, jaw: r >= 10 }, o));
+    if (kind === 'outline' || kind === 'flat') {
+        for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+            if (!at(r, c)) continue;
+            const edge = !at(r - 1, c) || !at(r + 1, c) || !at(r, c - 1) || !at(r, c + 1);
+            // The sketch is just the edges, with gaps in it
+            if (kind === 'outline' && (!edge || (r * 7 + c * 3) % 5 === 0)) continue;
+            cell(r, c, 0, F[r][c] === 'T' ? { flip: false, color: '#00ffe8' } : {});
+        }
+    } else if (kind === 'layered') {
+        // A front layer of bone, and a back layer round the edge and behind the eyes and nose
+        const inside = (r, c) => { if (r > 9) return false; let L = -1, R = -1; for (let i = 0; i < W; i++) if (at(r, i)) { if (L < 0) L = i; R = i; } return L >= 0 && c >= L && c <= R; };
+        for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
+            if (at(r, c)) cell(r, c, 0, F[r][c] === 'T' ? { flip: false, color: '#00ffe8' } : {});
+            if (inside(r, c)) {
+                const hole = !at(r, c), edge = !inside(r - 1, c) || !inside(r + 1, c) || !inside(r, c - 1) || !inside(r, c + 1);
+                if (hole || edge) cell(r, c, 1, { flip: false, color: '#00ffe8', eye: hole && r >= 4 && r <= 6 });
+            }
+        }
+    } else {
+        // Solid: a round cranium, cheekbones and a jaw, with the eye sockets, nose and gaps between the teeth cut out.
+        // Only the outside shell is kept (the inside could never be seen)
+        const eyeHole = (x, y, z) => z < 0.5 && ((x - 2) ** 2 + (y - 1) ** 2 <= 1.8 || (x + 2) ** 2 + (y - 1) ** 2 <= 1.8);
+        const carved = (x, y, z) => eyeHole(x, y, z) || (Math.abs(x) <= 0.5 && y >= 3 && y <= 4 && z < -1.5) || (y === 6 && x % 2 !== 0 && z <= -3);
+        const body = (x, y, z) =>
+            ((x / 5.2) ** 2 + ((y + 1) / 4.7) ** 2 + ((z - 0.4) / 4.9) ** 2 <= 1 && y <= 3) ||
+            (y >= 1 && y <= 5 && Math.abs(x) <= 4.3 - (y - 1) * 0.45 && z >= -4.2 && z <= 1.6) ||
+            (y >= 6 && y <= 7 && Math.abs(x) <= 3.2 && z >= -3.8 && z <= -0.4);
+        const solid = (x, y, z) => body(x, y, z) && !carved(x, y, z);
+        const N = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+        for (let x = -6; x <= 6; x++) for (let y = -7; y <= 8; y++) for (let z = -6; z <= 6; z++) {
+            if (!solid(x, y, z) || N.every(([a, b, c]) => solid(x + a, y + b, z + c))) continue;
+            const eye = N.some(([a, b, c]) => eyeHole(x + a, y + b, z + c) && body(x + a, y + b, z + c));
+            const tooth = y === 6 && z === -3;
+            out.push({ u: x, v: y - 1, w: z, flip: !(eye || tooth), color: eye || tooth ? '#00ffe8' : '#ffff46', eye, jaw: y >= 6 });
+        }
+    }
+    return (skullCellCache[kind] = out);
+}
+
 // The six faces: [normal, the four corners], +x +y +z are neon yellow, -x -y -z are teal
 const CUBE_FACES = [
     [[1, 0, 0], [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]], 0], [[-1, 0, 0], [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]], 1],
@@ -6740,122 +6790,59 @@ function playDeathFx(t, fx) {
             burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
             G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 50, color: t.color });
         }
-    } else if (fx === 'sketch' || fx === 'flat') {
-        if (!inView(t.x, t.y, 160)) return;
-        const k = t.r / CONFIG.RADIUS;
-        G.particles.push({ type: fx === 'sketch' ? 'sketchskull' : 'pixskull', x: t.x, y: t.y, vx: 0, vy: 0, life: fx === 'sketch' ? 1.5 : 1.7, max: fx === 'sketch' ? 1.5 : 1.7, k, seed: Math.random(), color: t.color });
-        G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 60 * k, color: fx === 'sketch' ? '#ffffff' : '#ffff46' });
-        burst(t.x, t.y, fx === 'sketch' ? 8 : 14, fx === 'sketch' ? '#ffffff' : '#ffff46', 220, 'glow');
-        Sound.pop && Sound.volAt(t.x, t.y) > 0.03 && Sound.pop();
-    } else cubeDeath(t);
+    } else cubeDeath(t, fx);
 }
 
-// Uncommon: a quick sketch of a skull - just the outline of the head, the eyes and nose, drawn in wobbly lines
-function drawSketchSkull(p) {
-    const age = p.max - p.life, k = p.k, pop = age < 0.15 ? 1.25 * Math.sin(age / 0.15 * Math.PI / 2) : 1 + 0.25 * Math.max(0, 1 - (age - 0.15) * 6);
-    const a = Math.min(1, p.life / 0.45), S = 30 * k * pop, cx = p.x, cy = p.y - 34 * k - age * 18;
-    // The lines redraw every so often, so it "boils" like a sketch
-    const rnd = seededRand(Math.floor(p.seed * 1e6) + Math.floor(age * 12)), j = () => (rnd() - 0.5) * 2.2 * k;
-    const line = (pts, close) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(cx + x * S + j(), cy + y * S + j()) : ctx.moveTo(cx + x * S + j(), cy + y * S + j())); if (close) ctx.closePath(); ctx.stroke(); };
-    const ring = (ox, oy, r) => { const pts = []; for (let i = 0; i < 9; i++) { const t = i / 9 * TAU; pts.push([ox + Math.cos(t) * r, oy + Math.sin(t) * r]); } line(pts, true); };
-    // The head: round on top, coming in at the cheeks, and left open at the bottom (no jaw)
-    const head = []; for (let i = 0; i <= 12; i++) { const t = Math.PI * 0.82 + i / 12 * Math.PI * 1.36; head.push([Math.cos(t), Math.sin(t) * 0.95 - 0.05]); }
-    head.push([0.62, 0.62]); head.unshift([-0.62, 0.62]);
-    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (const [col, lw] of [['rgba(0,255,232,0.5)', 5 * k], ['#ffffff', 2 * k]]) {
-        ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = lw;
-        line(head); ring(-0.38, 0.05, 0.22); ring(0.38, 0.05, 0.22);
-        line([[-0.08, 0.42], [0, 0.3], [0.08, 0.42]]);
-    }
-    ctx.restore();
-}
-
-// Rare: the whole skull, flat - plain squares, no depth and no shading. It pops up, holds, then breaks apart
-function drawPixSkull(p) {
-    const age = p.max - p.life, F = SKULL.face, H = F.length, W = F[0].length, e = 4.6 * p.k;
-    const pop = age < 0.14 ? Math.sin(age / 0.14 * Math.PI / 2) * 1.15 : 1 + 0.15 * Math.max(0, 1 - (age - 0.14) * 7);
-    const cx = p.x, cy = p.y - 36 * p.k - age * 6, s = e * pop;
-    ctx.globalAlpha = Math.min(1, p.life / 0.3);
-    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
-        const ch = F[r][c]; if (ch === '.') continue;
-        ctx.fillStyle = ch === 'T' ? '#00ffe8' : '#ffff46';
-        ctx.fillRect(cx + (c - W / 2) * s, cy + (r - H / 2) * s, s + 0.5, s + 0.5);
-    }
-    // Eyes
-    ctx.fillStyle = '#00ffe8';
-    for (const c0 of [2, 6]) ctx.fillRect(cx + (c0 + 1 - W / 2) * s, cy + (5 - H / 2) * s, s, s);
-    ctx.globalAlpha = 1;
-}
-function pixSkullBreak(p) {
-    const F = SKULL.face, H = F.length, W = F[0].length, e = 4.6 * p.k, cx = p.x, cy = p.y - 36 * p.k - p.max * 6;
-    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
-        if (F[r][c] === '.' || G.particles.length > 3000) continue;
-        const x = cx + (c - W / 2 + 0.5) * e, y = cy + (r - H / 2 + 0.5) * e, a = Math.atan2(y - cy, x - cx), sp = rand(80, 220);
-        G.particles.push({ type: 'chunk', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.4, 0.8), max: 0.8, size: e, color: F[r][c] === 'T' ? '#00ffe8' : '#ffff46', rot: 0, spin: rand(-8, 8) });
-    }
-    G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 70 * p.k, color: '#ffff46' });
-}
-
-function cubeDeath(t) {
+function cubeDeath(t, fx) {
     if (!inView(t.x, t.y, 160) || G.particles.length > 3600) return;
+    const spec = SKULLS[fx] || null, intro = spec ? spec.intro : 3;
     const k = t.r / CONFIG.RADIUS, sk = Math.min(2.2, Math.sqrt(k));
     // Which way the hit came from, so the pieces get knocked away from the killer
     const ka = t.killedBy && t.killedBy !== t ? Math.atan2(t.y - t.killedBy.y, t.x - t.killedBy.x) : rand(0, TAU);
-    const group = [];
-    // A neon burn mark glows on the ground
-    addDecal({ kind: 'scorch', x: t.x, y: t.y, r: 70 * k, tint: Math.random() < 0.5 ? '0,255,232' : '255,255,70', life: 9000 });
+    const group = [], soft = intro === 1 ? 0.55 : intro === 2 ? 0.8 : 1;
+    if (intro === 3) addDecal({ kind: 'scorch', x: t.x, y: t.y, r: 70 * k, tint: Math.random() < 0.5 ? '0,255,232' : '255,255,70', life: 9000 });
     const spawn = (o) => {
-        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(40, 200) * sk, kick = rand(20, 90);
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(40, 200) * sk * soft, kick = rand(20, 90) * soft;
         const c = Object.assign({
-            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(260, 500),
+            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(260, 500) * soft,
             vx: Math.cos(a) * sp + Math.cos(ka) * kick, vy: Math.sin(a) * sp + Math.sin(ka) * kick,
             ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-14, 14), wy: rand(-14, 14), wz: rand(-9, 9),
-            zapT: rand(0.3, 0.6), seedT: rand(0, 10), age: 0, group
+            zapT: rand(0.3, 0.6), seedT: rand(0, 10), age: 0, group, spec
         }, o);
         G.particles.push(c); group.push(c);
         return c;
     };
-    if (deathFx === 'skull') {
-        // The skull: a front layer of bone, and a back layer round the edge and behind the eyes and nose
-        const e = 6 * sk, F = SKULL.face, H = F.length, W = F[0].length;
-        const sko = { x: t.x, y: t.y, e, hover: SKULL.hover * sk, yaw: 0, jaw: 0, age: 0, charge: 0, cubes: [], whoosh: false, formed: false, k };
-        G.particles.push({ type: 'cubeskull', sk: sko, x: t.x, y: t.y, vx: 0, vy: 0, life: SKULL.explode + 0.2, max: SKULL.explode + 0.2 });
-        const at = (r, c) => r >= 0 && r < H && c >= 0 && c < W && F[r][c] !== '.';
-        // Filled outline (rows down to the top of the jaw), so the eyes and nose show the back layer through them
-        const inside = (r, c) => { if (r > 9) return false; let L = -1, R = -1; for (let i = 0; i < W; i++) if (at(r, i)) { if (L < 0) L = i; R = i; } return L >= 0 && c >= L && c <= R; };
-        const add = (r, c, w, o) => {
-            const cube = spawn(Object.assign({ sk: sko, u: (c - (W - 1) / 2) * e, v: (r - (H - 1) / 2) * e, w: w * e, size: e, layer: 1,
-                jaw: r >= 10, life: 99, max: 99, gatherIn: rand(SKULL.gather[0], SKULL.gather[1]) }, o));
-            sko.cubes.push(cube);
-        };
-        for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) {
-            if (at(r, c)) add(r, c, 0, { flip: F[r][c] !== 'T', color: F[r][c] === 'T' ? '#00ffe8' : '#ffff46' });
-            if (inside(r, c)) {
-                const hole = !at(r, c), edge = !inside(r - 1, c) || !inside(r + 1, c) || !inside(r, c - 1) || !inside(r, c + 1);
-                if (hole || edge) add(r, c, 1, { flip: false, color: '#00ffe8', eye: hole && r >= 4 && r <= 6, layer: hole ? 0 : 1 });
-            }
-        }
-        for (let i = 0; i < 14; i++) spawn({ size: rand(3.5, 6) * sk, life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], color: i % 2 ? '#00ffe8' : '#ffff46' });
+    if (spec) {
+        const e = spec.e * sk;
+        const sko = { x: t.x, y: t.y, e, spec, hover: spec.hover * sk, yaw: 0, jaw: 0, age: 0, charge: 0, cubes: [], whoosh: false, formed: false, k };
+        G.particles.push({ type: 'cubeskull', sk: sko, x: t.x, y: t.y, vx: 0, vy: 0, life: spec.explode + 0.2, max: spec.explode + 0.2 });
+        for (const c of skullCells(spec.cells))
+            sko.cubes.push(spawn({ sk: sko, u: c.u * e, v: c.v * e, w: c.w * e, size: e, flip: c.flip, color: c.color, eye: c.eye && spec.eyes, jaw: c.jaw && spec.jaw,
+                life: 99, max: 99, gatherIn: rand(spec.gather[0], spec.gather[1]) }));
+        for (let i = 0; i < spec.loose; i++) spawn({ size: rand(3.5, 6) * sk, life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], color: i % 2 ? '#00ffe8' : '#ffff46' });
     } else {
         for (let i = 0; i < CUBES.loose * Math.min(2, k); i++) spawn({ size: rand(3.5, 7) * sk, life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], color: i % 2 ? '#00ffe8' : '#ffff46' });
     }
-    // The body flashes white and blows apart
+    // The moment it happens (bigger the better the rarity)
+    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 70 * k, color: '#00f5d4' });
+    burst(t.x, t.y, 8 * intro, '#00ffe8', 300, 'glow');
+    const v = Sound.volAt(t.x, t.y);
+    if (intro === 1) { if (v > 0.03) Sound.pop(); return; }
     G.particles.push({ type: 'glow', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.1, max: 0.1, size: t.r * 2.2, color: '#ffffff' });
-    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 120 * k, color: '#ffffff' });
-    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 85 * k, color: '#00f5d4' });
     G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 55 * k, color: '#f4ff3a' });
+    burst(t.x, t.y, 6 * intro, '#ffff46', 280, 'glow');
+    Sound.zap(v);
+    if (intro === 2) return;
+    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 120 * k, color: '#ffffff' });
     G.particles.push({ type: 'glow', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 34 * k, color: '#e8ffff' });
     for (let i = 0; i < 5; i++) {
         const a = rand(0, TAU), Lz = rand(25, 55) * k;
         G.particles.push({ type: 'zap', x: t.x, y: t.y, x2: t.x + Math.cos(a) * Lz, y2: t.y + Math.sin(a) * Lz, vx: 0, vy: 0, life: rand(0.12, 0.25), max: 0.25, seed: Math.random(), color: i % 2 ? '#f4ff3a' : '#00f5d4' });
     }
     for (let i = 0; i < 10; i++) { const a = rand(0, TAU), sp = rand(120, 380); G.particles.push({ type: 'twinkle', x: t.x, y: t.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), max: 0.7, size: rand(5, 9), color: i % 2 ? '#b6fff2' : '#fdffb0' }); }
-    burst(t.x, t.y, 18, '#00ffe8', 340, 'glow');
-    burst(t.x, t.y, 14, '#ffff46', 300, 'glow');
     const near = G.player && !G.player.dead ? Math.hypot(t.x - G.player.x, t.y - G.player.y) : 9999;
     if (near < 700) G.shake = Math.max(G.shake || 0, 7 * (1 - near / 700) + (t.killedBy === G.player ? 4 : 0));
-    const v = Sound.volAt(t.x, t.y);
-    Sound.zap(v); Sound.shatter(v);
+    Sound.shatter(v);
 }
 
 // Where a cube of the skull sits right now (the skull turns, bobs and works its jaw)
@@ -6872,66 +6859,77 @@ function skullSpot(c) {
 }
 
 function updateSkull(p, dt) {
-    const sko = p.sk;
+    const sko = p.sk, spec = sko.spec;
     sko.age += dt;
-    sko.yaw = Math.sin(sko.age * 1.7) * 0.6;
+    // The legendary one spins right round; the others just turn a little side to side
+    sko.yaw = spec.spin ? sko.age * spec.spin : Math.sin(sko.age * 1.7) * spec.wobble;
     sko.formed = sko.cubes.every(c => c.set);
     // Chattering jaw, once it's together
-    sko.jaw = sko.formed ? Math.max(0, Math.sin(sko.age * 16)) * sko.e * 0.7 : 0;
-    sko.charge = clamp((sko.age - (SKULL.explode - SKULL.charge)) / SKULL.charge, 0, 1);
-    if (sko.charge > 0 && !sko.charged) { sko.charged = true; const v = Sound.volAt(sko.x, sko.y); if (v > 0.03) Sound.tone(300, SKULL.charge, 'sawtooth', 0.06 * v, 2200); }
+    sko.jaw = spec.jaw && sko.formed ? Math.max(0, Math.sin(sko.age * 16)) * sko.e * 0.7 : 0;
+    sko.charge = spec.charge ? clamp((sko.age - (spec.explode - spec.charge)) / spec.charge, 0, 1) : 0;
+    const v = Sound.volAt(sko.x, sko.y);
+    if (sko.charge > 0 && !sko.charged) { sko.charged = true; if (v > 0.03 && spec.intro === 3) Sound.tone(300, spec.charge, 'sawtooth', 0.06 * v, 2200); }
     if (sko.formed && !sko.cackled) {
         sko.cackled = true;
-        G.particles.push({ type: 'ring', x: sko.x, y: sko.y - sko.hover, vx: 0, vy: 0, life: 0.4, max: 0.4, size: sko.e * 9, color: '#ffffff' });
-        const v = Sound.volAt(sko.x, sko.y);
-        if (v > 0.03) for (let i = 0; i < 5; i++) setTimeout(() => Sound.tone(rand(180, 240), 0.07, 'square', 0.05 * v, 120), i * 75);
+        if (spec.intro > 1) G.particles.push({ type: 'ring', x: sko.x, y: sko.y - sko.hover, vx: 0, vy: 0, life: 0.4, max: 0.4, size: sko.e * 9, color: '#ffffff' });
+        if (spec.jaw && v > 0.03) for (let i = 0; i < 5; i++) setTimeout(() => Sound.tone(rand(180, 240), 0.07, 'square', 0.05 * v, 120), i * 75);
     }
-    if (sko.age >= SKULL.explode) {
-        // BOOM: every cube is thrown out from the skull and goes loose, to land, fizzle and pop
-        p.life = 0;
-        const cx = sko.x, cy = sko.y - sko.hover;
-        // They go out in a circle: spread evenly all the way round, all at about the same speed, so it's a ring that grows
-        const live = sko.cubes.filter(c => c.life > 0), n = live.length, a0 = rand(0, TAU);
-        live.forEach((c, i) => {
-            const s = skullSpot(c), a = a0 + (i / n) * TAU * 3.0 + rand(-0.04, 0.04), sp = (i % 3 === 0 ? 260 : i % 3 === 1 ? 330 : 400) * Math.sqrt(sko.k) * rand(0.95, 1.05);
-            Object.assign(c, s, { sk: null, set: false, landed: false, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: rand(60, 160),
-                wx: rand(-16, 16), wy: rand(-16, 16), wz: rand(-10, 10), life: rand(1.1, 1.9), max: 1.9, zapT: rand(0.2, 0.5) });
-        });
-        // Shock rings rolling out along the ground with them
-        for (const [life, size, col] of [[0.55, sko.e * 30, '#ffffff'], [0.7, sko.e * 26, '#00ffe8'], [0.8, sko.e * 20, '#ffff46']])
-            G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life, max: life, size, color: col });
-        G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.25, max: 0.25, size: sko.e * 9, color: '#ffffff' });
-        G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.5, max: 0.5, size: sko.e * 22, color: '#00ffe8' });
-        G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.35, max: 0.35, size: sko.e * 15, color: '#ffff46' });
-        for (let i = 0; i < 14; i++) { const a = rand(0, TAU), sp = rand(150, 420); G.particles.push({ type: 'twinkle', x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.6), max: 0.6, size: rand(6, 10), color: i % 2 ? '#ffffff' : '#fdffb0' }); }
-        burst(cx, cy, 20, '#00ffe8', 420, 'glow'); burst(cx, cy, 16, '#ffff46', 380, 'glow');
-        const near = G.player && !G.player.dead ? Math.hypot(sko.x - G.player.x, sko.y - G.player.y) : 9999;
-        if (near < 700) G.shake = Math.max(G.shake || 0, 10 * (1 - near / 700));
-        const v = Sound.volAt(sko.x, sko.y);
-        Sound.boom(v * 0.6, 0.6); Sound.shatter(v);
+    if (sko.age < spec.explode) return;
+    p.life = 0;
+    const cx = sko.x, cy = sko.y - sko.hover, live = sko.cubes.filter(c => c.life > 0), n = live.length;
+    if (spec.end === 'drop') {
+        // Uncommon: it just falls apart
+        for (const c of live) Object.assign(c, skullSpot(c), { sk: null, set: false, landed: true, quiet: true, vx: rand(-30, 30), vy: rand(-20, 20), vz: rand(0, 60),
+            wx: rand(-8, 8), wy: rand(-8, 8), wz: rand(-6, 6), life: rand(0.4, 0.9), max: 0.9 });
+        return;
     }
+    if (spec.end === 'break') {
+        // Rare: it breaks apart and the cubes scatter and fade
+        for (const c of live) { const s = skullSpot(c), dx = s.x - cx, dy = (s.y - s.z) - cy, d = Math.hypot(dx, dy) || 1, sp = rand(70, 200);
+            Object.assign(c, s, { sk: null, set: false, landed: false, lite: true, vx: dx / d * sp, vy: rand(-30, 30), vz: -dy / d * sp * 0.5 + rand(40, 140),
+                wx: rand(-12, 12), wy: rand(-12, 12), wz: rand(-8, 8), life: rand(0.6, 1.1), max: 1.1, zapT: 9 }); }
+        G.particles.push({ type: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.35, max: 0.35, size: sko.e * 12, color: '#ffff46' });
+        if (v > 0.03) Sound.pop();
+        return;
+    }
+    // Epic and legendary: BOOM, out in a circle - spread evenly all the way round in growing rings
+    const a0 = rand(0, TAU);
+    live.forEach((c, i) => {
+        const s = skullSpot(c), a = a0 + (i / n) * TAU * 3.0 + rand(-0.04, 0.04), sp = (i % 3 === 0 ? 260 : i % 3 === 1 ? 330 : 400) * Math.sqrt(sko.k) * rand(0.95, 1.05);
+        Object.assign(c, s, { sk: null, set: false, landed: false, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: rand(60, 160),
+            wx: rand(-16, 16), wy: rand(-16, 16), wz: rand(-10, 10), life: rand(1.1, 1.9), max: 1.9, zapT: rand(0.2, 0.5) });
+    });
+    for (const [life, size, col] of [[0.55, sko.e * 30, '#ffffff'], [0.7, sko.e * 26, '#00ffe8'], [0.8, sko.e * 20, '#ffff46']])
+        G.particles.push({ type: 'ring', x: sko.x, y: sko.y, vx: 0, vy: 0, life, max: life, size, color: col });
+    G.particles.push({ type: 'glow', x: cx, y: cy, vx: 0, vy: 0, life: 0.25, max: 0.25, size: sko.e * 9, color: '#ffffff' });
+    for (let i = 0; i < 14; i++) { const a = rand(0, TAU), sp = rand(150, 420); G.particles.push({ type: 'twinkle', x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.6), max: 0.6, size: rand(6, 10), color: i % 2 ? '#ffffff' : '#fdffb0' }); }
+    burst(cx, cy, 20, '#00ffe8', 420, 'glow'); burst(cx, cy, 16, '#ffff46', 380, 'glow');
+    const near = G.player && !G.player.dead ? Math.hypot(sko.x - G.player.x, sko.y - G.player.y) : 9999;
+    if (near < 700) G.shake = Math.max(G.shake || 0, 10 * (1 - near / 700));
+    Sound.boom(v * 0.6, 0.6); Sound.shatter(v);
 }
 
 // The skull is drawn as one thing, back cubes first, with a shadow under it and its eyes glowing
 function drawSkull(sko) {
     const set = sko.cubes.filter(c => c.set && c.life > 0);
     if (!set.length) return;
-    const f = set.length / sko.cubes.length;
+    const f = set.length / sko.cubes.length, spec = sko.spec;
     ctx.globalAlpha = 0.3 * f; ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.ellipse(sko.x, sko.y + 4, sko.e * 5.5, sko.e * 2.4, 0, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
-    if (sko.formed) {
-        // Eye glow
+    set.sort((a, b) => b.depth - a.depth);
+    if (spec.eyes && sko.formed) {
+        // Eye glow (behind the front of the skull, so it shines out of the sockets)
         ctx.save(); ctx.globalCompositeOperation = 'lighter';
         const g = 0.35 + 0.25 * Math.sin(sko.age * 9) + sko.charge * 0.5;
         for (const side of [-1, 1]) {
-            const [X, Y] = skullRot(sko, side * 2 * sko.e, -0.5 * sko.e, 0);
+            const [X, Y, Z] = skullRot(sko, side * 2 * sko.e, -0.5 * sko.e, spec.eyeW * sko.e);
+            if (Z > sko.e * 2) continue;   // (turned away from you)
             ctx.globalAlpha = clamp(g, 0, 1); ctx.fillStyle = '#00ffe8';
             ctx.beginPath(); ctx.arc(sko.x + X, sko.y + 2 - sko.hover + Y, sko.e * 2.2, 0, TAU); ctx.fill();
         }
         ctx.restore();
     }
-    set.sort((a, b) => b.depth - a.depth);
     for (const c of set) drawCube(c);
 }
 
@@ -6944,10 +6942,12 @@ function cubePhysics(p, dt) {
         p.z = 0;
         // The first time a loose cube hits the ground it lets out a crackle, and from then on it fizzles hard
         if (!p.landed && !p.sk) {
-            p.landed = true; p.zapT = 0;
-            G.particles.push({ type: 'ring', x: p.x, y: p.y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: p.size * 2.2, color: p.color });
-            G.particles.push({ type: 'twinkle', x: p.x, y: p.y - 2, vx: 0, vy: -15, life: 0.3, max: 0.3, size: rand(5, 8), color: '#ffffff' });
-            if (Math.random() < 0.12) Sound.tink(Sound.volAt(p.x, p.y));
+            p.landed = true; p.zapT = p.lite ? 9 : 0;
+            if (!p.lite) {
+                G.particles.push({ type: 'ring', x: p.x, y: p.y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: p.size * 2.2, color: p.color });
+                G.particles.push({ type: 'twinkle', x: p.x, y: p.y - 2, vx: 0, vy: -15, life: 0.3, max: 0.3, size: rand(5, 8), color: '#ffffff' });
+                if (Math.random() < 0.12) Sound.tink(Sound.volAt(p.x, p.y));
+            }
         }
         if (p.vz < -120) { p.vz = -p.vz * 0.4; p.vx *= 0.65; p.vy *= 0.65; p.wx *= 0.6; p.wy *= 0.6; p.wz *= 0.6; }
         else p.vz = 0;
@@ -6961,13 +6961,13 @@ function cubePhysics(p, dt) {
 
 function updateCube(p, dt) {
     p.age += dt;
-    const sko = p.sk;
+    const sko = p.sk, spec = p.spec;
     if (!sko) cubePhysics(p, dt);
     else if (p.set) { Object.assign(p, skullSpot(p)); p.flash -= dt; }
     else if (p.age < p.gatherIn) cubePhysics(p, dt);
     else {
         // Drawn back up into the skull: pulled towards its spot like on a spring, still tumbling, and clicks in when it gets there
-        if (!p.pulled) { p.pulled = p.age; p.vz += rand(80, 200); if (!sko.whoosh) { sko.whoosh = true; const v = Sound.volAt(p.x, p.y); if (v > 0.03) Sound.tone(220, 0.9, 'sine', 0.08 * v, 900); } }
+        if (!p.pulled) { p.pulled = p.age; p.vz += rand(80, 200); if (!sko.whoosh) { sko.whoosh = true; const v = Sound.volAt(p.x, p.y); if (v > 0.03 && spec.intro > 1) Sound.tone(220, 0.9, 'sine', 0.08 * v, 900); } }
         const s = skullSpot(p), K = SKULL.spring, D = SKULL.damp;
         p.vx += ((s.x - p.x) * K - p.vx * D) * dt;
         p.vy += ((s.y - p.y) * K - p.vy * D) * dt;
@@ -6975,16 +6975,17 @@ function updateCube(p, dt) {
         p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
         p.ax += p.wx * dt; p.ay += p.wy * dt; p.az += p.wz * dt;
         const d = Math.hypot(s.x - p.x, s.y - p.y, s.z - p.z);
-        if ((d < 2.5 && Math.hypot(p.vx, p.vy, p.vz) < 90) || p.age - p.pulled > 1.1 || sko.age > SKULL.formBy) {
-            p.set = true; p.landed = true; p.flash = 0.2; p.zapT = rand(0.2, 0.8);
+        if ((d < 2.5 && Math.hypot(p.vx, p.vy, p.vz) < 90) || p.age - p.pulled > 1.1 || sko.age > spec.formBy) {
+            p.set = true; p.landed = true; p.flash = spec.intro > 1 ? 0.2 : 0; p.zapT = rand(0.2, 0.8);
             Object.assign(p, s);
-            if (Math.random() < 0.3) G.particles.push({ type: 'twinkle', x: p.x, y: p.y - p.z, vx: 0, vy: -10, life: 0.3, max: 0.3, size: rand(5, 8), color: '#ffffff' });
-            if (Math.random() < 0.1) Sound.tink(Sound.volAt(p.x, p.y));
+            if (spec.twinkle && Math.random() < 0.3) G.particles.push({ type: 'twinkle', x: p.x, y: p.y - p.z, vx: 0, vy: -10, life: 0.3, max: 0.3, size: rand(5, 8), color: '#ffffff' });
+            if (spec.intro > 1 && Math.random() < 0.1) Sound.tink(Sound.volAt(p.x, p.y));
         }
     }
-    // Electricity: little arcs jump off it
-    if ((p.zapT -= dt) <= 0) {
-        p.zapT = p.landed ? rand(0.03, 0.12) * (p.life / p.max + 0.4) * (p.set ? 10 : 1) : rand(0.35, 0.8);
+    // Electricity: little arcs jump off it (the plainer effects don't spark, or only a little)
+    const sparks = p.quiet ? 0 : spec ? spec.sparks : 1;
+    if (sparks > 0 && (p.zapT -= dt) <= 0) {
+        p.zapT = (p.landed ? rand(0.03, 0.12) * (p.life / p.max + 0.4) * (p.set ? 10 : 1) : rand(0.35, 0.8)) / sparks;
         const a = rand(0, TAU), Lz = rand(6, 16), py = p.y - p.z;
         // Often the spark jumps across to another cube close by, so they crackle together
         let o = null;
@@ -6998,11 +6999,13 @@ function updateCube(p, dt) {
         if (Math.random() < 0.03) Sound.zap(Sound.volAt(p.x, p.y) * 0.25);
     }
     // Sparkles: a glint pops up on it now and then
-    if (Math.random() < dt * (p.set ? 0.25 : 3) && G.particles.length < 1800) G.particles.push({ type: 'twinkle', x: p.x + rand(-p.size, p.size), y: p.y - p.z + rand(-p.size, p.size), vx: 0, vy: -20, life: rand(0.2, 0.4), max: 0.4, size: rand(4, 8), color: Math.random() < 0.5 ? '#ffffff' : p.color });
-    // At the end it explodes: a flash, a ring, sparks and sparkles
-    if (p.life <= 0) {
+    const tw = p.quiet || p.lite ? 0 : spec ? (p.set ? spec.twinkle : 3 * spec.twinkle / 0.25) : 3;
+    if (tw && Math.random() < dt * tw && G.particles.length < 1800) G.particles.push({ type: 'twinkle', x: p.x + rand(-p.size, p.size), y: p.y - p.z + rand(-p.size, p.size), vx: 0, vy: -20, life: rand(0.2, 0.4), max: 0.4, size: rand(4, 8), color: Math.random() < 0.5 ? '#ffffff' : p.color });
+    // At the end it explodes: a flash, a ring, sparks and sparkles (the plainer effects just fade out, or give a small pop)
+    if (p.life <= 0 && !p.quiet) {
         const y = p.y - p.z, busy = G.particles.length > 1400;   // (lots going on: lighter pops, so phones keep up)
-        G.particles.push({ type: 'glow', x: p.x, y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: p.size * 2.4, color: '#ffffff' });
+        G.particles.push({ type: 'glow', x: p.x, y, vx: 0, vy: 0, life: 0.2, max: 0.2, size: p.size * (p.lite ? 1.6 : 2.4), color: '#ffffff' });
+        if (p.lite) return;
         G.particles.push({ type: 'ring', x: p.x, y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: p.size * 3.5, color: p.color });
         if (!busy) for (let i = 0; i < 6; i++) { const a = rand(0, TAU), sp = rand(90, 280); G.particles.push({ type: 'glow', x: p.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.15, 0.35), max: 0.35, size: 2.4, color: i % 2 ? '#00ffe8' : '#ffff46' }); }
         if (!busy || Math.random() < 0.3) G.particles.push({ type: 'twinkle', x: p.x, y, vx: rand(-80, 80), vy: rand(-80, 80), life: rand(0.25, 0.45), max: 0.45, size: rand(5, 9), color: '#ffffff' });
@@ -12068,7 +12071,6 @@ function updateParticles(dt) {
         p.life -= dt;
         if (p.type === 'cube') { updateCube(p, dt); continue; }
         if (p.type === 'cubeskull') { if (p.life > 0) updateSkull(p, dt); continue; }
-        if (p.type === 'pixskull' && p.life <= 0 && !p.broke) { p.broke = true; pixSkullBreak(p); continue; }
         if (p.type === 'shell' && p.life <= 0) addCasing(p.x, p.y);
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -13769,8 +13771,6 @@ function drawParticles() {
         switch (p.type) {
             case 'cube': if (!(p.sk && p.set)) drawCube(p); break;
             case 'cubeskull': drawSkull(p.sk); break;
-            case 'sketchskull': drawSketchSkull(p); break;
-            case 'pixskull': drawPixSkull(p); break;
             case 'twinkle': {
                 // A four-point sparkle that grows then shrinks
                 const k = Math.sin(t * Math.PI), r = p.size * k, w = r * 0.22;
@@ -14712,10 +14712,10 @@ $('mode-go').addEventListener('click', () => menuStep('setup'));
 // with the one you've picked on top (rarity, name and a clip of it playing) and all of them in a list below.
 const DEATH_FX = [
     { id: 'classic', name: 'Classic', rarity: 'common', desc: 'A body and blood.' },
-    { id: 'sketch', name: 'Skull Sketch', rarity: 'uncommon', desc: 'A quick, wobbly sketch of a skull pops up and fades.' },
-    { id: 'flat', name: 'Flat Skull', rarity: 'rare', desc: 'A whole skull of flat squares pops up, then breaks apart.' },
-    { id: 'burst', name: 'Cube Burst', rarity: 'epic', desc: 'Bursts into neon cubes that crackle and pop.' },
-    { id: 'skull', name: 'Cube Skull', rarity: 'legendary', desc: 'The cubes pull together into a 3D skull that laughs and explodes.' }
+    { id: 'sketch', name: 'Sketch Skull', rarity: 'uncommon', desc: 'A few cubes make the outline of a skull, then just drop.' },
+    { id: 'flat', name: 'Flat Skull', rarity: 'rare', desc: 'A whole flat skull of cubes, which breaks apart.' },
+    { id: 'skull', name: 'Cube Skull', rarity: 'epic', desc: 'A skull of cubes that turns, laughs and explodes in a circle.' },
+    { id: 'skull3d', name: '3D Skull', rarity: 'legendary', desc: 'A solid 3D skull of cubes that spins right round, laughs and explodes in a circle.' }
 ];
 const fxInfo = id => DEATH_FX.find(f => f.id === id) || DEATH_FX[0];
 function showDeathFx() {
@@ -14740,7 +14740,7 @@ $('fxsel-back').addEventListener('click', () => { $('fxsel').classList.add('hidd
 // code on its own little world and canvas (the game's globals are swapped over just while it draws).
 const fxClip = {
     on: false, last: 0, S: null,
-    restart() { this.S = { mode: 'demo', time: 0, t: 0, dead: false, particles: [], floats: [], fighters: [], cam: { x: 0, y: -28 }, zoom: 1.5, shake: 0, player: null, world: { decals: [] } }; },
+    restart() { this.S = { mode: 'demo', time: 0, t: 0, dead: false, particles: [], floats: [], fighters: [], cam: { x: 0, y: -44 }, zoom: 1.35, shake: 0, player: null, world: { decals: [] } }; },
     start() { if (this.on) return; this.on = true; this.restart(); this.last = performance.now(); requestAnimationFrame(t => this.frame(t)); },
     stop() { this.on = false; },
     frame(now) {
@@ -14750,7 +14750,7 @@ const fxClip = {
         const keep = { G, ctx, viewW, viewH };
         G = this.S; ctx = cv.getContext('2d'); viewW = w; viewH = h;
         try {
-            const S = this.S, cycle = { skull: 5.6, burst: 4.2, flat: 3.2, sketch: 3, classic: 3.2 }[deathFx] || 3.2;
+            const S = this.S, cycle = { skull3d: 6.4, skull: 5.6, flat: 3.8, sketch: 3, classic: 3.2 }[deathFx] || 3.2;
             S.t += dt; S.time += dt * 1000;
             const f = { x: 0, y: 0, r: CONFIG.RADIUS, angle: -0.4, color: '#ff8a3d', dark: shade('#ff8a3d', -0.35), light: shade('#ff8a3d', 0.25), soldier: false, killedBy: null };
             if (!S.dead && S.t > 0.8) {
