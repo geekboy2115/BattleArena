@@ -687,6 +687,13 @@ const Sound = {
         [[523, 0], [659, 140], [784, 280], [1047, 420], [784, 640], [1047, 780], [1319, 920]].forEach(([f, t], i) =>
             setTimeout(() => { this.tone(f, i === 6 ? 0.9 : 0.22, 'triangle', 0.25); this.tone(f / 2, i === 6 ? 0.9 : 0.2, 'square', 0.05); }, t));
     },
+    // Glassy shatter: a crack of noise and a scatter of high chimes
+    shatter(vol) {
+        if (vol < 0.03 || this.budget > 10) return; this.budget++;
+        this.noiseBurst(7000, 0.12, 0.35 * vol);
+        for (let i = 0; i < 4; i++) setTimeout(() => this.tone(rand(1600, 3400), 0.18, 'sine', 0.05 * vol, rand(1200, 3000)), i * rand(18, 45));
+    },
+    tink(vol, high) { if (vol < 0.05 || this.budget > 10) return; this.budget++; this.tone(rand(high ? 2400 : 1500, high ? 4000 : 2600), 0.07, 'sine', 0.04 * vol); },
     zap(vol) { if (vol < 0.03 || this.budget > 10) return; this.budget++; this.noiseBurst(4500, 0.18, 0.3 * vol); this.tone(rand(900, 1500), 0.12, 'sawtooth', 0.05 * vol, rand(200, 400)); },
     pop() { this.noiseBurst(2500, 0.25, 0.25); this.tone(rand(500, 900), 0.3, 'sine', 0.06, 200); },
     crunch(vol) { this.noiseBurst(900, 0.22, 0.6 * vol); },
@@ -6687,7 +6694,7 @@ function updateVictory(realDt) {
 // crackle with electricity, and fizzle and pop as they fade away
 // Death: the body breaks up into spinning 3D cubes (three neon yellow sides, three teal sides)
 // that blast out, tumble to the ground, crackle with electricity and sparkle, then explode one by one
-const CUBES = { yellow: [244, 255, 58], teal: [0, 245, 212], n: 85, life: [2.2, 3.8], grav: 1100, tilt: 0.55 };
+const CUBES = { yellow: [255, 255, 70], teal: [0, 255, 232], n: 85, life: [2.2, 3.8], grav: 1100, tilt: 0.55 };
 // The six faces: [normal, the four corners], +x +y +z are neon yellow, -x -y -z are teal
 const CUBE_FACES = [
     [[1, 0, 0], [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]], 0], [[-1, 0, 0], [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]], 1],
@@ -6700,14 +6707,14 @@ function cubeDeath(t) {
     // Which way the hit came from, so the pieces get knocked away from the killer
     const ka = t.killedBy && t.killedBy !== t ? Math.atan2(t.y - t.killedBy.y, t.x - t.killedBy.x) : rand(0, TAU);
     for (let i = 0; i < n; i++) {
-        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(40, 250) * Math.sqrt(k), kick = rand(20, 120);
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * t.r, sp = rand(25, 150) * Math.sqrt(k), kick = rand(10, 70);
         G.particles.push({
-            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(220, 520),
+            type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.8, z: rand(6, 22) * k, vz: rand(240, 480),
             vx: Math.cos(a) * sp + Math.cos(ka) * kick, vy: Math.sin(a) * sp + Math.sin(ka) * kick,
             size: rand(3.5, 7) * Math.min(2, Math.sqrt(k) * 1.1),
             ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-12, 12), wy: rand(-12, 12), wz: rand(-8, 8),
             life: rand(CUBES.life[0], CUBES.life[1]), max: CUBES.life[1], zapT: rand(0.3, 0.6), seedT: rand(0, 10),
-            color: i % 2 ? '#00f5d4' : '#f4ff3a'
+            color: i % 2 ? '#00ffe8' : '#ffff46'
         });
     }
     // The moment it happens: a blast of light, shock rings, arcs across the body and a shower of sparkles
@@ -6719,9 +6726,13 @@ function cubeDeath(t) {
         G.particles.push({ type: 'zap', x: t.x, y: t.y, x2: t.x + Math.cos(a) * L, y2: t.y + Math.sin(a) * L, vx: 0, vy: 0, life: rand(0.12, 0.25), max: 0.25, seed: Math.random(), color: i % 2 ? '#f4ff3a' : '#00f5d4' });
     }
     for (let i = 0; i < 10; i++) { const a = rand(0, TAU), sp = rand(120, 380); G.particles.push({ type: 'twinkle', x: t.x, y: t.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), max: 0.7, size: rand(5, 9), color: i % 2 ? '#b6fff2' : '#fdffb0' }); }
-    burst(t.x, t.y, 16, '#00f5d4', 340, 'glow');
-    burst(t.x, t.y, 12, '#f4ff3a', 300, 'glow');
-    Sound.zap(Sound.volAt(t.x, t.y));
+    burst(t.x, t.y, 18, '#00ffe8', 340, 'glow');
+    burst(t.x, t.y, 14, '#ffff46', 300, 'glow');
+    G.particles.push({ type: 'glow', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.14, max: 0.14, size: 50 * k, color: '#ffffff' });
+    const near = G.player && !G.player.dead ? Math.hypot(t.x - G.player.x, t.y - G.player.y) : 9999;
+    if (near < 700) G.shake = Math.max(G.shake || 0, 7 * (1 - near / 700) + (t.killedBy === G.player ? 4 : 0));
+    const v = Sound.volAt(t.x, t.y);
+    Sound.zap(v); Sound.shatter(v);
 }
 
 // A cube: falls with gravity, bounces, skids and tumbles to a stop, then crackles and sparkles until it explodes
@@ -6732,7 +6743,12 @@ function updateCube(p, dt) {
     if (ground) {
         p.z = 0;
         // The first time it hits the ground it lets out a crackle, and from then on it fizzles hard
-        if (!p.landed) { p.landed = true; p.zapT = 0; }
+        if (!p.landed) {
+            p.landed = true; p.zapT = 0;
+            G.particles.push({ type: 'ring', x: p.x, y: p.y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: p.size * 2.2, color: p.color });
+            G.particles.push({ type: 'twinkle', x: p.x, y: p.y - 2, vx: 0, vy: -15, life: 0.3, max: 0.3, size: rand(5, 8), color: '#ffffff' });
+            if (Math.random() < 0.12) Sound.tink(Sound.volAt(p.x, p.y));
+        }
         if (p.vz < -120) { p.vz = -p.vz * 0.4; p.vx *= 0.65; p.vy *= 0.65; p.wx *= 0.6; p.wy *= 0.6; p.wz *= 0.6; }
         else p.vz = 0;
     }
@@ -6745,7 +6761,7 @@ function updateCube(p, dt) {
     if ((p.zapT -= dt) <= 0) {
         p.zapT = p.landed ? rand(0.03, 0.12) * (p.life / p.max + 0.4) : rand(0.35, 0.8);
         const a = rand(0, TAU), L = rand(6, 16);
-        G.particles.push({ type: 'zap', x: p.x, y: p.y - p.z, x2: p.x + Math.cos(a) * L, y2: p.y + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: rand(0.06, 0.14), max: 0.14, seed: Math.random(), color: Math.random() < 0.5 ? '#e8ffff' : p.color });
+        G.particles.push({ type: 'zap', x: p.x, y: p.y - p.z, x2: p.x + Math.cos(a) * L, y2: p.y + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: rand(0.06, 0.14), max: 0.14, seed: Math.random(), color: Math.random() < 0.25 ? '#e8ffff' : p.color });
         if (Math.random() < 0.04) Sound.zap(Sound.volAt(p.x, p.y) * 0.25);
     }
     // Sparkles: a glint pops up on it now and then
@@ -6755,9 +6771,9 @@ function updateCube(p, dt) {
         const y = p.y - p.z;
         G.particles.push({ type: 'glow', x: p.x, y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: p.size * 2.4, color: '#ffffff' });
         G.particles.push({ type: 'ring', x: p.x, y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: p.size * 3.5, color: p.color });
-        for (let i = 0; i < 6; i++) { const a = rand(0, TAU), sp = rand(90, 260); G.particles.push({ type: 'glow', x: p.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.15, 0.35), max: 0.35, size: 2.2, color: i % 2 ? '#00f5d4' : '#f4ff3a' }); }
+        for (let i = 0; i < 8; i++) { const a = rand(0, TAU), sp = rand(90, 280); G.particles.push({ type: 'glow', x: p.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.15, 0.35), max: 0.35, size: 2.4, color: i % 2 ? '#00ffe8' : '#ffff46' }); }
         for (let i = 0; i < 2; i++) { const a = rand(0, TAU), sp = rand(40, 120); G.particles.push({ type: 'twinkle', x: p.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.25, 0.45), max: 0.45, size: rand(5, 9), color: '#ffffff' }); }
-        if (Math.random() < 0.3) Sound.pop();
+        if (Math.random() < 0.25) Sound.tink(Sound.volAt(p.x, p.y) * 1.4, true);
     }
 }
 
@@ -6784,22 +6800,25 @@ function drawCube(p) {
     ctx.save();
     // Neon glow around it
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.22 * fade * (0.7 + 0.3 * Math.sin(G.time / 40 + p.seedT));
+    const pulse = 0.75 + 0.25 * Math.sin(G.time / 40 + p.seedT);
     ctx.fillStyle = p.color;
-    ctx.beginPath(); ctx.arc(p.x, cy, h * 2.6, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.16 * fade * pulse; ctx.beginPath(); ctx.arc(p.x, cy, h * 3.4, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.3 * fade * pulse; ctx.beginPath(); ctx.arc(p.x, cy, h * 2, 0, TAU); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = fade;
     ctx.lineJoin = 'round';
     for (const [n, corners, side] of CUBE_FACES) {
         const nz = rot(n)[2];
         if (nz >= 0) continue;               // facing away (the camera looks down -z)
-        const lit = 0.55 + 0.45 * -nz, c = side ? CUBES.teal : CUBES.yellow;
+        const lit = 0.78 + 0.22 * -nz, c = side ? CUBES.teal : CUBES.yellow;
         ctx.fillStyle = `rgb(${c[0] * lit | 0},${c[1] * lit | 0},${c[2] * lit | 0})`;
         ctx.beginPath();
         corners.forEach((v, i) => { const r = rot(v); i ? ctx.lineTo(p.x + r[0] * h, cy + r[1] * h) : ctx.moveTo(p.x + r[0] * h, cy + r[1] * h); });
         ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = side ? 'rgba(200,255,245,0.8)' : 'rgba(255,255,200,0.8)';
-        ctx.lineWidth = 0.8; ctx.stroke();
+        // The face square-on to you shines white-hot
+        if (-nz > 0.8) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = fade * 0.45 * (-nz - 0.8) * 5; ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = fade; }
+        ctx.strokeStyle = side ? 'rgba(220,255,250,0.95)' : 'rgba(255,255,225,0.95)';
+        ctx.lineWidth = 1; ctx.stroke();
     }
     ctx.restore();
     ctx.globalAlpha = 1;
