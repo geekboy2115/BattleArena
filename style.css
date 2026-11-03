@@ -998,3 +998,12 @@ body.fs #fs-btn { opacity: 0.55; }
 
 .fx-bar { margin-top: 6px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; max-width: 220px; }
 .fx-bar i { display: block; height: 100%; width: 0; background: var(--rc); box-shadow: 0 0 6px var(--rc); }
+
+/* Phones, team modes (war, zombies, boss...): the team score chip sits at the top middle, so the health bars go under it
+   instead of on top of it, and when the phone is upright the chip drops below your stats and the minimap */
+body.touch #hud:has(#team-score:not(.hidden)) #hud-bottom { top: 66px; }
+@media (orientation: portrait) {
+    body.touch #team-score { top: 186px; }
+    body.touch #hud:has(#team-score:not(.hidden)) #hud-bottom { top: 250px; }
+    body.touch #hud:has(#team-score:not(.hidden)) #killfeed { display: none; }
+}
