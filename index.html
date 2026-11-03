@@ -118,12 +118,9 @@
             <h1 class="title"><span class="title-top">BATTLE</span><span class="title-bottom">ARENA</span></h1>
             <p class="credit">Made by Grant Zhang</p>
 
-            <!-- Effects: how people go when they're killed -->
+            <!-- Effects: how people go when they're killed (opens the Effects page) -->
             <div class="fx-select">
-                <span class="fx-label">EFFECTS</span>
-                <div class="seg" id="fx-seg">
-                    <button data-fx="skull">Cube Skull</button><button data-fx="burst">Cube Burst</button><button data-fx="classic">Classic</button>
-                </div>
+                <button class="fx-open" id="fx-open"><span class="fx-label">EFFECTS</span><span class="fx-cur" id="fx-cur"></span><span class="fx-go">&#8250;</span></button>
             </div>
 
             <div class="mode-select">
@@ -221,6 +218,20 @@
                 <button class="map-card type-card" data-type="hightech"><canvas width="300" height="180"></canvas><span class="map-name">HIGH TECH WARFARE</span><span class="map-desc">Only quantum guns and tech vehicles, and quantum drops keep falling.</span></button>
             </div>
             <button id="typesel-back" class="btn ghost">BACK</button>
+        </div>
+    </div>
+
+    <!-- Effects page: the one you've picked on top with a clip of it, and all of them to scroll through below -->
+    <div id="fxsel" class="overlay menu-overlay hidden">
+        <div class="menu-card fx-card">
+            <h2 class="card-title">EFFECTS</h2>
+            <div class="fx-top">
+                <div class="fx-rarity" id="fx-rarity"></div>
+                <div class="fx-name" id="fx-name"></div>
+                <canvas id="fx-clip" width="480" height="270"></canvas>
+            </div>
+            <div class="fx-list" id="fx-list"></div>
+            <button id="fxsel-back" class="btn">DONE</button>
         </div>
     </div>
 

@@ -958,9 +958,29 @@ body.fs #fs-btn { opacity: 0.55; }
 .setup-btns .btn.ghost { flex: 0 0 34%; }
 #menu-card.step-setup { min-width: min(460px, 92vw); }
 
-/* Effects: how people go when they're killed (top of the mode step) */
-.fx-select { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 2px 0 10px; flex-wrap: wrap; }
+/* Effects: the button at the top of the mode step, and the Effects page */
+.fx-select { display: flex; justify-content: center; margin: 2px 0 10px; }
+.fx-open { display: flex; align-items: center; gap: 10px; padding: 6px 14px; border-radius: 12px; cursor: pointer; font-family: inherit; color: var(--ink);
+    background: rgba(0, 255, 232, 0.07); border: 1px solid rgba(0, 255, 232, 0.45); box-shadow: 0 0 12px rgba(0, 255, 232, 0.18); }
+.fx-open:hover { background: rgba(0, 255, 232, 0.14); }
 .fx-label { font-family: 'Black Ops One', sans-serif; font-size: 13px; letter-spacing: 2px; color: #00ffe8; text-shadow: 0 0 8px rgba(0,255,232,0.6); }
-.fx-select .seg button { width: auto; height: auto; padding: 5px 10px; font-size: 13px; }
-.fx-select .seg button.on { background: linear-gradient(135deg, #ffff46, #00ffe8); color: #10202a; border-color: #ffff46; box-shadow: 0 0 10px rgba(0,255,232,0.5); }
-@media (max-height: 500px) { .fx-select { margin: 0 0 4px; } .fx-select .seg button { padding: 3px 8px; font-size: 12px; } }
+.fx-cur { font-size: 13px; font-weight: 700; letter-spacing: 1px; }
+.fx-go { font-size: 20px; line-height: 1; color: #00ffe8; }
+.fx-card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.fx-top { text-align: center; margin-bottom: 14px; }
+.fx-rarity { font-family: 'Black Ops One', sans-serif; font-size: 30px; letter-spacing: 3px; line-height: 1.1; }
+.fx-name { font-size: 15px; font-weight: 700; letter-spacing: 1px; opacity: 0.85; margin-bottom: 8px; }
+#fx-clip { width: 100%; max-width: 480px; aspect-ratio: 16 / 9; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: #24361f; display: block; margin: 0 auto; }
+.fx-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.fx-item { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 14px; border-radius: 12px; cursor: pointer; font-family: inherit; color: var(--ink);
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-left: 5px solid var(--rc); }
+.fx-item.on { background: rgba(255,255,255,0.12); border-color: var(--rc); box-shadow: 0 0 14px color-mix(in srgb, var(--rc) 45%, transparent); }
+.fx-item .fx-ir { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--rc); }
+.fx-item .fx-in { font-size: 17px; font-weight: 700; }
+.fx-item .fx-id { font-size: 12px; opacity: 0.7; }
+.fx-item .fx-check { margin-left: auto; font-size: 18px; color: var(--rc); opacity: 0; }
+.fx-item.on .fx-check { opacity: 1; }
+@media (max-height: 500px) {
+    .fx-select { margin: 0 0 4px; } .fx-open { padding: 3px 10px; }
+    .fx-rarity { font-size: 22px; } #fx-clip { max-width: 340px; }
+}

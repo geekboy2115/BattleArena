@@ -14647,13 +14647,77 @@ function menuStep(step) {
     if (typeof fitMenus === 'function') fitMenus();
 }
 $('mode-go').addEventListener('click', () => menuStep('setup'));
-// Effects: pick how people go when they're killed (remembered)
-function showDeathFx() { document.querySelectorAll('#fx-seg button').forEach(b => b.classList.toggle('on', b.dataset.fx === deathFx)); }
-document.querySelectorAll('#fx-seg button').forEach(b => b.addEventListener('click', () => {
+// Effects: how people go when they're killed. The button on the title screen opens the Effects page,
+// with the one you've picked on top (rarity, name and a clip of it playing) and all of them in a list below.
+const DEATH_FX = [
+    { id: 'classic', name: 'Classic', rarity: 'common', desc: 'A body and blood.' },
+    { id: 'burst', name: 'Cube Burst', rarity: 'epic', desc: 'Bursts into neon cubes that crackle and pop.' },
+    { id: 'skull', name: 'Cube Skull', rarity: 'legendary', desc: 'The cubes pull together into a 3D skull that laughs and explodes.' }
+];
+const fxInfo = id => DEATH_FX.find(f => f.id === id) || DEATH_FX[0];
+function showDeathFx() {
+    const f = fxInfo(deathFx), col = RARITY[f.rarity].color;
+    $('fx-cur').innerHTML = `<span style="color:${col}">${f.rarity.toUpperCase()}</span> · ${f.name}`;
+    $('fx-rarity').textContent = f.rarity.toUpperCase(); $('fx-rarity').style.color = col; $('fx-rarity').style.textShadow = `0 0 14px ${col}88`;
+    $('fx-name').textContent = f.name;
+    document.querySelectorAll('.fx-item').forEach(b => b.classList.toggle('on', b.dataset.fx === deathFx));
+}
+$('fx-list').innerHTML = DEATH_FX.map(f => `<button class="fx-item" data-fx="${f.id}" style="--rc:${RARITY[f.rarity].color}"><div><div class="fx-ir">${f.rarity.toUpperCase()}</div><div class="fx-in">${f.name}</div><div class="fx-id">${f.desc}</div></div><span class="fx-check">&#10003;</span></button>`).join('');
+document.querySelectorAll('.fx-item').forEach(b => b.addEventListener('click', () => {
     deathFx = b.dataset.fx;
     try { localStorage.setItem('ba_deathfx', deathFx); } catch (e) {}
     showDeathFx();
+    fxClip.restart();
+    $('fxsel').querySelector('.fx-card').scrollTo({ top: 0, behavior: 'smooth' });
 }));
+$('fx-open').addEventListener('click', () => { screens.menu.classList.add('hidden'); $('fxsel').classList.remove('hidden'); showDeathFx(); fxClip.start(); });
+$('fxsel-back').addEventListener('click', () => { $('fxsel').classList.add('hidden'); screens.menu.classList.remove('hidden'); fxClip.stop(); });
+
+// The clip: someone standing there gets killed with the effect, over and over. It runs the real effect
+// code on its own little world and canvas (the game's globals are swapped over just while it draws).
+const fxClip = {
+    on: false, last: 0, S: null,
+    restart() { this.S = { mode: 'demo', time: 0, t: 0, dead: false, particles: [], floats: [], fighters: [], cam: { x: 0, y: -28 }, zoom: 1.5, shake: 0, player: null, world: { decals: [] } }; },
+    start() { if (this.on) return; this.on = true; this.restart(); this.last = performance.now(); requestAnimationFrame(t => this.frame(t)); },
+    stop() { this.on = false; },
+    frame(now) {
+        if (!this.on) return;
+        const cv = $('fx-clip'), w = cv.width, h = cv.height, dt = Math.min(0.05, (now - this.last) / 1000);
+        this.last = now;
+        const keep = { G, ctx, viewW, viewH };
+        G = this.S; ctx = cv.getContext('2d'); viewW = w; viewH = h;
+        try {
+            const S = this.S, cycle = deathFx === 'skull' ? 5.6 : deathFx === 'burst' ? 4.2 : 3.2;
+            S.t += dt; S.time += dt * 1000;
+            const f = { x: 0, y: 0, r: CONFIG.RADIUS, angle: -0.4, color: '#ff8a3d', dark: shade('#ff8a3d', -0.35), light: shade('#ff8a3d', 0.25), soldier: false, killedBy: null };
+            if (!S.dead && S.t > 0.8) {
+                S.dead = true;
+                if (deathFx === 'classic') { addCorpse(f); burst(0, 0, 22, f.color, 260, 'blood'); burst(0, 0, 10, '#ff4f6d', 180, 'blood'); S.particles.push({ type: 'ring', x: 0, y: 0, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 50, color: f.color }); }
+                else cubeDeath(f);
+            }
+            updateParticles(dt);
+            if (S.t > cycle) this.restart();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            const g = ctx.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, w * 0.7);
+            g.addColorStop(0, '#4d7a3a'); g.addColorStop(1, '#2a4520');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+            ctx.translate(w / 2, h / 2); ctx.scale(S.zoom, S.zoom); ctx.translate(-S.cam.x, -S.cam.y);
+            const hw = w / 2 / S.zoom, hh = h / 2 / S.zoom;
+            drawDecals(S.cam.x - hw, S.cam.y - hh, S.cam.x + hw, S.cam.y + hh, 'ground');
+            if (!S.dead) {
+                // The one about to get it: standing there, bobbing a little
+                const b = Math.sin(S.t * 6) * 1.2;
+                ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(3, 5, f.r * 1.1, f.r * 0.8, 0, 0, TAU); ctx.fill();
+                for (const [hx, hy] of [[f.r * 0.9, -f.r * 0.75], [f.r * 0.9, f.r * 0.75]]) { ctx.fillStyle = f.dark; ctx.beginPath(); ctx.arc(hx, hy + b, 7.5, 0, TAU); ctx.fill(); ctx.fillStyle = f.light; ctx.beginPath(); ctx.arc(hx, hy + b, 5.5, 0, TAU); ctx.fill(); }
+                ctx.fillStyle = f.dark; ctx.beginPath(); ctx.arc(0, b, f.r + 2.5, 0, TAU); ctx.fill();
+                ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(0, b, f.r, 0, TAU); ctx.fill();
+            }
+            drawParticles();
+            ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+        } finally { ({ G, ctx, viewW, viewH } = keep); }
+        requestAnimationFrame(t => this.frame(t));
+    }
+};
 showDeathFx();
 $('setup-back').addEventListener('click', () => menuStep('mode'));
 $('typesel-back').addEventListener('click', () => { screens.typesel.classList.add('hidden'); screens.menu.classList.remove('hidden'); });
