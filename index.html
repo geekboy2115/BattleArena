@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261103h">
+    <link rel="stylesheet" href="style.css?v=20261104b">
 </head>
 
 <body>
@@ -141,6 +141,22 @@
                 <div class="cpu-row"><span>Play as</span>
                     <div class="seg" id="assassin-role">
                         <button data-r="survivor" class="on">Survivor</button><button data-r="assassin">Assassin</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cpu-select hidden" id="settings-murder">
+                <div class="cpu-row"><span>Play as</span>
+                    <div class="seg" id="murder-role">
+                        <button data-r="random" class="on">Random</button><button data-r="innocent">Innocent</button><button data-r="sheriff">Sheriff</button><button data-r="murderer">Murderer</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cpu-select hidden" id="settings-ghost">
+                <div class="cpu-row"><span>Play as</span>
+                    <div class="seg" id="ghost-role">
+                        <button data-r="hunter" class="on">Hunter</button><button data-r="ghost">Ghost</button>
                     </div>
                 </div>
             </div>
@@ -339,7 +355,7 @@
         </div>
     </div>
 
-    <script src="script.js?v=20261103h"></script>
+    <script src="script.js?v=20261104b"></script>
 </body>
 
 </html>

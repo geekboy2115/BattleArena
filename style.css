@@ -965,3 +965,8 @@ body.touch #hud:has(#team-score:not(.hidden)) #hud-bottom { top: 66px; }
     body.touch #hud:has(#team-score:not(.hidden)) #hud-bottom { top: 250px; }
     body.touch #hud:has(#team-score:not(.hidden)) #killfeed { display: none; }
 }
+
+/* Murder Mystery / Ghost: the role buttons get their own line */
+#settings-murder .cpu-row, #settings-ghost .cpu-row { flex-wrap: wrap; gap: 8px; }
+#settings-murder .seg { width: 100%; }
+#settings-murder .seg button { flex: 1; padding-left: 4px; padding-right: 4px; }

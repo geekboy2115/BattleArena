@@ -4612,7 +4612,7 @@ function createFighter(x, y, opts) {
 
 // Teammates never count as enemies; in free for all everyone else does.
 // Things with no owner (airstrikes, car explosions, fire) are a danger to everyone
-const foe = (a, b) => a !== b && (!a || !b || a.team === null || a.team !== b.team);
+const foe = (a, b) => a !== b && !(G && G.fort && G.fort.build) && (!a || !b || a.team === null || a.team !== b.team);
 
 function findSpawn(avoid, minDist) {
     const W = CONFIG.WORLD_SIZE;
@@ -4631,7 +4631,8 @@ function newState(mode, setup) {
     const zombies = setup.type === 'zombies', escape = setup.type === 'escape', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', assassin = setup.type === 'assassin', bossFight = setup.type === 'boss';
-    const war = setup.type === 'war' || setup.type === 'hightech' || revolution ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
+    const murder = setup.type === 'murder', ghostMode = setup.type === 'ghost', fort = setup.type === 'fort';
+    const war = setup.type === 'war' || setup.type === 'hightech' || revolution || fort ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
         mode, cpuCount, war,
@@ -4640,7 +4641,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin || bossFight, assassin, bossFight, bossF: null, sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin || bossFight, assassin, bossFight, bossF: null, murder, ghostMode, fort: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4689,12 +4690,17 @@ function newState(mode, setup) {
         zone: { cx: W / 2, cy: W / 2, r: W * 0.72, phase: 0, state: 'wait', timer: ZONE_PHASES[0].wait, dmg: 1, sx: 0, sy: 0, sr: 0, tcx: W / 2, tcy: W / 2, tr: 0 }
     };
     setNextZoneTarget(G.zone);
-    if (G.noZone || revolution) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    // (no red zone at all in Survival or Murder Mystery)
+    if (G.noZone || revolution || survival || murder) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    // Ghost and Fort Wars are played in one fixed circle in the middle of the map
+    const arena = ghostMode ? GHOST.arena : fort ? FORT.arena : 0;
+    if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
     // Early Warfare: no cars parked at the curbs or piled in scrapyards (the map is built before G.early exists)
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
-    for (const s of G.world.lootSpots) {
+    // (Murder Mystery has none: the knife and the sheriff's gun are the only weapons)
+    if (!murder) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
         let key = weightedPick(GROUND_TABLE);
@@ -4702,13 +4708,13 @@ function newState(mode, setup) {
         spawnLoot(s.x, s.y, key);
     }
     const caveK = G.world.cave ? 0.12 : 1;  // (the cavern is a lot smaller than the whole world)
-    const boxes = Math.min(800, 220 + cpuCount * 0.6) * caveK;
+    const boxes = murder ? 0 : Math.min(800, 220 + cpuCount * 0.6) * caveK;
     for (let i = 0; i < boxes; i++) {
         const s = findSpawn(null, 0);
         if (!blockedAt(G.world.grid, s.x, s.y, 34) && !buildingAt(s.x, s.y, 30)) addLootBox(s.x, s.y);
     }
     // Supplies lying out in the open are rare; most loot comes from boxes, airdrops and kills
-    const scatter = Math.min(150, 30 + cpuCount * 0.12) * caveK;
+    const scatter = murder ? 0 : Math.min(150, 30 + cpuCount * 0.12) * caveK;
     for (let i = 0; i < scatter; i++) {
         const s = findSpawn(null, 0);
         spawnLoot(s.x, s.y, survival && Math.random() < 0.25 ? pick(['water', 'bucket', 'meat']) : weightedPick(GROUND_TABLE));
@@ -4719,9 +4725,10 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the Assassin's wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern') spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !murder && !ghostMode && !fort) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
-    if (war) {
+    if (fort) spawnFortTeams(W / 2);
+    else if (war) {
         spawnTeams(W / 2, setup.baseDist || W * 0.33);
     } else if (escape) {
         // (the title screen sets up its own small breakout instead)
@@ -4729,10 +4736,11 @@ function newState(mode, setup) {
     } else {
         if (mode === 'playing') addPlayer(findSpawn(null, 0), null);
         const avoid = G.player ? [G.player] : null;
-        if (G.player && (zombies || assassin || bossFight)) G.player.team = 0;
+        if (G.player && (zombies || assassin || bossFight || ghostMode)) G.player.team = 0;
         for (let i = 0; i < cpuCount; i++) {
             const s = findSpawn(avoid, 600);
-            const b = createFighter(s.x, s.y, { name: botName(i), color: zombies || assassin || bossFight ? SURVIVOR_COLOR : pick(BOT_COLORS), team: zombies || assassin || bossFight ? 0 : null });
+            const same = zombies || assassin || bossFight || ghostMode;
+            const b = createFighter(s.x, s.y, { name: botName(i), color: same ? SURVIVOR_COLOR : pick(BOT_COLORS), team: same ? 0 : null });
             if (G.epic) b.chasesDrops = Math.random() < 0.8;
             G.fighters.push(b);
         }
@@ -4745,7 +4753,416 @@ function newState(mode, setup) {
     if (revolution) for (const f of G.fighters) f.hp = f.maxHp = REVO.hp;
     if (assassin && mode === 'playing') { spreadOut(); pickAssassin(setup.role === 'assassin' ? G.player : null); }
     if (bossFight) setupBossFight();
+    if (murder && mode === 'playing') setupMurder(setup.role);
+    if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
     G.alive = G.fighters.length;
+}
+
+// Everyone scattered round the circle the game is played in
+function placeInArena(R, apart) {
+    const W = CONFIG.WORLD_SIZE, c = W / 2, placed = [];
+    for (const f of G.fighters) {
+        let best = null, bestD = -1;
+        for (let t = 0; t < 40; t++) {
+            const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (R - 150), x = c + Math.cos(a) * d, y = c + Math.sin(a) * d;
+            if (blockedAt(G.world.grid, x, y, 36)) continue;
+            let m = Infinity;
+            for (const q of placed) m = Math.min(m, Math.hypot(q.x - x, q.y - y));
+            if (m > bestD) { bestD = m; best = { x, y }; }
+            if (m >= apart) break;
+        }
+        if (!best) continue;
+        placed.push(best);
+        f.x = best.x; f.y = best.y; f.vx = f.vy = 0;
+    }
+    if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
+}
+const arenaR = () => (G.murder ? MURDER.arena : G.zone.r) - 200;
+const arenaPoint = (R = arenaR()) => { const c = CONFIG.WORLD_SIZE / 2; for (let t = 0; t < 20; t++) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * R, x = c + Math.cos(a) * d, y = c + Math.sin(a) * d; if (!blockedAt(G.world.grid, x, y, 30)) return { x, y }; } return { x: c, y: c }; };
+// A bot strolling about the circle: a new spot every so often
+function strollArena(b) {
+    if (b.mode !== 'zone' || !b.goal || b.goal.huntOf || dist(b, b.goal) < 60 || G.time > (b.strollUntil || 0)) {
+        b.mode = 'zone'; b.goal = arenaPoint(); b.strollUntil = G.time + rand(5000, 11000);
+    }
+}
+
+// ---------- Murder Mystery ----------
+// One murderer with a knife, one sheriff with a gun, everyone else innocent - and nobody knows who's who.
+// The knife kills in one stab and the sheriff's gun in one shot. Anyone who sees the knife out knows who the murderer is.
+// If the sheriff shoots an innocent, the sheriff dies too and drops the gun: whoever picks it up is the new sheriff.
+// Innocents win if the murderer goes down or the time runs out; the murderer wins if nobody else is left.
+const MURDER = { arena: 1500, time: 180000, sight: 560, cool: [4000, 8000], lonely: 380, maxPlayers: 40 };
+const MURDER_ROLE = { murderer: 'MURDERER', sheriff: 'SHERIFF', innocent: 'INNOCENT' };
+function setupMurder(role) {
+    placeInArena(MURDER.arena, 260);
+    const p = G.player, others = G.fighters.filter(f => f !== p);
+    if (role === 'random') role = pick(['murderer', 'sheriff', ...Array(Math.max(1, G.fighters.length - 2)).fill('innocent')]);
+    const m = role === 'murderer' ? p : pick(others);
+    const s = role === 'sheriff' ? p : pick(others.filter(f => f !== m));
+    m.murderer = true; m.inv = [null, 'Dagger']; m.slot = 0;
+    if (s) { s.sheriff = true; s.inv = [null, 'Pistol']; s.slot = 1; equipNew(s, 'Pistol'); }
+    G.murdererF = m;
+    G.murderEnd = MURDER.time;
+}
+const murderRole = f => f.murderer ? 'murderer' : f.sheriff ? 'sheriff' : 'innocent';
+// The knife kills in one stab and the sheriff's gun in one shot; punches barely hurt
+function murderDamage(t, amount, attacker, weapon) {
+    if (!attacker || attacker === t) return amount;
+    if (weapon === 'Dagger' && attacker.murderer) return 999;
+    if (weapon === 'Pistol') return 999;
+    if (weapon === 'Fist') return Math.min(amount, 3);
+    return amount;
+}
+function murderDeath(t, killer) {
+    // The gun falls to the ground when the sheriff goes down
+    if (t.inv.includes('Pistol')) {
+        const [l] = dropItems(t.x, t.y, [{ key: 'Pistol' }], 0.4);
+        G.murderGun = l;
+        if (G.mode === 'playing' && !G.result) showBanner('THE SHERIFF IS DOWN', true, 'The gun is on the ground. Whoever picks it up is the new sheriff!');
+    }
+    // Shot an innocent: the sheriff pays for it
+    if (killer && killer !== t && killer.sheriff && !t.murderer && !killer.dead) G.guilty = killer;
+}
+function updateMurder(dt) {
+    if (G.mode !== 'playing') return;
+    const m = G.murdererF;
+    if (G.guilty) {
+        const k = G.guilty; G.guilty = null;
+        if (!k.dead) { addFloat(k.x, k.y - 40, 'SHOT AN INNOCENT!', '#ff5a5f', true); k.guiltyDeath = true; killFighter(k, null, 'Shot an innocent'); }
+    }
+    // Whoever picks up the gun becomes the sheriff
+    for (const f of G.fighters) if (!f.dead && !f.sheriff && !f.murderer && f.inv.includes('Pistol')) {
+        f.sheriff = true; f.knows = false;
+        if (f.isPlayer) showBanner("YOU'RE THE SHERIFF NOW", true, 'One shot kills. Shoot the murderer, but if you shoot an innocent, you die too!');
+        else if (G.player && !G.player.dead) addFloat(f.x, f.y - 40, 'NEW SHERIFF', '#7fd4ff', true);
+    }
+    // Anyone who sees the knife out knows who the murderer is
+    if (m && !m.dead && held(m) === 'Dagger' && G.time >= (G.nextWitness || 0)) {
+        G.nextWitness = G.time + 200;
+        G.fgrid.query(m.x, m.y, MURDER.sight, f => { if (f !== m && !f.dead && !f.knows && Math.hypot(f.x - m.x, f.y - m.y) < MURDER.sight && lineOfSight(f, m)) f.knows = true; });
+    }
+    if (G.result) return;
+    const p = G.player, left = G.fighters.filter(f => !f.dead && !f.murderer).length;
+    let won = null, title, sub;
+    if (!m || m.dead) { won = !p.murderer; title = p.murderer ? 'YOU WERE STOPPED' : 'THE MURDERER IS DOWN!'; sub = m && m.killedBy ? `${m.killedBy === p ? 'You' : m.killedBy.name} took out the murderer${p.murderer ? '' : ` (${m.name})`}.` : 'The murderer is gone.'; }
+    else if (left === 0) { won = !!p.murderer; title = p.murderer ? 'NOBODY IS LEFT' : 'THE MURDERER WINS'; sub = p.murderer ? 'You got every last one of them.' : `It was ${m.name}.`; }
+    else if (G.time >= G.murderEnd) { won = !p.murderer; title = p.murderer ? "TIME'S UP" : 'SURVIVED!'; sub = p.murderer ? `${left} got away.` : `The murderer was ${m.name}. ${left} made it.`; }
+    if (won === null) return;
+    if (!won && p.dead) return;  // (you already lost)
+    G.result = { won, place: won ? 1 : 2, title, sub };
+    G.overAt = G.time + 2400;
+    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
+}
+// The bots: the murderer stalks anyone on their own, the sheriff hunts the murderer once spotted,
+// innocents stroll about, run from a murderer they've seen and go for a dropped gun
+function murderBot(b) {
+    b.nextThink = G.time + rand(150, 300);
+    const m = G.murdererF, gun = G.murderGun;
+    if (!b.murderer && !b.sheriff && gun && !gun.gone && dist(b, gun) < 900 && !(b.knows && m && !m.dead && dist(m, gun) < 250)) { b.mode = 'loot'; b.goal = gun; return; }
+    if (b.murderer) {
+        const v = b.victim;
+        if (v && !v.dead && G.time < b.huntUntil) {
+            const d = dist(b, v);
+            if (d < 170 && lineOfSight(b, v)) {
+                if (b.slot !== 1) switchSlot(b, 1);
+                if (b.target !== v) b.engageAt = G.time + 120;
+                b.mode = 'fight'; b.target = v; b.hasLOS = true;
+            } else {
+                if (b.slot !== 0) switchSlot(b, 0);
+                b.mode = 'zone'; b.goal = { x: v.x, y: v.y, huntOf: v };
+            }
+            return;
+        }
+        if (v) { b.victim = null; b.nextKill = G.time + rand(...MURDER.cool); }
+        if (b.slot !== 0) switchSlot(b, 0);
+        if (G.time >= (b.nextKill || 0)) {
+            // Someone on their own, with nobody else close enough to see
+            let best = null, bd = 900;
+            for (const f of G.fighters) {
+                if (f === b || f.dead) continue;
+                const d = dist(b, f);
+                if (d > bd) continue;
+                let lonely = true;
+                G.fgrid.query(f.x, f.y, MURDER.lonely, q => { if (q !== f && q !== b && !q.dead && Math.hypot(q.x - f.x, q.y - f.y) < MURDER.lonely) lonely = false; });
+                if (lonely) { bd = d; best = f; }
+            }
+            if (best) { b.victim = best; b.huntUntil = G.time + 9000; return; }
+        }
+        strollArena(b);
+        return;
+    }
+    if (b.sheriff && m && !m.dead && b.knows) {
+        const d = dist(b, m);
+        if (d < 600 && lineOfSight(b, m) && clearShot(b, m)) {
+            if (b.target !== m) b.engageAt = G.time + rand(250, 500);
+            b.mode = 'fight'; b.target = m; b.hasLOS = true; b.lastSeen = G.time;
+        } else { b.mode = 'zone'; b.goal = { x: m.x, y: m.y, huntOf: m }; b.target = null; }
+        return;
+    }
+    if (b.knows && m && !m.dead && dist(b, m) < 650) { b.mode = 'flee'; b.target = m; b.fleeUntil = G.time + 3000; return; }
+    strollArena(b);
+}
+
+// A bot sheriff only fires with nobody else in the way or right beside the murderer
+function clearShot(b, m) {
+    const dx = m.x - b.x, dy = m.y - b.y, L2 = dx * dx + dy * dy || 1;
+    for (const f of G.fighters) {
+        if (f === b || f === m || f.dead) continue;
+        const t = clamp(((f.x - b.x) * dx + (f.y - b.y) * dy) / L2, 0, 1.15);
+        if (Math.hypot(b.x + dx * t - f.x, b.y + dy * t - f.y) < f.r + 26) return false;
+    }
+    return true;
+}
+
+// ---------- Ghost ----------
+// One ghost nobody can see: it only shows for a moment when it shoots or gets hit, and leaves glowing footprints.
+// Pitch dark; the hunters have flashlights and guns. The ghost is quick and tough, with a shotgun that never runs out.
+const GHOST = { arena: 2300, hp: 500, hpPer: 55, regen: 20, speed: 1.22, reveal: 600, step: 34, stepLife: 7000, track: 420, maxPlayers: 60 };
+const ghostSeen = f => G.time - (f.lastShot || -1e9) < GHOST.reveal;
+function setupGhost(who) {
+    placeInArena(GHOST.arena, 500);
+    const g = who || pick(G.fighters.filter(f => !f.isPlayer));
+    if (!g) return;
+    g.ghost = true; g.team = 1; if (!g.isPlayer) g.name = 'The Ghost'; g.color = '#d8f4ff'; g.dark = shade(g.color, -0.45); g.light = shade(g.color, 0.35);
+    // (tougher the more hunters there are)
+    g.hp = g.maxHp = GHOST.hp + GHOST.hpPer * (G.fighters.length - 1);
+    g.inv[0] = 'Shotgun'; g.slot = 0; g.ammo.Shotgun = 9999;
+    G.ghostF = g;
+    // The hunters start armed
+    for (const f of G.fighters) if (f !== g) { applyLoot(f, pick(['Assault Rifle', 'Shotgun', 'Mac10', 'Machine Gun']), -1); f.items.bandage = 3; }
+}
+function updateGhost(dt) {
+    const g = G.ghostF;
+    if (g && !g.dead) {
+        g.ammo.Shotgun = 9999;
+        // Out of the fight for a moment, it heals
+        if (G.time - g.lastHurt > 3000) g.hp = Math.min(g.maxHp, g.hp + GHOST.regen * dt);
+        // Footprints, left and right, wherever it walks
+        if (!g.lastStep) g.lastStep = { x: g.x, y: g.y, side: 1 };
+        if (Math.hypot(g.x - g.lastStep.x, g.y - g.lastStep.y) > GHOST.step) {
+            const a = Math.atan2(g.y - g.lastStep.y, g.x - g.lastStep.x), side = -g.lastStep.side;
+            G.ghostSteps.push({ x: g.x - Math.sin(a) * 6 * side, y: g.y + Math.cos(a) * 6 * side, a, t: G.time });
+            g.lastStep = { x: g.x, y: g.y, side };
+        }
+    }
+    if (G.ghostSteps.length && G.time - G.ghostSteps[0].t > GHOST.stepLife) G.ghostSteps = G.ghostSteps.filter(s => G.time - s.t < GHOST.stepLife);
+    if (G.mode !== 'playing' || G.result) return;
+    const p = G.player, left = G.fighters.filter(f => !f.dead && !f.ghost).length;
+    let won = null, title, sub;
+    if (!g || g.dead) { won = !p.ghost; title = p.ghost ? 'BANISHED!' : 'GHOST BANISHED!'; sub = g && g.killedBy ? `${g.killedBy === p ? 'You' : g.killedBy.name} got the ghost.` : 'The ghost is gone.'; }
+    else if (left === 0) { won = !!p.ghost; title = p.ghost ? 'THE HAUNTING IS COMPLETE' : 'THE GHOST WINS'; sub = p.ghost ? 'Not one hunter is left.' : 'Every hunter is gone.'; }
+    if (won === null) return;
+    if (!won && p.dead) return;
+    G.result = { won, place: won ? 1 : 2, title, sub };
+    G.overAt = G.time + 2400;
+    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
+}
+// The ghost bot haunts: it creeps up on a hunter who's on their own, blasts them up close,
+// and slips away to heal when it's hurt or too many hunters are round it
+function ghostBot(b) {
+    b.nextThink = G.time + rand(150, 280);
+    if (G.time < (b.slipUntil || 0) && b.goal) { b.mode = 'zone'; return; }
+    let crowd = 0;
+    G.fgrid.query(b.x, b.y, 450, f => { if (!f.dead && !f.ghost && Math.hypot(f.x - b.x, f.y - b.y) < 450) crowd++; });
+    if (b.hp < b.maxHp * 0.45 || crowd >= 4) {
+        // slip away: somewhere in the circle well away from here
+        let best = null, bd = -1;
+        for (let i = 0; i < 6; i++) { const q = arenaPoint(); const d = dist(q, b); if (d > bd) { bd = d; best = q; } }
+        b.mode = 'zone'; b.goal = best; b.slipUntil = G.time + rand(4000, 7000); b.victim = null;
+        return;
+    }
+    let v = b.victim;
+    if (!v || v.dead || G.time > (b.huntUntil || 0)) {
+        v = null; let bd = Infinity;
+        for (const f of G.fighters) {
+            if (f.dead || f.ghost) continue;
+            let near = 0;
+            G.fgrid.query(f.x, f.y, 350, q => { if (q !== f && !q.dead && !q.ghost && Math.hypot(q.x - f.x, q.y - f.y) < 350) near++; });
+            const d = dist(b, f) * (1 + near * 0.8);
+            if (d < bd) { bd = d; v = f; }
+        }
+        b.victim = v; b.huntUntil = G.time + 10000;
+    }
+    if (!v) { strollArena(b); return; }
+    const d = dist(b, v);
+    if (d < 230 && lineOfSight(b, v)) {
+        if (b.target !== v) b.engageAt = G.time + 150;
+        b.mode = 'fight'; b.target = v; b.hasLOS = true;
+    } else { b.mode = 'zone'; b.goal = { x: v.x, y: v.y, huntOf: v }; }
+}
+// The freshest footprint a hunter is close enough to notice
+function freshStep(b) {
+    let best = null;
+    for (let i = G.ghostSteps.length - 1; i >= 0 && i > G.ghostSteps.length - 120; i--) {
+        const s = G.ghostSteps[i];
+        if (G.time - s.t > GHOST.stepLife * 0.6) break;
+        if (Math.hypot(s.x - b.x, s.y - b.y) < GHOST.track) { best = s; break; }
+    }
+    return best;
+}
+// Footprints glow pale blue in the dark (drawn on top of the darkness)
+function drawGhostSteps(camX, camY, zoom) {
+    if (!G.ghostSteps.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of G.ghostSteps) {
+        const sx = (s.x - camX) * zoom, sy = (s.y - camY) * zoom;
+        if (sx < -20 || sy < -20 || sx > viewW + 20 || sy > viewH + 20) continue;
+        const k = 1 - (G.time - s.t) / GHOST.stepLife;
+        ctx.save(); ctx.translate(sx, sy); ctx.rotate(s.a);
+        ctx.fillStyle = `rgba(120,200,255,${0.35 * k})`;
+        ctx.beginPath(); ctx.ellipse(0, 0, 9 * zoom, 5 * zoom, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(210,240,255,${0.8 * k})`;
+        ctx.beginPath(); ctx.ellipse(1.5 * zoom, 0, 5 * zoom, 2.6 * zoom, 0, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(-4 * zoom, 0, 1.8 * zoom, 0, TAU); ctx.fill();
+        ctx.restore();
+    }
+    ctx.restore();
+}
+
+// ---------- Fort Wars ----------
+// Two teams, a glowing wall down the middle. For the first 2 minutes nobody can fight: everyone builds a fort out of
+// sandbag walls and crates (your team's bots build too). Then the wall drops and it's war - and the forts can be shot apart.
+const FORT = { build: 120000, dist: 950, arena: 2300, blocks: 60, hp: 320, crateHp: 220, reach: 190, every: 160, gap: 30 };
+function spawnFortTeams(cx) {
+    const { size } = G.war, bases = [{ x: cx - FORT.dist, y: cx }, { x: cx + FORT.dist, y: cx }];
+    let n = 0;
+    for (let t = 0; t < 2; t++) {
+        const base = bases[t];
+        for (let i = 0; i < size; i++) {
+            const s = spawnNear(base, 160 + Math.sqrt(size) * 40, 30);
+            if (t === 0 && i === 0 && G.mode === 'playing') { addPlayer(s, 0); continue; }
+            const b = createFighter(s.x, s.y, { name: botName(n++), color: TEAMS[t].color, team: t });
+            G.fighters.push(b);
+        }
+        G.teamAlive[t] = size;
+        scatterSupply(G.mode === 'demo' ? 2 : Math.min(10, 3 + Math.floor(size / 8)), base, 260);
+    }
+    G.fort = { build: true, cx, bases, plans: bases.map((b, t) => fortPlan(b, t)), next: [0, 0], placed: [0, 0] };
+    if (G.player) G.player.fortLeft = FORT.blocks;
+}
+// What each team's bots build: a front wall with two doorways, a second wall behind the doors, side walls, crates for cover
+function fortPlan(base, t) {
+    const s = t === 0 ? 1 : -1, out = [];
+    for (let i = -4; i <= 4; i++) if (i !== -2 && i !== 2) out.push({ x: base.x + s * 300, y: base.y + i * 80, hw: 12, hh: 40 });
+    for (const y of [-160, 160]) out.push({ x: base.x + s * 190, y: base.y + y, hw: 12, hh: 40 });
+    for (const side of [-1, 1]) for (let k = 0; k < 5; k++) out.push({ x: base.x + s * (260 - k * 80), y: base.y + side * 380, hw: 40, hh: 12 });
+    for (let i = 0; i < 6; i++) out.push({ x: base.x + s * rand(-60, 220), y: base.y + rand(-300, 300), hw: 20, hh: 20, crate: true });
+    return out;
+}
+// Can a block go here? false = never (wrong side, in a wall...), 'busy' = someone's standing there right now
+function fortSpot(x, y, hw, hh, team) {
+    const F = G.fort;
+    if (team === 0 ? x + hw > F.cx - FORT.gap : x - hw < F.cx + FORT.gap) return false;
+    if (Math.hypot(x - F.cx, y - F.cx) > FORT.arena - 80) return false;
+    for (const [px, py] of [[x, y], [x - hw, y - hh], [x + hw, y + hh], [x - hw, y + hh], [x + hw, y - hh]]) if (blockedAt(G.world.grid, px, py, 4)) return false;
+    let hit = false;
+    G.fgrid.query(x, y, Math.max(hw, hh) + 30, f => { if (!f.dead && Math.abs(f.x - x) < hw + f.r && Math.abs(f.y - y) < hh + f.r) hit = true; });
+    return hit ? 'busy' : true;
+}
+const fortSpotOk = (x, y, hw, hh, team) => fortSpot(x, y, hw, hh, team) === true;
+function addFortBlock(x, y, hw, hh, team, crate) {
+    const o = crate
+        ? { type: 'crate', fortBlock: true, x, y, hw, hh, hp: FORT.crateHp, maxHp: FORT.crateHp, hitAt: -9999, team }
+        : { type: 'wall', sandbags: true, fortBlock: true, x, y, hw, hh, color: '#8d7d5a', hp: FORT.hp, maxHp: FORT.hp, hitAt: -9999, team };
+    G.world.obstacles.push(o);
+    G.world.grid.insertBox(o);
+    if (inView(x, y, 100)) { burst(x, y, 8, '#c9b48a', 120); G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: Math.max(hw, hh) * 1.3, color: '#fff2c8' }); }
+    return o;
+}
+function damageFortBlock(o, dmg) {
+    if (o.broken) return;
+    o.hp -= dmg; o.hitAt = G.time;
+    if (o.hp > 0) return;
+    o.broken = true;
+    G.world.grid.removeBox(o);
+    const i = G.world.obstacles.indexOf(o);
+    if (i >= 0) G.world.obstacles.splice(i, 1);
+    if (inView(o.x, o.y, 100)) {
+        const cols = o.type === 'crate' ? ['#c89b6d', '#a87b4f', '#e6cfa3'] : ['#8d7d5a', '#a8976c', '#6e6046'];
+        for (let k = 0; k < 14; k++) { const a = rand(0, TAU), sp = rand(80, 260); G.particles.push({ type: 'chunk', x: o.x + rand(-o.hw, o.hw), y: o.y + rand(-o.hh, o.hh), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.5, 0.9), max: 0.9, size: rand(4, 8), color: pick(cols), rot: rand(0, TAU), spin: rand(-12, 12) }); }
+        Sound.crunch(Sound.volAt(o.x, o.y));
+    }
+}
+// Where your next block would go: in front of you where you're aiming, turned across your aim
+function fortAim(p, m) {
+    const dx = m.x - p.x, dy = m.y - p.y, d = Math.hypot(dx, dy) || 1, r = Math.min(FORT.reach, Math.max(60, d));
+    const x = p.x + dx / d * r, y = p.y + dy / d * r, across = Math.abs(dx) > Math.abs(dy);
+    return { x, y, hw: across ? 12 : 40, hh: across ? 40 : 12 };
+}
+function placeFortBlock(p, m) {
+    if (G.time < (p.nextBuild || 0)) return;
+    p.nextBuild = G.time + 220;
+    if (!(p.fortLeft > 0)) { addFloat(p.x, p.y - 34, 'No blocks left', '#ff8fa3'); Sound.empty(); return; }
+    const a = fortAim(p, m);
+    if (!fortSpotOk(a.x, a.y, a.hw, a.hh, p.team)) { Sound.empty(); return; }
+    addFortBlock(a.x, a.y, a.hw, a.hh, p.team, false);
+    p.fortLeft--;
+    Sound.thud(0.25);
+}
+function updateFort(dt) {
+    const F = G.fort;
+    if (!F || !F.build) return;
+    // Nobody crosses the glowing wall while building
+    for (const f of G.fighters) {
+        if (f.dead) continue;
+        if (f.team === 0 && f.x > F.cx - FORT.gap + 6) { f.x = F.cx - FORT.gap + 6; f.vx = Math.min(0, f.vx); }
+        if (f.team === 1 && f.x < F.cx + FORT.gap - 6) { f.x = F.cx + FORT.gap - 6; f.vx = Math.max(0, f.vx); }
+    }
+    // The bots put their fort up, a piece at a time
+    for (let t = 0; t < 2; t++) {
+        const plan = F.plans[t];
+        if (F.next[t] >= plan.length || G.time < (F.at || (F.at = [0, 0]))[t]) continue;
+        const q = plan[F.next[t]], ok = fortSpot(q.x, q.y, q.hw, q.hh, t);
+        // (someone in the way: try again in a moment, and shoo them off it)
+        if (ok === 'busy') { F.at[t] = G.time + 400; G.fgrid.query(q.x, q.y, 90, f => { if (!f.isPlayer && f.team === t && !f.dead) { f.mode = 'zone'; f.goal = { x: F.bases[t].x + rand(-120, 120), y: F.bases[t].y + rand(-150, 150) }; f.strollUntil = G.time + 2500; } }); continue; }
+        F.next[t]++;
+        F.at[t] = G.time + FORT.build * 0.7 / plan.length;
+        if (!ok) continue;
+        addFortBlock(q.x, q.y, q.hw, q.hh, t, q.crate);
+        // (the nearest builder runs over to it)
+        let bb = null, bd = Infinity;
+        for (const f of G.fighters) if (!f.dead && !f.isPlayer && f.team === t) { const d = dist(f, q); if (d < bd) { bd = d; bb = f; } }
+        if (bb) { bb.mode = 'zone'; bb.goal = { x: q.x - (t === 0 ? 50 : -50), y: q.y }; bb.strollUntil = G.time + 2500; }
+    }
+    const left = FORT.build - G.time;
+    if (left <= 10000 && !F.warned && G.mode === 'playing') { F.warned = true; showBanner('10 SECONDS!', true, 'The wall is about to drop. Get behind your fort!'); }
+    if (left <= 0) {
+        F.build = false;
+        if (G.mode === 'playing') { showBanner('FIGHT!', true, 'The wall is down. Destroy their fort and wipe them out!'); Sound.tone(220, 0.6, 'sawtooth', 0.12, 110); }
+        for (const f of G.fighters) if (!f.isPlayer && f.mode === 'zone') { f.mode = 'wander'; f.nextThink = G.time; }
+    }
+}
+// While building, bots stay in their own half round their base
+function fortBot(b) {
+    const F = G.fort, base = F.bases[b.team];
+    if (b.mode === 'zone' && b.goal && G.time < (b.strollUntil || 0) && dist(b, b.goal) > 40) return;
+    // (behind where the front wall goes, inside the side walls)
+    const s = b.team === 0 ? 1 : -1;
+    b.mode = 'zone'; b.goal = { x: base.x + s * rand(-260, 130), y: base.y + rand(-300, 300) };
+    b.strollUntil = G.time + rand(3000, 7000);
+}
+// The glowing wall down the middle, the build preview, and the health of blocks under fire
+function drawFort() {
+    const F = G.fort;
+    if (!F) return;
+    if (F.build) {
+        const top = F.cx - FORT.arena, bot = F.cx + FORT.arena, pu = 0.6 + 0.4 * Math.sin(G.time / 300);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createLinearGradient(F.cx - 30, 0, F.cx + 30, 0);
+        g.addColorStop(0, 'rgba(80,200,255,0)'); g.addColorStop(0.5, `rgba(120,220,255,${0.45 * pu})`); g.addColorStop(1, 'rgba(80,200,255,0)');
+        ctx.fillStyle = g; ctx.fillRect(F.cx - 30, top, 60, bot - top);
+        ctx.fillStyle = `rgba(220,245,255,${0.7 * pu})`; ctx.fillRect(F.cx - 1.5, top, 3, bot - top);
+        ctx.restore();
+        const p = G.player;
+        if (p && !p.dead && G.mode === 'playing' && p.fortLeft > 0) {
+            const a = fortAim(p, inputOf(p).world()), ok = fortSpotOk(a.x, a.y, a.hw, a.hh, p.team);
+            ctx.fillStyle = ok ? 'rgba(120,255,150,0.3)' : 'rgba(255,90,90,0.3)';
+            ctx.strokeStyle = ok ? 'rgba(160,255,180,0.9)' : 'rgba(255,120,120,0.9)'; ctx.lineWidth = 2;
+            ctx.fillRect(a.x - a.hw, a.y - a.hh, a.hw * 2, a.hh * 2); ctx.strokeRect(a.x - a.hw, a.y - a.hh, a.hw * 2, a.hh * 2);
+        }
+    }
+    for (const o of G.world.obstacles) if (o.fortBlock && G.time - o.hitAt < 2000) drawPlantHealth(o, o.y - o.hh - 12);
 }
 
 // ---------- Assassin ----------
@@ -5696,6 +6113,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
+    if (G.murder || G.ghostMode || G.fort) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -5841,6 +6259,7 @@ function expireDeathDrops() {
 
 // Picks up (part of) a loot pile; leftovers stay on the ground
 function takeLoot(f, l, swapIdx) {
+    if (G.murder && f.murderer && l.key === 'Pistol') return 0;
     const took = applyLoot(f, l.key, swapIdx, l.mag, l.count);
     if (took >= l.count) removeLoot(l);
     else l.count -= took;
@@ -6355,6 +6774,12 @@ function blast(x, y, owner, R, dmg, weapon) {
             if (d < R) damageBaseWall(o, dmg * (weapon === 'Cannon' || (TOWER_ARMS.boom && weapon === TOWER_ARMS.boom.name) || weapon === 'Catapult' ? 5 : 2.5) * (1 - d / R * 0.6), owner);
         }
     }
+    // Fort Wars: explosions blow fort walls and crates apart
+    if (G.fort && !G.fort.build) {
+        const fb = [];
+        G.world.grid.query(x, y, R + 40, o => { if (o.fortBlock && !o.broken) fb.push(o); });
+        for (const o of fb) { const d = Math.hypot(clamp(x, o.x - o.hw, o.x + o.hw) - x, clamp(y, o.y - o.hh, o.y + o.hh) - y); if (d < R) damageFortBlock(o, dmg * 3 * (1 - d / R * 0.6)); }
+    }
     // Boxes get blown open, plants get shredded
     const props = [];
     G.world.grid.query(x, y, R, o => {
@@ -6419,6 +6844,7 @@ function damage(t, amount, attacker, weapon) {
     // until it's destroyed, and only then does anything get through to you
     if (t.car && !t.car.dead) return;
     if (G.time < (t.protectUntil || 0)) return;  // just respawned
+    if (G.murder) amount = murderDamage(t, amount, attacker, weapon);
     if (t.downed) { t.downHp -= amount; t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
     let dmg = amount;
     if (t.isPlayer && G.strikeCam) G.strikeCam = null;  // (watching a boss strike: getting hurt brings the camera back)
@@ -6427,6 +6853,8 @@ function damage(t, amount, attacker, weapon) {
     if (G.time < (t.frozenUntil || 0)) dmg *= 1.5;  // frozen solid: hits shatter
     dmg *= edgeOf(t).takes;
     if (t.giant) dmg *= BOSS.takes;  // (his hide is thick)
+    if (t.ghost) dmg *= 0.45;  // (bullets half pass through)
+    if (attacker && attacker.ghost && attacker !== t) dmg *= 1.8;  // (and its blasts hit hard)
     if (attacker !== t) dmg *= edgeOf(attacker).hits;
     dmg = shieldAbsorb(t, dmg, attacker, weapon);
     if (t.armor > 0) {
@@ -6503,7 +6931,9 @@ function killFighter(t, killer, weapon) {
         G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 50, color: t.color });
     }
 
-    if (G.mode !== 'demo') addKillfeed(t, killer, weapon);
+    // (Murder Mystery: the feed never says who did it, or how)
+    if (G.mode !== 'demo') { if (G.murder) addKillfeed(t, killer && killer.isPlayer ? killer : null, killer && killer.isPlayer ? weapon : weapon === 'Shot an innocent' ? 'shot an innocent' : 'murdered'); else addKillfeed(t, killer, weapon); }
+    if (G.murder) murderDeath(t, killer);
 
     if (killer && killer.isPlayer && killer !== t) playerKillFx(t);
     if (G.war) { warDeath(t, killer, weapon); return; }
@@ -6511,6 +6941,8 @@ function killFighter(t, killer, weapon) {
     if (t.isPlayer && t.assassin) return;  // (Assassin: caught or taken down, it's reported as a catch)
     if (t.isPlayer) {
         G.result = { won: false, place: G.escape ? G.sides.a + G.escaped : G.alive + 1, sub: G.escape ? `The army got you. ${G.escaped} of ${ESCAPE.people} people escaped.` : G.bossFight && G.bossF && !G.bossF.dead ? `The boss still has ${Math.ceil(G.bossF.hp / G.bossF.maxHp * 100)}% of his health left.` : null, killer: killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null) };
+        if (t.guiltyDeath) Object.assign(G.result, { sub: 'You shot an innocent, so you went down too.', killer: null });
+        else if (G.murder) G.result.sub = t.murderer ? 'The murderer has been stopped.' : `The murderer was ${G.murdererF ? G.murdererF.name : 'someone'}.`;
         G.overAt = G.time + 1800;
         G.timeScale = 0.25;
         G.flash = 0.5;
@@ -6874,7 +7306,7 @@ function updatePlayer(p, dt) {
         else { p.vx = p.vy = 0; const m = mouseWorld(); p.angle = Math.atan2(m.y - p.y, m.x - p.x); return; }
     }
     // (the jet pack makes you faster)
-    const sp = CONFIG.PLAYER_SPEED * (p.zombie ? 1.08 : 1) * (p.perk === 'jet' ? 1.35 : 1);
+    const sp = CONFIG.PLAYER_SPEED * (p.zombie ? 1.08 : 1) * (p.perk === 'jet' ? 1.35 : 1) * (p.ghost ? GHOST.speed : 1);
     if (mx || my) p.moveHeading = Math.atan2(my, mx);
     p.vx = (mx / len) * sp;
     p.vy = (my / len) * sp;
@@ -6886,7 +7318,7 @@ function updatePlayer(p, dt) {
         // A grenade in hand: the trigger pulls the pin, and letting go throws it where you're aiming
         if (mouse.down && !p.cook) { playerCook(p); if (p.cook) p.cookByTrigger = true; }
         else if (!mouse.down && p.cook && p.cookByTrigger) { p.cookByTrigger = false; playerRelease(p); }
-    } else if (mouse.down) tryAttack(p);
+    } else if (mouse.down) { if (G.fort && G.fort.build) placeFortBlock(p, m); else tryAttack(p); }
 }
 
 // ---------- Bot AI ----------
@@ -6986,6 +7418,9 @@ function marchTarget(b) {
 
 function botThink(b) {
     if (b.zombie) { zombieThink(b); return; }
+    if (G.murder) { murderBot(b); return; }
+    if (G.ghostMode && b.ghost) { ghostBot(b); return; }
+    if (G.fort && G.fort.build) { b.nextThink = G.time + rand(300, 600); fortBot(b); return; }
     const K = AIK();
     b.nextThink = G.time + (b.boss ? rand(90, 160) : rand(220, 480) * K.think);
     // Escape: the group follows you (or, on the title screen, whoever's in front)
@@ -7001,6 +7436,7 @@ function botThink(b) {
         if (f.dead || !foe(b, f)) return;
         const d = Math.hypot(f.x - b.x, f.y - b.y);
         if (f.downed && d > 220) return;  // a downed enemy isn't worth chasing
+        if (f.ghost && !ghostSeen(f) && d > 70) return;  // (nobody can see the ghost unless it's just shot or been hit)
         if (d < (G.time < (b.blindUntil || 0) ? 110 : sightOf(f) * K.sight) && (!f.hidden || d < CONFIG.HIDDEN_SIGHT)) seen.push([d, f]);
     });
     seen.sort((p, q) => p[0] - q[0]);
@@ -7027,6 +7463,11 @@ function botThink(b) {
             if (b.items.bucket > 0 && inPond(b)) drinkFromPond(b);
         }
     }
+    // Ghost: with no ghost in sight, hunters follow fresh footprints
+    if (!enemy && G.ghostMode && b.team === 0 && G.mode === 'playing') {
+        const st = freshStep(b);
+        if (st) { b.mode = 'zone'; b.goal = { x: st.x + Math.cos(st.a) * 140, y: st.y + Math.sin(st.a) * 140 }; return; }
+    }
     // Nothing to fight and a vehicle nearby: some bots go for a drive
     if (!enemy && !urgent && b.mode !== 'loot' && b.mode !== 'box' && canDrive(b)) { const c = nearestCar(b, 380, true); if (c && !gaveUpOn(b, c)) { b.mode = 'tocar'; b.goal = c; return; } }
     // Stick with the current target unless someone is much closer; chase it briefly after losing sight
@@ -7036,6 +7477,8 @@ function botThink(b) {
         if (visible && (!enemy || d < bestD + 150)) { enemy = b.target; bestD = d; }
         else if (!visible && !enemy && G.time - b.lastSeen < 3000) { enemy = b.target; bestD = d; }
     }
+    // (the ghost can only be seen right after it shoots, or bumped into)
+    if (enemy && enemy.ghost && !ghostSeen(enemy) && bestD > 60) { if (b.target === enemy && b.lastSpot) { b.mode = 'zone'; b.goal = { x: b.lastSpot.x, y: b.lastSpot.y }; b.target = null; return; } enemy = null; }
     // Someone hiding under a tree or in a bush can be hunted toward, but not shot at until they're spotted again
     b.hasLOS = !!enemy && (!enemy.hidden || bestD < CONFIG.HIDDEN_SIGHT) && lineOfSight(b, enemy);
     if (b.hasLOS) { b.lastSeen = G.time; b.lastSpot = { x: enemy.x, y: enemy.y }; }
@@ -7389,7 +7832,7 @@ function updateBot(b, dt) {
     if (b.downed) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
-    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.zombie ? ZOMBIE.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1), faceMove = true;
+    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.zombie ? ZOMBIE.speed : 1) * (b.ghost ? GHOST.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1), faceMove = true;
 
     switch (b.mode) {
         case 'fight': {
@@ -7419,7 +7862,8 @@ function updateBot(b, dt) {
             b.angle += angleDiff(b.angle, want) * Math.min(1, dt * (b.boss ? 16 : 9 * AIK().turn));
             faceMove = false;
             const inRange = d < w.range + (w.melee ? t.r : 0);
-            if (b.hasLOS && G.time > b.engageAt && inRange && Math.abs(angleDiff(b.angle, want)) < 0.3) tryAttack(b);
+            const unseen = t.ghost && !ghostSeen(t) && d > 60;  // (the ghost vanished again: hold fire)
+            if (b.hasLOS && !unseen && G.time > b.engageAt && inRange && Math.abs(angleDiff(b.angle, want)) < 0.3) tryAttack(b);
             break;
         }
         case 'box': {
@@ -8487,9 +8931,9 @@ function drawGroundDetail(L, T, R, B) {
 function dayT() { return (G.time / DAY.length + (G.dayPhase || 0)) % 1; }
 // 0 in daylight, DAY.dark at the dead of night
 const ZOMBIE_DARK = 1;
-const pitchDark = () => !!G && (G.zombies || G.assassin) && G.mode !== 'demo';  // Zombies is played in pitch dark: your flashlight is all you've got
+const pitchDark = () => !!G && (G.zombies || G.assassin || G.ghostMode) && G.mode !== 'demo';  // Zombies is played in pitch dark: your flashlight is all you've got
 function darkness() {
-    if ((G.zombies || G.assassin) && G.mode !== 'demo') return ZOMBIE_DARK;
+    if ((G.zombies || G.assassin || G.ghostMode) && G.mode !== 'demo') return ZOMBIE_DARK;
     if (G.world.terrain === 'cavern') return CAVERN.dark;
     if (!G.dayCycle || G.world.floor) return 0;
     const t = dayT();
@@ -8565,9 +9009,10 @@ function drawLighting(camX, camY, zoom) {
             g.fillStyle = grad;
             g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, L, f.angle - 0.32, f.angle + 0.32); g.closePath(); g.fill();
         };
-        for (const f of G.fighters) if (f !== p && !f.dead && !f.zombie && !f.downed && !f.car) { cone(f, 650, 0.7); light(f.x, f.y, 55, 0.55); }
+        for (const f of G.fighters) if (f !== p && !f.dead && !f.zombie && !f.downed && !f.car && !f.ghost) { cone(f, 650, 0.7); light(f.x, f.y, 55, 0.55); }
         if (p && p.scopeAt) light(p.scopeAt.x, p.scopeAt.y, Math.min(viewW, viewH) * 0.6 / zoom, 1);
         ctx.drawImage(lightCv, 0, 0, viewW, viewH);
+        if (G.ghostMode) drawGhostSteps(camX, camY, zoom);
         if (G.zombies) drawZombieEyes(camX, camY, zoom);
         return;
     }
@@ -11669,6 +12114,7 @@ function separateFighters() {
 }
 
 function updateHidden(f) {
+    if (f.ghost) { f.hidden = !ghostSeen(f); return; }  // (the ghost is unseen unless it's just shot or been hit)
     if (f.car && vt(f.car).stealth && G.time - (f.car.firedAt || -1e9) > 1500) { f.hidden = true; return; }
     f.hidden = inSmoke(f.x, f.y);
     // Firing gives your position away for a moment, even from cover
@@ -11722,6 +12168,7 @@ function updateBullets(dt) {
                 b.dead = true;
                 if (wall.type === 'box') { damageBox(wall, b.dmg * 0.5, b.owner); break; }
                 if (wall.baseWall) damageBaseWall(wall, b.dmg, b.owner);
+                if (wall.fortBlock) damageFortBlock(wall, b.dmg * 0.6);
                 if (mineable(wall)) mineHit(wall, b.dmg * 0.6, b.owner);
                 if (wall.drivecar) damageCar(wall.drivecar, b.dmg * 0.6, b.owner);
                 if (wall.type === 'tree') { damagePlant(wall, b.dmg, b.owner); break; }
@@ -11807,6 +12254,9 @@ function update(dt) {
     if (G.world.stairs.length && G.mode === 'playing' && G.player && !G.player.dead && !G.frozen && !G.player.car) checkStairs(dt);
     if (G.war && G.time >= G.war.nextCenter) updateTeamCenters();
     if (G.noZone) updateOutbreak(dt);
+    if (G.murder) updateMurder(dt);
+    if (G.ghostMode) updateGhost(dt);
+    if (G.fort) updateFort(dt);
     if (G.world.maze && G.escape && G.mode === 'playing') updateMazeFog();
     if (G.survival) { if (!G.frozen && !G.world.floor) updateAnimals(dt); updateCountdown(); }
     updateDayCycle();
@@ -12074,7 +12524,15 @@ function render() {
     const visible = [];
     for (const f of G.fighters) if (!f.car && !f.up && f.x > L - 80 && f.x < R + 80 && f.y > T - 80 && f.y < B + 80) visible.push(f);
     if (G.world.cars) { drawCars(); drawDriveRoute(); }
-    for (const f of visible) drawFighter(f);
+    for (const f of visible) {
+        if (f.ghost && !f.dead) {
+            // The ghost: see-through, and all but invisible unless it's just shot or been hit (you see yourself faintly)
+            const a = f === G.player ? 0.45 : ghostSeen(f) ? 1 : 0.035;
+            ctx.save(); ctx.globalAlpha = a; drawFighter(f); ctx.restore();
+            continue;
+        }
+        drawFighter(f);
+    }
     for (const f of visible) { drawShieldBubble(f); drawStun(f); drawFrozen(f); }
 
     if (G.world.floor && G.world.floor.heli) drawHelicopter(G.world.floor.heli.x, G.world.floor.heli.y, now);
@@ -13372,6 +13830,7 @@ function drawFighter(f) {
 // Health bars over hurt bots
 function drawOverhead(f) {
     const p = G.player;
+    if (f.ghost && f !== p && !ghostSeen(f)) return;
     if (f.hidden && p && !p.dead && f !== p && foe(p, f) && dist(f, p) > CONFIG.HIDDEN_SIGHT) return;
     if (f.healing) {
         const t = (G.time - f.healing.start) / (f.healing.end - f.healing.start);
@@ -13478,6 +13937,7 @@ function drawRocket(b) {
 }
 
 function drawParticles() {
+    if (G.fort) drawFort();
     for (const p of G.particles) {
         const t = p.life / p.max;
         switch (p.type) {
@@ -13769,6 +14229,9 @@ function updateHUD() {
     if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
     else if (G.assassin) zt = p.assassin ? "Take them all out · don't get caught" : 'Find the assassin and catch him';
+    else if (G.murder) { const r = murderRole(p), n = G.fighters.filter(f => !f.dead && !f.murderer).length; zt = `${MURDER_ROLE[r]} · ${r === 'murderer' ? `${n} left to get` : r === 'sheriff' ? 'find the murderer' : 'stay alive'} · ${fmtTime(Math.max(0, (G.murderEnd - G.time) / 1000))}`; }
+    else if (G.ghostMode) zt = p.ghost ? `Haunt them all · ${G.fighters.filter(f => !f.dead && !f.ghost).length} hunters left` : 'Find the ghost · follow its glowing footprints';
+    else if (G.fort) zt = G.fort.build ? `Build your fort · ${p.fortLeft || 0} blocks left · fight in ${fmtTime(Math.max(0, (FORT.build - G.time) / 1000))}` : 'Shoot their fort apart and wipe them out';
     else if (G.escape) {
         const F = G.world.floor;
         if (!F && G.extract) zt = `Reach the extraction helicopter · ${Math.round(dist(p, G.extract) / 10)}m`;
@@ -13779,7 +14242,7 @@ function updateHUD() {
     else if (G.revolution) zt = p.dead ? (G.revolution.queue.some(q => q.f === p) ? `Respawning in ${Math.ceil((G.revolution.queue.find(q => q.f === p).at - G.time) / 1000)}s` : 'Dead: spectating') : `Wipe out the ${revoName(1 - p.team)} · ${fmtTime(Math.max(0, (REVO.timeLimit - G.time) / 1000))} left`;
     else if (z.state === 'wait') zt = `Zone shrinks in ${fmtTime(z.timer)}`;
     else if (z.state === 'shrink') zt = `Zone closing ${fmtTime(z.timer)}`;
-    else zt = 'Final zone';
+    else zt = G.survival ? 'Survive: last one alive wins' : 'Final zone';
     setText(hud.zone, 'zone', zt);
     hud.zone.classList.toggle('closing', z.state !== 'wait' && !G.revolution);
 
@@ -14051,7 +14514,7 @@ function addKillfeed(victim, killer, weapon) {
     const el = document.createElement('div');
     el.className = 'kf' + (mine ? ' mine' : '');
     if (killer && killer !== victim) el.innerHTML = `${name(killer)}<span class="w">${weapon}</span>${name(victim)}`;
-    else el.innerHTML = `${name(victim)}<span class="w">${weapon === 'zone' ? 'lost to the zone' : weapon === 'escaped' ? 'escaped the city' : weapon === 'starved' ? 'starved to death' : weapon === 'dehydrated' ? 'died of thirst' : 'died'}</span>`;
+    else el.innerHTML = `${name(victim)}<span class="w">${weapon === 'zone' ? 'lost to the zone' : weapon === 'escaped' ? 'escaped the city' : weapon === 'starved' ? 'starved to death' : weapon === 'dehydrated' ? 'died of thirst' : weapon === 'murdered' || weapon === 'shot an innocent' ? weapon : 'died'}</span>`;
     hud.killfeed.appendChild(el);
     while (hud.killfeed.children.length > 5) hud.killfeed.firstChild.remove();
     setTimeout(() => { el.style.opacity = '0'; }, 5000);
@@ -14103,8 +14566,12 @@ const MODES = [
     { id: 'revolution', name: 'REVOLUTION', desc: 'Rebels against the Regime: fortified bases with healing rooms and an armory, chests everywhere, tanks and cannons. Everyone is tougher, and there are no respawns or revives: when you die, you stay dead.' },
     { id: 'assassin', name: 'ASSASSIN', desc: 'Pitch dark. One assassin with a Barrett hides among the survivors and picks them off. Survivors win if they catch him (touch him or take him down); he wins if nobody is left. Play as either side.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
-    { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' }
+    { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
+    { id: 'murder', name: 'MURDER MYSTERY', desc: 'One murderer with a knife, one sheriff with a gun, and everyone else innocent. Nobody knows who\'s who. Find the murderer before everyone is gone.' },
+    { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
+    { id: 'fort', name: 'FORT WARS', desc: 'Two teams get 2 minutes to build a fort out of sandbags and crates. Then the wall in the middle drops and it\'s war: shoot their fort apart.' }
 ];
+let murderRolePick = 'random', ghostRolePick = 'hunter';
 // After the mode and its settings, you pick how the fight is armed
 const WARFARE = {
     normal: { name: 'NORMAL WARFARE', desc: 'Ordinary guns to find in boxes, ordinary cars and trucks.' },
@@ -14121,14 +14588,17 @@ function setMenuMode(i, dir) {
     const m = MODES[menuMode];
     $('mode-name').textContent = m.name;
     $('mode-desc').textContent = m.desc;
-    $('settings-ffa').classList.toggle('hidden', m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-ffa').classList.toggle('hidden', m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution' || m.id === 'fort');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-assassin').classList.toggle('hidden', m.id !== 'assassin');
-    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'assassin' ? 'Survivors' : m.id === 'boss' ? 'Teammates' : 'Opponents';
-    $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
-    // Revolution is always two sides
-    $('team-count').closest('.cpu-row').classList.toggle('hidden', m.id === 'revolution');
+    $('settings-murder').classList.toggle('hidden', m.id !== 'murder');
+    $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
+    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'assassin' ? 'Survivors' : m.id === 'boss' ? 'Teammates' : m.id === 'murder' ? `Other players (up to ${MURDER.maxPlayers - 1})` : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : 'Opponents';
+    $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution' && m.id !== 'fort');
+    // Revolution and Fort Wars are always two sides
+    $('team-count').closest('.cpu-row').classList.toggle('hidden', m.id === 'revolution' || m.id === 'fort');
     if (typeof updateTeamLabel === 'function' && teamSlider) updateTeamLabel();
+    try { showCpuValue(); } catch (e) {}  // (not set up yet on the very first call)
     $('mode-dots').innerHTML = MODES.map((_, k) => `<span class="${k === menuMode ? 'on' : ''}"></span>`).join('');
     const card = document.querySelector('.mode-card');
     card.classList.remove('slide-left', 'slide-right');
@@ -14139,12 +14609,12 @@ function setMenuMode(i, dir) {
 
 // Players per team: left half of the slider covers 1–50, right half 50 up to the max for this many teams
 function teamSize() {
-    const teams = MODES[menuMode] && MODES[menuMode].id === 'revolution' ? 2 : warTeams, t = +teamSlider.value / 1000, max = Math.floor(MAX_PLAYERS / teams);
+    const teams = MODES[menuMode] && (MODES[menuMode].id === 'revolution' || MODES[menuMode].id === 'fort') ? 2 : warTeams, t = +teamSlider.value / 1000, max = Math.floor(MAX_PLAYERS / teams);
     return t < 0.5 ? Math.max(1, Math.round(1 + (t / 0.5) * 49)) : Math.min(max, Math.round(50 + ((t - 0.5) / 0.5) * (max - 50)));
 }
 function updateTeamLabel() {
     $('team-value').textContent = teamSize();
-    $('team-max').textContent = Math.floor(MAX_PLAYERS / (MODES[menuMode] && MODES[menuMode].id === 'revolution' ? 2 : warTeams));
+    $('team-max').textContent = Math.floor(MAX_PLAYERS / (MODES[menuMode] && (MODES[menuMode].id === 'revolution' || MODES[menuMode].id === 'fort') ? 2 : warTeams));
 }
 
 $('mode-prev').addEventListener('click', () => setMenuMode(menuMode - 1, -1));
@@ -14387,8 +14857,11 @@ function sliderToCount(v) {
     return t < 0.5 ? Math.max(1, Math.round(1 + (t / 0.5) * 99)) : Math.min(MAX_BOTS, Math.round(100 + ((t - 0.5) / 0.5) * (MAX_BOTS - 100)));
 }
 
-slider.addEventListener('input', () => { $('cpu-value').textContent = sliderToCount(+slider.value); });
-$('cpu-value').textContent = sliderToCount(+slider.value);
+// (Murder Mystery and Ghost only take so many players)
+const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'murder' ? MURDER.maxPlayers - 1 : id === 'ghost' ? GHOST.maxPlayers - 1 : Infinity; };
+const showCpuValue = () => { $('cpu-value').textContent = Math.min(cpuCap(), sliderToCount(+slider.value)); };
+slider.addEventListener('input', showCpuValue);
+showCpuValue();
 
 // Zombies: survivors (including you) 2–1000, starting zombies 30–500 (left half of each slider is the small numbers)
 const survivorCount = () => clamp(sliderToCount(+$('surv-slider').value), 2, MAX_PLAYERS - ZOMBIE.min);
@@ -14438,7 +14911,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { screens.mapsel.classList.add('hidden'); screens.typesel.classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'murder' || id === 'ghost' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -14455,6 +14928,9 @@ const BRIEF = {
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
+BRIEF.murder = [['🔪', '<b>Murderer:</b> a knife that kills in one stab. Take everyone out, but anyone who sees the knife out knows it\'s you.'], ['🔫', '<b>Sheriff:</b> a gun that kills in one shot. Shoot the murderer. Shoot an innocent and you die too.'], ['🙂', '<b>Innocent:</b> stay alive for 3 minutes. If the sheriff goes down, grab the gun: you become the sheriff.'], ['❓', 'Nobody knows who\'s who. Pick your role, or let it be random.']];
+BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
+BRIEF.fort = [['🧱', '<b>2 minutes to build:</b> aim and shoot to put down sandbag walls (60 of them). Your team\'s bots build too.'], ['🚧', 'A glowing wall splits the map while you build. Nobody can fight yet.'], ['💥', 'Then the wall drops: it\'s war. Bullets and explosions knock the forts apart.'], ['🎯', 'Wipe out the other team to win.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
@@ -14480,7 +14956,7 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'assassin' ? (assassinRole === 'assassin' ? 'You: Assassin' : 'You: Survivor') : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'assassin' ? (assassinRole === 'assassin' ? 'You: Assassin' : 'You: Survivor') : m.id === 'murder' ? `You: ${murderRolePick === 'random' ? 'Random' : murderRolePick[0].toUpperCase() + murderRolePick.slice(1)}` : m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
@@ -14490,7 +14966,8 @@ function openBriefing(map) {
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') openTypeSelect(); else startGame(BRIEF_STAGE.map);
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'murder' || id === 'ghost') openMapSelect(); else openTypeSelect(); }
+    else startGame(BRIEF_STAGE.map);
 });
 $('brief-back').addEventListener('click', () => {
     $('brief').classList.add('hidden');
@@ -14503,7 +14980,7 @@ function openMapSelect() {
     const id = MODES[menuMode].id, escape = id === 'escape';
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
-        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin') || ((m === 'cavern') !== (id === 'boss')));
+        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution' || id === 'fort') && m === 'maze') || (m === 'wasteland' && id !== 'assassin') || ((m === 'cavern') !== (id === 'boss')));
         card.disabled = false;
         card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
     }
@@ -14608,6 +15085,11 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
+for (const [sel, set] of [['#murder-role', v => { murderRolePick = v; }], ['#ghost-role', v => { ghostRolePick = v; }]])
+    for (const b of document.querySelectorAll(sel + ' button')) b.addEventListener('click', () => {
+        set(b.dataset.r);
+        for (const o of document.querySelectorAll(sel + ' button')) o.classList.toggle('on', o === b);
+    });
 for (const b of document.querySelectorAll('#assassin-role button')) b.addEventListener('click', () => {
     assassinRole = b.dataset.r;
     for (const o of document.querySelectorAll('#assassin-role button')) o.classList.toggle('on', o === b);
@@ -14626,20 +15108,22 @@ $('menu-btn').addEventListener('click', toMenu);
 
 function startGame(map = lastMap) {
     Sound.init();
-    const id = MODES[menuMode].id, war = id === 'war' || id === 'hightech' || id === 'revolution';
+    const id = MODES[menuMode].id, war = id === 'war' || id === 'hightech' || id === 'revolution' || id === 'fort';
     if (id === 'revolution' && map === 'maze') map = 'ordinary';
     // Escape has no open countryside to cross, and Survival has no maze
     if (id === 'escape' && map === 'ordinary') map = 'city';
     if (id !== 'assassin' && map === 'wasteland') map = 'ordinary';
-    if (id === 'survival' && map === 'maze') map = 'ordinary';
+    if ((id === 'survival' || id === 'fort') && map === 'maze') map = 'ordinary';
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     lastMap = map;
-    const setup = war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
+    const setup = war ? { type: id, teams: id === 'revolution' || id === 'fort' ? 2 : warTeams, size: teamSize() }
+        : id === 'murder' ? { type: id, count: Math.max(2, Math.min(MURDER.maxPlayers - 1, sliderToCount(+slider.value))), role: murderRolePick }
+        : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : id === 'assassin' ? { type: id, count: sliderToCount(+slider.value), role: assassinRole }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = lastWarfare;
+    setup.warfare = id === 'murder' || id === 'ghost' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -14656,13 +15140,16 @@ function startGame(map = lastMap) {
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.murder);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
     hud.cells.water.classList.toggle('hidden', !G.survival);
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
-    if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
+    if (G.murder) { const r = murderRole(G.player); showBanner(`YOU ARE ${r === 'innocent' ? 'INNOCENT' : 'THE ' + MURDER_ROLE[r]}`, true, r === 'murderer' ? 'Take everyone out. Switch to your knife (slot 2) to stab: one stab kills. Anyone who sees the knife knows it\'s you!' : r === 'sheriff' ? 'One shot kills. Find the murderer and shoot them, but if you shoot an innocent, you die too!' : 'Stay alive for 3 minutes. Watch for anyone with a knife out, and grab the gun if the sheriff goes down.'); }
+    else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
+    else if (G.fort) showBanner('FORT WARS', true, `${G.war.size} a side. 2 minutes to build: aim and ${TOUCH.enabled ? 'push the right stick' : 'click'} to put down sandbag walls. Then the wall drops!`);
+    else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
     else if (G.hightech && war) showBanner(`HIGH TECH TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Find quantum guns in the crates and grab a mech!');
     else if (war) showBanner(`TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, false, 'Grab guns from the supply crates near your base');
