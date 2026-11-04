@@ -6748,13 +6748,16 @@ function updateCube(p, dt) {
         for (const q of G.particles) if (q !== p && q.type === 'cube' && q.rest >= 0 && q.fade < 1 && Math.hypot(q.x - p.x, q.y - p.y) < 45) { p.nb.push(q); if (p.nb.length >= 3) break; }
     }
     // Electricity (like the old cube effects): little arcs keep jumping off it, and often across to a cube close by
-    if ((p.zapT = (p.zapT || 0) - dt) <= 0) {
+    // (very rapid: several new arcs off every cube each frame, kept within limits so phones keep up)
+    p.zapT = (p.zapT || 0) - dt;
+    for (let n = 0; p.zapT <= 0 && n < 4; n++) {
         const hard = p.rest >= p.crackleAt;
-        p.zapT = hard ? rand(0.02, 0.06) : rand(0.03, 0.12);
+        p.zapT += hard ? rand(0.002, 0.006) : rand(0.003, 0.012);
+        if (G.particles.length > 3000) { p.zapT = 0.05; break; }
         const a = rand(0, TAU), Lz = rand(6, 16) * (1 - p.fade * 0.5), col = Math.random() < 0.25 ? '#e8ffff' : Math.random() < 0.6 ? '#1ec8ff' : p.color;
         const nb = (p.nb || []).filter(q => q.life > 0 && q.fade < 1), o = nb.length && Math.random() < 0.45 ? nb[(Math.random() * nb.length) | 0] : null;
-        if (o) G.particles.push({ type: 'zap', x: p.x, y: p.y, x2: o.x, y2: o.y, vx: 0, vy: 0, life: rand(0.06, 0.12), max: 0.12, seed: Math.random(), color: col });
-        else G.particles.push({ type: 'zap', x: p.x, y: p.y, x2: p.x + Math.cos(a) * Lz, y2: p.y + Math.sin(a) * Lz * 0.7, vx: 0, vy: 0, life: rand(0.06, 0.14), max: 0.14, seed: Math.random(), color: col });
+        if (o) G.particles.push({ type: 'zap', x: p.x, y: p.y, x2: o.x, y2: o.y, vx: 0, vy: 0, life: rand(0.03, 0.07), max: 0.07, seed: Math.random(), color: col });
+        else G.particles.push({ type: 'zap', x: p.x, y: p.y, x2: p.x + Math.cos(a) * Lz, y2: p.y + Math.sin(a) * Lz * 0.7, vx: 0, vy: 0, life: rand(0.03, 0.08), max: 0.08, seed: Math.random(), color: col });
     }
     if (p.rest < p.crackleAt) {
         // Sparkling on the ground
@@ -13616,8 +13619,8 @@ function drawParticles() {
                 break;
             }
             case 'zap': {
-                // A crackle of electricity (its zigzag holds for a moment, then jumps to a new one)
-                const rnd = seededRand(Math.floor(p.seed * 1e6) + Math.floor(G.time / 40));
+                // A crackle of electricity (its zigzag jumps to a new shape every frame)
+                const rnd = seededRand(Math.floor(p.seed * 1e6) + Math.floor(G.time / 16));
                 const j = Math.hypot(p.x2 - p.x, p.y2 - p.y) * 0.35;
                 ctx.save();
                 ctx.globalCompositeOperation = 'lighter';
