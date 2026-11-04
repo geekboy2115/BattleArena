@@ -6710,7 +6710,7 @@ function cubeDeath(t) {
             vx: Math.cos(a) * sp + Math.cos(kd) * rand(10, 60), vy: Math.sin(a) * sp * 0.7 + Math.sin(kd) * rand(10, 60), vz: rand(120, 260),
             ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-9, 9), wy: rand(-9, 9), wz: rand(-6, 6),
             size: rand(3.2, 4.8), bounced: false, ground: false, rest: -1, fade: 0, seed: rand(0, 1),
-            crackleAt: DCUBE.sparkle + rand(0, 0.5), fit: 0, fitT: rand(0, 0.15), life: 99, max: 99, color: i % 2 ? '#1ec8ff' : '#fff03c' });
+            crackleAt: DCUBE.sparkle + rand(0, 0.5), life: 99, max: 99, color: i % 2 ? '#1ec8ff' : '#fff03c' });
     }
     // a light pop as they burst out
     G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 40, color: '#bff4ff' });
@@ -6747,23 +6747,20 @@ function updateCube(p, dt) {
         if (Math.random() < dt * 3) G.particles.push({ type: 'twinkle', x: p.x + rand(-6, 6), y: p.y - rand(2, 10), vx: 0, vy: -8, life: 0.35, max: 0.35, size: rand(4, 7), color: Math.random() < 0.5 ? '#ffffff' : p.color });
         return;
     }
-    // Crackling away: smaller and smaller, in rapid fitful spurts of electricity
+    // Crackling away: smaller and smaller, with electricity constantly and rapidly shocking every cube
+    // (the arcs themselves are drawn fresh every frame in drawCube)
+    if (p.fade === 0 && !p.nbDone) {
+        // find the cubes next to it, so sparks can jump between them
+        p.nbDone = true; p.nb = [];
+        for (const q of G.particles) if (q !== p && q.type === 'cube' && q.rest >= 0 && Math.hypot(q.x - p.x, q.y - p.y) < 22 && p.nb.length < 2) p.nb.push(q);
+    }
     p.fade = Math.min(1, (p.rest - p.crackleAt) / DCUBE.crackle);
-    p.fitT -= dt;
-    if (p.fitT <= 0) {
-        // each spurt is short and sharp, with a short uneven pause before the next
-        p.fit = p.fit > 0 ? 0 : rand(0.05, 0.16);
-        p.fitT = p.fit > 0 ? p.fit : rand(0.02, 0.12);
-        if (p.fit > 0 && Math.random() < 0.3) Sound.crackle(Sound.volAt(p.x, p.y));
-    }
-    if (Math.random() < dt * (p.fit > 0 ? 90 : 6)) {
-        const a = rand(0, TAU), L = rand(5, 14) * (1 - p.fade * 0.5);
-        G.particles.push({ type: 'zap', x: p.x, y: p.y - 3, x2: p.x + Math.cos(a) * L, y2: p.y - 3 + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: 0.06, max: 0.06, color: p.color });
-    }
+    if (Math.random() < dt * 6) Sound.crackle(Sound.volAt(p.x, p.y) * 0.7);
+    if (Math.random() < dt * 8) burst(p.x, p.y - 3, 1, Math.random() < 0.5 ? '#ffffff' : p.color, 90, 'spark');
     if (p.fade >= 1) { p.life = 0; burst(p.x, p.y - 2, 3, p.color, 60, 'glow'); }
 }
 function drawCube(p) {
-    const s = p.size * (1 - p.fade) * (p.fade > 0 ? (p.fit > 0 ? 0.6 + 0.6 * Math.random() : 0.9 + 0.1 * Math.random()) : 1);
+    const s = p.size * (1 - p.fade) * (p.fade > 0 ? 0.7 + 0.5 * Math.random() : 1);
     if (s < 0.3) return;
     const cx = Math.cos(p.ax), sx = Math.sin(p.ax), cy = Math.cos(p.ay), sy = Math.sin(p.ay), cz = Math.cos(p.az), sz = Math.sin(p.az), ct = Math.cos(DCUBE.tilt), st = Math.sin(DCUBE.tilt);
     const rot = ([x, y, z]) => {
@@ -6782,13 +6779,31 @@ function drawCube(p) {
     for (const [n, cs, side] of CUBE_FACES) {
         const nn = rot(n);
         if (nn[2] <= 0.02) continue;
-        const c = side ? DCUBE.blue : DCUBE.yellow, b = 0.65 + 0.35 * nn[2] + (p.fade > 0 ? (p.fit > 0 ? 0.9 : 0.2) * Math.random() : 0);
+        const c = side ? DCUBE.blue : DCUBE.yellow, b = 0.65 + 0.35 * nn[2] + (p.fade > 0 ? 0.8 * Math.random() : 0);
         ctx.fillStyle = `rgb(${Math.min(255, c[0] * b + 40 * nn[2])},${Math.min(255, c[1] * b + 40 * nn[2])},${Math.min(255, c[2] * b + 40 * nn[2])})`;
         ctx.strokeStyle = 'rgba(255,255,255,0.75)';
         ctx.beginPath();
         cs.forEach((q, i) => { const [a, bb] = rot(q); i ? ctx.lineTo(X + a * s, Y + bb * s) : ctx.moveTo(X + a * s, Y + bb * s); });
         ctx.closePath(); ctx.fill(); ctx.stroke();
     }
+    if (p.fade > 0) drawShocks(p, X, Y, s);
+}
+// Electricity all over a crackling cube: jagged arcs across it and out of it, new ones every frame,
+// and sparks jumping across to the cubes next to it
+function drawShocks(p, X, Y, s) {
+    const jag = (x1, y1, x2, y2, j) => {
+        ctx.moveTo(x1, y1);
+        for (let k = 1; k < 4; k++) ctx.lineTo(lerp(x1, x2, k / 4) + rand(-j, j), lerp(y1, y2, k / 4) + rand(-j, j));
+        ctx.lineTo(x2, y2);
+    };
+    const L = 6 + s * 2.2;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) { const a = rand(0, TAU); jag(X + rand(-s, s), Y + rand(-s, s), X + Math.cos(a) * L, Y + Math.sin(a) * L * 0.75, 2.5); }
+    for (const q of p.nb || []) if (q.life > 0 && q.fade < 1 && Math.random() < 0.6) jag(X, Y, q.x, q.y - q.z, 3.5);
+    ctx.strokeStyle = p.color; ctx.globalAlpha = 0.45; ctx.lineWidth = 3.2; ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.95; ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.restore();
 }
 
 function inView(x, y, pad = 0) {
