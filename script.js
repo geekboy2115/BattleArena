@@ -6743,7 +6743,8 @@ function updateCube(p, dt) {
     }
     p.rest += dt;
     if (p.rest < p.crackleAt) {
-        // Sparkling on the ground
+        // Sparkling on the ground, with thin blue shocks flicking over it (drawn in drawShocks)
+        if (Math.random() < dt * 2) Sound.crackle(Sound.volAt(p.x, p.y) * 0.35);
         if (Math.random() < dt * 3) G.particles.push({ type: 'twinkle', x: p.x + rand(-6, 6), y: p.y - rand(2, 10), vx: 0, vy: -8, life: 0.35, max: 0.35, size: rand(4, 7), color: Math.random() < 0.5 ? '#ffffff' : p.color });
         return;
     }
@@ -6786,23 +6787,33 @@ function drawCube(p) {
         cs.forEach((q, i) => { const [a, bb] = rot(q); i ? ctx.lineTo(X + a * s, Y + bb * s) : ctx.moveTo(X + a * s, Y + bb * s); });
         ctx.closePath(); ctx.fill(); ctx.stroke();
     }
-    if (p.fade > 0) drawShocks(p, X, Y, s);
+    if (p.rest >= 0) drawShocks(p, X, Y, s, p.fade > 0);
 }
-// Electricity all over a crackling cube: jagged arcs across it and out of it, new ones every frame,
-// and sparks jumping across to the cubes next to it
-function drawShocks(p, X, Y, s) {
-    const jag = (x1, y1, x2, y2, j) => {
-        ctx.moveTo(x1, y1);
-        for (let k = 1; k < 4; k++) ctx.lineTo(lerp(x1, x2, k / 4) + rand(-j, j), lerp(y1, y2, k / 4) + rand(-j, j));
-        ctx.lineTo(x2, y2);
+// Electricity on a cube once it's on the ground: very rapid, thin blue shocks that flick on and off,
+// with little branches (like real sparks), and while it crackles away they come faster, longer and jump to the cubes beside it
+function drawShocks(p, X, Y, s, hard) {
+    if (Math.random() > (hard ? 0.85 : 0.6)) return;   // flicking on and off from frame to frame
+    const pts = [];
+    const bolt = (x1, y1, x2, y2, n, j, branch) => {
+        const P = [[x1, y1]];
+        for (let k = 1; k < n; k++) { const f = k / n; P.push([lerp(x1, x2, f) + rand(-j, j), lerp(y1, y2, f) + rand(-j, j)]); }
+        P.push([x2, y2]); pts.push(P);
+        if (branch && Math.random() < 0.5) {
+            const m = P[1 + Math.floor(Math.random() * (n - 1))], a = Math.atan2(y2 - y1, x2 - x1) + rand(-1.2, 1.2), l = Math.hypot(x2 - x1, y2 - y1) * rand(0.3, 0.55);
+            bolt(m[0], m[1], m[0] + Math.cos(a) * l, m[1] + Math.sin(a) * l * 0.75, 3, j * 0.7, false);
+        }
     };
-    const L = 6 + s * 2.2;
-    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    const n = hard ? 3 : 1 + (Math.random() < 0.4 ? 1 : 0), L = (hard ? 9 : 7) + s * 1.8;
+    for (let i = 0; i < n; i++) {
+        const a = rand(0, TAU), sx = X + rand(-s, s) * 0.8, sy = Y + rand(-s, s) * 0.8, l = L * rand(0.6, 1.2);
+        bolt(sx, sy, sx + Math.cos(a) * l, sy + Math.sin(a) * l * 0.75, 5, 1.6, true);
+    }
+    if (hard) for (const q of p.nb || []) if (q.life > 0 && q.fade < 1 && Math.random() < 0.35) bolt(X, Y, q.x, q.y - q.z, 6, 2.2, true);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath();
-    for (let i = 0; i < 3; i++) { const a = rand(0, TAU); jag(X + rand(-s, s), Y + rand(-s, s), X + Math.cos(a) * L, Y + Math.sin(a) * L * 0.75, 2.5); }
-    for (const q of p.nb || []) if (q.life > 0 && q.fade < 1 && Math.random() < 0.6) jag(X, Y, q.x, q.y - q.z, 3.5);
-    ctx.strokeStyle = p.color; ctx.globalAlpha = 0.45; ctx.lineWidth = 3.2; ctx.stroke();
-    ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.95; ctx.lineWidth = 1.1; ctx.stroke();
+    for (const P of pts) P.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    ctx.strokeStyle = '#1a7dff'; ctx.globalAlpha = 0.55; ctx.lineWidth = 2.2; ctx.stroke();     // blue glow
+    ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = '#c8f0ff'; ctx.globalAlpha = 1; ctx.lineWidth = 0.8; ctx.stroke();     // thin bright core
     ctx.restore();
 }
 
