@@ -6742,6 +6742,11 @@ function updateCube(p, dt) {
         return;
     }
     p.rest += dt;
+    // every so often, find the cubes lying next to it, so shocks can jump between them
+    if ((p.nbT = (p.nbT || 0) - dt) <= 0) {
+        p.nbT = rand(0.25, 0.4); p.nb = [];
+        for (const q of G.particles) if (q !== p && q.type === 'cube' && q.rest >= 0 && q.fade < 1 && Math.hypot(q.x - p.x, q.y - p.y) < 30) { p.nb.push(q); if (p.nb.length >= 3) break; }
+    }
     if (p.rest < p.crackleAt) {
         // Sparkling on the ground, with thin blue shocks flicking over it (drawn in drawShocks)
         if (Math.random() < dt * 2) Sound.crackle(Sound.volAt(p.x, p.y) * 0.35);
@@ -6750,11 +6755,6 @@ function updateCube(p, dt) {
     }
     // Crackling away: smaller and smaller, with electricity constantly and rapidly shocking every cube
     // (the arcs themselves are drawn fresh every frame in drawCube)
-    if (p.fade === 0 && !p.nbDone) {
-        // find the cubes next to it, so sparks can jump between them
-        p.nbDone = true; p.nb = [];
-        for (const q of G.particles) if (q !== p && q.type === 'cube' && q.rest >= 0 && Math.hypot(q.x - p.x, q.y - p.y) < 22 && p.nb.length < 2) p.nb.push(q);
-    }
     p.fade = Math.min(1, (p.rest - p.crackleAt) / DCUBE.crackle);
     if (Math.random() < dt * 6) Sound.crackle(Sound.volAt(p.x, p.y) * 0.7);
     if (Math.random() < dt * 8) burst(p.x, p.y - 3, 1, Math.random() < 0.5 ? '#ffffff' : p.color, 90, 'spark');
@@ -6808,7 +6808,8 @@ function drawShocks(p, X, Y, s, hard) {
         const a = rand(0, TAU), sx = X + rand(-s, s) * 0.8, sy = Y + rand(-s, s) * 0.8, l = L * rand(0.6, 1.2);
         bolt(sx, sy, sx + Math.cos(a) * l, sy + Math.sin(a) * l * 0.75, 5, 1.6, true);
     }
-    if (hard) for (const q of p.nb || []) if (q.life > 0 && q.fade < 1 && Math.random() < 0.35) bolt(X, Y, q.x, q.y - q.z, 6, 2.2, true);
+    // shocks jumping across to the cubes beside it (still or crackling away)
+    for (const q of p.nb || []) if (q.life > 0 && q.fade < 1 && Math.random() < (hard ? 0.45 : 0.3)) bolt(X, Y, q.x, q.y - q.z, 6, 2.2, true);
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath();
     for (const P of pts) P.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
