@@ -947,8 +947,7 @@ body.fs #fs-btn { opacity: 0.55; }
 #menu-card.step-setup #mode-go,
 #menu-card.step-setup .best,
 #menu-card.step-setup .controls-wrap,
-#menu-card.step-setup .credit,
-#menu-card.step-setup .fx-select { display: none !important; }
+#menu-card.step-setup .credit { display: none !important; }
 #menu-card.step-setup .title { display: none; }
 .setup-head { text-align: center; margin: 4px 0 14px; }
 .setup-step { font-size: 12px; font-weight: 700; letter-spacing: 2px; color: var(--muted); }
@@ -958,47 +957,6 @@ body.fs #fs-btn { opacity: 0.55; }
 .setup-btns .btn.ghost { flex: 0 0 34%; }
 #menu-card.step-setup { min-width: min(460px, 92vw); }
 
-/* Effects: the button at the top of the mode step, and the Effects page */
-.fx-select { display: flex; justify-content: center; margin: 2px 0 10px; }
-.fx-open { display: flex; align-items: center; gap: 10px; padding: 6px 14px; border-radius: 12px; cursor: pointer; font-family: inherit; color: var(--ink);
-    background: rgba(0, 255, 232, 0.07); border: 1px solid rgba(0, 255, 232, 0.45); box-shadow: 0 0 12px rgba(0, 255, 232, 0.18); }
-.fx-open:hover { background: rgba(0, 255, 232, 0.14); }
-.fx-label { font-family: 'Black Ops One', sans-serif; font-size: 13px; letter-spacing: 2px; color: #00ffe8; text-shadow: 0 0 8px rgba(0,255,232,0.6); }
-.fx-cur { font-size: 13px; font-weight: 700; letter-spacing: 1px; }
-.fx-go { font-size: 20px; line-height: 1; color: #00ffe8; }
-#fxsel .fx-card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 24px) !important; max-height: calc(100dvh - 24px) !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-.fx-top { text-align: center; margin-bottom: 14px; }
-.fx-rarity { font-family: 'Black Ops One', sans-serif; font-size: 30px; letter-spacing: 3px; line-height: 1.1; }
-.fx-name { font-size: 15px; font-weight: 700; letter-spacing: 1px; opacity: 0.85; margin-bottom: 8px; }
-#fx-clip { width: 100%; max-width: 480px; aspect-ratio: 16 / 9; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: #24361f; display: block; margin: 0 auto; }
-.fx-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-.fx-item { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 14px; border-radius: 12px; cursor: pointer; font-family: inherit; color: var(--ink);
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-left: 5px solid var(--rc); }
-.fx-item.on { background: rgba(255,255,255,0.12); border-color: var(--rc); box-shadow: 0 0 14px color-mix(in srgb, var(--rc) 45%, transparent); }
-.fx-item .fx-ir { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--rc); }
-.fx-item .fx-in { font-size: 17px; font-weight: 700; }
-.fx-item .fx-id { font-size: 12px; opacity: 0.7; }
-.fx-item .fx-check { margin-left: auto; font-size: 18px; color: var(--rc); opacity: 0; }
-.fx-item.on .fx-check { opacity: 1; }
-@media (max-height: 500px) {
-    .fx-select { margin: 0 0 4px; } .fx-open { padding: 3px 10px; }
-    .fx-rarity { font-size: 22px; } #fx-clip { max-width: 340px; }
-}
-
-.fx-bank { text-align: center; font-size: 13px; letter-spacing: 2px; color: #ff8a8a; margin: -6px 0 10px; }
-.fx-bank b { color: #fff; font-size: 16px; }
-.fx-action { margin: 10px auto 0; display: block; min-width: 220px; padding: 10px 18px; font-size: 16px; }
-.fx-action.done { opacity: 0.6; }
-.fx-action.buy { background: linear-gradient(135deg, #ffc23d, #ff5a5f); color: #2a0d12; }
-.fx-action.locked { opacity: 0.55; background: rgba(255,255,255,0.08); color: var(--ink); }
-.fx-item.view { outline: 2px dashed var(--rc); outline-offset: 2px; }
-.fx-item.lock .fx-in { opacity: 0.75; }
-.fx-item .fx-check { white-space: nowrap; font-size: 13px; font-weight: 700; }
-.fx-item.lock .fx-check { opacity: 1; color: #ffb3b3; }
-
-.fx-bar { margin-top: 6px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; max-width: 220px; }
-.fx-bar i { display: block; height: 100%; width: 0; background: var(--rc); box-shadow: 0 0 6px var(--rc); }
-
 /* Phones, team modes (war, zombies, boss...): the team score chip sits at the top middle, so the health bars go under it
    instead of on top of it, and when the phone is upright the chip drops below your stats and the minimap */
 body.touch #hud:has(#team-score:not(.hidden)) #hud-bottom { top: 66px; }
@@ -1007,11 +965,3 @@ body.touch #hud:has(#team-score:not(.hidden)) #hud-bottom { top: 66px; }
     body.touch #hud:has(#team-score:not(.hidden)) #hud-bottom { top: 250px; }
     body.touch #hud:has(#team-score:not(.hidden)) #killfeed { display: none; }
 }
-
-.fx-search { width: 100%; box-sizing: border-box; margin: 4px 0 10px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(0,255,232,0.4);
-    background: rgba(255,255,255,0.06); color: var(--ink); font: 600 16px Rajdhani, sans-serif; outline: none; }
-.fx-search:focus { border-color: #00ffe8; box-shadow: 0 0 10px rgba(0,255,232,0.3); }
-.fx-search::placeholder { color: rgba(255,255,255,0.4); }
-.fx-item.hidden { display: none; }
-.fx-none { text-align: center; opacity: 0.7; margin: 6px 0 12px; }
-.fx-none.unlocked { opacity: 1; color: #ffc23d; font-weight: 800; letter-spacing: 2px; text-shadow: 0 0 10px #ffc23d88; }
