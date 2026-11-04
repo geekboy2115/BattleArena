@@ -6705,13 +6705,16 @@ const CUBE_FACES = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [-1, 0, 0], [0, -1, 0], [0,
 function cubeDeath(t) {
     const r = t.r || CONFIG.RADIUS, kd = t.killedBy && t.killedBy !== t ? Math.atan2(t.y - t.killedBy.y, t.x - t.killedBy.x) : rand(0, TAU);
     for (let i = 0; i < DCUBE.n; i++) {
-        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * r, sp = rand(20, 90);
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * r, sp = rand(55, 140);
         G.particles.push({ type: 'cube', x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d * 0.7, z: rand(4, r * 2.2),
-            vx: Math.cos(a) * sp + Math.cos(kd) * rand(10, 60), vy: Math.sin(a) * sp * 0.7 + Math.sin(kd) * rand(10, 60), vz: rand(-20, 140),
+            vx: Math.cos(a) * sp + Math.cos(kd) * rand(10, 60), vy: Math.sin(a) * sp * 0.7 + Math.sin(kd) * rand(10, 60), vz: rand(120, 260),
             ax: rand(0, TAU), ay: rand(0, TAU), az: rand(0, TAU), wx: rand(-9, 9), wy: rand(-9, 9), wz: rand(-6, 6),
             size: rand(3.2, 4.8), bounced: false, ground: false, rest: -1, fade: 0, seed: rand(0, 1),
-            crackleAt: DCUBE.sparkle + rand(0, 0.5), life: 99, max: 99, color: i % 2 ? '#1ec8ff' : '#fff03c' });
+            crackleAt: DCUBE.sparkle + rand(0, 0.5), fit: 0, fitT: rand(0, 0.15), life: 99, max: 99, color: i % 2 ? '#1ec8ff' : '#fff03c' });
     }
+    // a light pop as they burst out
+    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 40, color: '#bff4ff' });
+    burst(t.x, t.y, 10, '#ffffff', 160, 'glow');
 }
 function updateCube(p, dt) {
     if (p.rest < 0) {
@@ -6744,17 +6747,23 @@ function updateCube(p, dt) {
         if (Math.random() < dt * 3) G.particles.push({ type: 'twinkle', x: p.x + rand(-6, 6), y: p.y - rand(2, 10), vx: 0, vy: -8, life: 0.35, max: 0.35, size: rand(4, 7), color: Math.random() < 0.5 ? '#ffffff' : p.color });
         return;
     }
-    // Crackling away: smaller and smaller, with little sparks of electricity
+    // Crackling away: smaller and smaller, in rapid fitful spurts of electricity
     p.fade = Math.min(1, (p.rest - p.crackleAt) / DCUBE.crackle);
-    if (Math.random() < dt * 14) {
-        const a = rand(0, TAU), L = rand(5, 12) * (1 - p.fade * 0.6);
-        G.particles.push({ type: 'zap', x: p.x, y: p.y - 3, x2: p.x + Math.cos(a) * L, y2: p.y - 3 + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: 0.07, max: 0.07, color: p.color });
-        if (Math.random() < 0.08) Sound.crackle(Sound.volAt(p.x, p.y));
+    p.fitT -= dt;
+    if (p.fitT <= 0) {
+        // each spurt is short and sharp, with a short uneven pause before the next
+        p.fit = p.fit > 0 ? 0 : rand(0.05, 0.16);
+        p.fitT = p.fit > 0 ? p.fit : rand(0.02, 0.12);
+        if (p.fit > 0 && Math.random() < 0.3) Sound.crackle(Sound.volAt(p.x, p.y));
+    }
+    if (Math.random() < dt * (p.fit > 0 ? 90 : 6)) {
+        const a = rand(0, TAU), L = rand(5, 14) * (1 - p.fade * 0.5);
+        G.particles.push({ type: 'zap', x: p.x, y: p.y - 3, x2: p.x + Math.cos(a) * L, y2: p.y - 3 + Math.sin(a) * L * 0.7, vx: 0, vy: 0, life: 0.06, max: 0.06, color: p.color });
     }
     if (p.fade >= 1) { p.life = 0; burst(p.x, p.y - 2, 3, p.color, 60, 'glow'); }
 }
 function drawCube(p) {
-    const s = p.size * (1 - p.fade) * (p.fade > 0 ? 0.85 + 0.15 * Math.random() : 1);
+    const s = p.size * (1 - p.fade) * (p.fade > 0 ? (p.fit > 0 ? 0.6 + 0.6 * Math.random() : 0.9 + 0.1 * Math.random()) : 1);
     if (s < 0.3) return;
     const cx = Math.cos(p.ax), sx = Math.sin(p.ax), cy = Math.cos(p.ay), sy = Math.sin(p.ay), cz = Math.cos(p.az), sz = Math.sin(p.az), ct = Math.cos(DCUBE.tilt), st = Math.sin(DCUBE.tilt);
     const rot = ([x, y, z]) => {
@@ -6773,7 +6782,7 @@ function drawCube(p) {
     for (const [n, cs, side] of CUBE_FACES) {
         const nn = rot(n);
         if (nn[2] <= 0.02) continue;
-        const c = side ? DCUBE.blue : DCUBE.yellow, b = 0.65 + 0.35 * nn[2] + (p.fade > 0 ? 0.3 * Math.random() : 0);
+        const c = side ? DCUBE.blue : DCUBE.yellow, b = 0.65 + 0.35 * nn[2] + (p.fade > 0 ? (p.fit > 0 ? 0.9 : 0.2) * Math.random() : 0);
         ctx.fillStyle = `rgb(${Math.min(255, c[0] * b + 40 * nn[2])},${Math.min(255, c[1] * b + 40 * nn[2])},${Math.min(255, c[2] * b + 40 * nn[2])})`;
         ctx.strokeStyle = 'rgba(255,255,255,0.75)';
         ctx.beginPath();
