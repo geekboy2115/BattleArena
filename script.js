@@ -5022,8 +5022,9 @@ function drawGhostSteps(camX, camY, zoom) {
 
 // ---------- Fort Wars ----------
 // Two teams, a glowing wall down the middle. For the first 2 minutes nobody can fight: everyone builds a fort out of
-// sandbag walls and crates (your team's bots build too). Then the wall drops and it's war - and the forts can be shot apart.
-const FORT = { build: 120000, dist: 950, arena: 2300, blocks: 60, hp: 320, crateHp: 220, reach: 190, every: 160, gap: 30 };
+// wooden walls and crates. Everyone has an axe: chop trees for wood, then spend it on walls (your team's bots chop and build too).
+// Then the wall drops and it's war - and the forts can be shot and blown apart.
+const FORT = { build: 120000, dist: 950, arena: 2300, hp: 320, crateHp: 220, reach: 190, gap: 30, chop: 2, fell: 8, fist: 1, wall: 4, crate: 6, startWood: 8, trees: 26 };
 function spawnFortTeams(cx) {
     const { size } = G.war, bases = [{ x: cx - FORT.dist, y: cx }, { x: cx + FORT.dist, y: cx }];
     let n = 0;
@@ -5038,8 +5039,42 @@ function spawnFortTeams(cx) {
         G.teamAlive[t] = size;
         scatterSupply(G.mode === 'demo' ? 2 : Math.min(10, 3 + Math.floor(size / 8)), base, 260);
     }
-    G.fort = { build: true, cx, bases, plans: bases.map((b, t) => fortPlan(b, t)), next: [0, 0], placed: [0, 0] };
-    if (G.player) G.player.fortLeft = FORT.blocks;
+    G.fort = { build: true, cx, bases, plans: bases.map((b, t) => fortPlan(b, t)), next: [0, 0], placed: [0, 0], wood: [FORT.startWood * 2, FORT.startWood * 2] };
+    // Everyone starts holding an axe
+    for (const f of G.fighters) { f.inv[1] = 'Axe'; f.slot = 1; f.wood = FORT.startWood; }
+    // A wood behind each base to chop (plus whatever trees the map already has on your side)
+    G.fort.trees = bases.map((b, t) => fortGrove(b, t));
+}
+function fortGrove(base, t) {
+    const F = G.fort, s = t === 0 ? 1 : -1;
+    for (let i = 0, made = 0; i < FORT.trees * 6 && made < FORT.trees; i++) {
+        const behind = Math.random() < 0.65;
+        const x = behind ? base.x - s * rand(380, 900) : base.x + s * rand(-300, 330);
+        const y = base.y + (behind ? rand(-850, 850) : (Math.random() < 0.5 ? -1 : 1) * rand(480, 850));
+        const canopy = rand(70, 100), r = canopy * 0.27;
+        if (Math.hypot(x - F.cx, y - F.cx) > FORT.arena - 160 || blockedAt(G.world.grid, x, y, r + 45) || buildingAt(x, y, 40)) continue;
+        const o = { type: 'tree', x, y, r, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 };
+        G.world.obstacles.push(o); G.world.grid.insert(o);
+        made++;
+    }
+    // Every tree on this side near the base: the bots' woodpile
+    return G.world.obstacles.filter(o => o.type === 'tree' && !o.broken && (t === 0 ? o.x < F.cx - 60 : o.x > F.cx + 60) && Math.hypot(o.x - base.x, o.y - base.y) < 1300);
+}
+// Chopping a tree during the build gives wood: the player keeps their own, bots put theirs in the team's pile
+function fortChopped(f, o) {
+    const w = WEAPONS[held(f)], n = (w && w.blade === 'axe' ? FORT.chop : FORT.fist) + (o.hp <= 0 ? FORT.fell : 0);
+    if (f.isPlayer) { f.wood = (f.wood || 0) + n; addFloat(o.x, o.y - o.r - 10, `+${n} wood`, '#e6b97a'); }
+    else G.fort.wood[f.team] += n;
+}
+// Is there a tree right in front of you, close enough to chop?
+function fortTreeAhead(f) {
+    let found = null;
+    G.world.grid.query(f.x, f.y, 140, o => {
+        if (found || o.type !== 'tree' || o.broken) return;
+        if (Math.hypot(f.x - o.x, f.y - o.y) - o.r > 86) return;
+        if (Math.abs(angleDiff(f.angle, Math.atan2(o.y - f.y, o.x - f.x))) <= 1.1) found = o;
+    });
+    return found;
 }
 // What each team's bots build: a front wall with two doorways, a second wall behind the doors, side walls, crates for cover
 function fortPlan(base, t) {
@@ -5048,6 +5083,11 @@ function fortPlan(base, t) {
     for (const y of [-160, 160]) out.push({ x: base.x + s * 190, y: base.y + y, hw: 12, hh: 40 });
     for (const side of [-1, 1]) for (let k = 0; k < 5; k++) out.push({ x: base.x + s * (260 - k * 80), y: base.y + side * 380, hw: 40, hh: 12 });
     for (let i = 0; i < 6; i++) out.push({ x: base.x + s * rand(-60, 220), y: base.y + rand(-300, 300), hw: 20, hh: 20, crate: true });
+    // then an outer front wall, the side walls carried round the back, and a back wall (with two back doors)
+    for (let i = -6; i <= 6; i++) if (i !== -3 && i !== 3) out.push({ x: base.x + s * 430, y: base.y + i * 80, hw: 12, hh: 40 });
+    for (const side of [-1, 1]) for (let k = 5; k < 9; k++) out.push({ x: base.x + s * (260 - k * 80), y: base.y + side * 380, hw: 40, hh: 12 });
+    for (let i = -4; i <= 4; i++) if (i !== -2 && i !== 2) out.push({ x: base.x - s * 340, y: base.y + i * 80, hw: 12, hh: 40 });
+    for (let i = 0; i < 6; i++) out.push({ x: base.x + s * rand(-280, 380), y: base.y + rand(-330, 330), hw: 20, hh: 20, crate: true });
     return out;
 }
 // Can a block go here? false = never (wrong side, in a wall...), 'busy' = someone's standing there right now
@@ -5064,10 +5104,10 @@ const fortSpotOk = (x, y, hw, hh, team) => fortSpot(x, y, hw, hh, team) === true
 function addFortBlock(x, y, hw, hh, team, crate) {
     const o = crate
         ? { type: 'crate', fortBlock: true, x, y, hw, hh, hp: FORT.crateHp, maxHp: FORT.crateHp, hitAt: -9999, team }
-        : { type: 'wall', sandbags: true, fortBlock: true, x, y, hw, hh, color: '#8d7d5a', hp: FORT.hp, maxHp: FORT.hp, hitAt: -9999, team };
+        : { type: 'wall', planks: true, fortBlock: true, x, y, hw, hh, color: '#8a5a32', seed: randInt(1, 1e9), hp: FORT.hp, maxHp: FORT.hp, hitAt: -9999, team };
     G.world.obstacles.push(o);
     G.world.grid.insertBox(o);
-    if (inView(x, y, 100)) { burst(x, y, 8, '#c9b48a', 120); G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: Math.max(hw, hh) * 1.3, color: '#fff2c8' }); }
+    if (inView(x, y, 100)) { burst(x, y, 8, '#c08a55', 120); G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: Math.max(hw, hh) * 1.3, color: '#fff2c8' }); }
     return o;
 }
 function damageFortBlock(o, dmg) {
@@ -5079,7 +5119,7 @@ function damageFortBlock(o, dmg) {
     const i = G.world.obstacles.indexOf(o);
     if (i >= 0) G.world.obstacles.splice(i, 1);
     if (inView(o.x, o.y, 100)) {
-        const cols = o.type === 'crate' ? ['#c89b6d', '#a87b4f', '#e6cfa3'] : ['#8d7d5a', '#a8976c', '#6e6046'];
+        const cols = o.type === 'crate' ? ['#c89b6d', '#a87b4f', '#e6cfa3'] : ['#8a5a32', '#a8743f', '#5e3a1e', '#c08a55'];
         for (let k = 0; k < 14; k++) { const a = rand(0, TAU), sp = rand(80, 260); G.particles.push({ type: 'chunk', x: o.x + rand(-o.hw, o.hw), y: o.y + rand(-o.hh, o.hh), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.5, 0.9), max: 0.9, size: rand(4, 8), color: pick(cols), rot: rand(0, TAU), spin: rand(-12, 12) }); }
         Sound.crunch(Sound.volAt(o.x, o.y));
     }
@@ -5093,16 +5133,30 @@ function fortAim(p, m) {
 function placeFortBlock(p, m) {
     if (G.time < (p.nextBuild || 0)) return;
     p.nextBuild = G.time + 220;
-    if (!(p.fortLeft > 0)) { addFloat(p.x, p.y - 34, 'No blocks left', '#ff8fa3'); Sound.empty(); return; }
+    if (!((p.wood || 0) >= FORT.wall)) { p.nextBuild = G.time + 900; addFloat(p.x, p.y - 34, `Need ${FORT.wall} wood: chop a tree`, '#ff8fa3'); Sound.empty(); return; }
     const a = fortAim(p, m);
     if (!fortSpotOk(a.x, a.y, a.hw, a.hh, p.team)) { Sound.empty(); return; }
     addFortBlock(a.x, a.y, a.hw, a.hh, p.team, false);
-    p.fortLeft--;
+    p.wood -= FORT.wall;
     Sound.thud(0.25);
 }
 function updateFort(dt) {
     const F = G.fort;
     if (!F || !F.build) return;
+    // Felled trees grow back so there's always wood to chop
+    if (F.regrow) for (let i = F.regrow.length - 1; i >= 0; i--) {
+        const g = F.regrow[i], o = g.o;
+        if (G.time < g.at) continue;
+        let busy = false;
+        G.fgrid.query(o.x, o.y, o.r + 30, f => { if (!f.dead && Math.hypot(f.x - o.x, f.y - o.y) < o.r + f.r) busy = true; });
+        if (busy || blockedAt(G.world.grid, o.x, o.y, o.r)) { g.at = G.time + 2000; continue; }
+        F.regrow.splice(i, 1);
+        o.broken = false; o.hp = o.maxHp; o.hitAt = -9999;
+        G.world.grid.insert(o);
+        const si = G.stumps.findIndex(q => q.x === o.x && q.y === o.y);
+        if (si >= 0) G.stumps.splice(si, 1);
+        if (inView(o.x, o.y, 200)) for (let k = 0; k < 14; k++) { const a = rand(0, TAU), sp = rand(30, 120); G.particles.push({ type: 'leaf', x: o.x, y: o.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.5, 1), max: 1, size: rand(3, 6), color: pick(['#5ea84a', '#77c25a']), rot: rand(0, TAU), spin: rand(-8, 8) }); }
+    }
     // Nobody crosses the glowing wall while building
     for (const f of G.fighters) {
         if (f.dead) continue;
@@ -5113,12 +5167,15 @@ function updateFort(dt) {
     for (let t = 0; t < 2; t++) {
         const plan = F.plans[t];
         if (F.next[t] >= plan.length || G.time < (F.at || (F.at = [0, 0]))[t]) continue;
-        const q = plan[F.next[t]], ok = fortSpot(q.x, q.y, q.hw, q.hh, t);
+        const q = plan[F.next[t]], cost = q.crate ? FORT.crate : FORT.wall;
+        if (F.wood[t] < cost) continue;
+        const ok = fortSpot(q.x, q.y, q.hw, q.hh, t);
         // (someone in the way: try again in a moment, and shoo them off it)
         if (ok === 'busy') { F.at[t] = G.time + 400; G.fgrid.query(q.x, q.y, 90, f => { if (!f.isPlayer && f.team === t && !f.dead) { f.mode = 'zone'; f.goal = { x: F.bases[t].x + rand(-120, 120), y: F.bases[t].y + rand(-150, 150) }; f.strollUntil = G.time + 2500; } }); continue; }
         F.next[t]++;
-        F.at[t] = G.time + FORT.build * 0.7 / plan.length;
+        F.at[t] = G.time + FORT.build * 0.75 / plan.length;
         if (!ok) continue;
+        F.wood[t] -= cost;
         addFortBlock(q.x, q.y, q.hw, q.hh, t, q.crate);
         // (the nearest builder runs over to it)
         let bb = null, bd = Infinity;
@@ -5136,7 +5193,31 @@ function updateFort(dt) {
 // While building, bots stay in their own half round their base
 function fortBot(b) {
     const F = G.fort, base = F.bases[b.team];
-    if (b.mode === 'zone' && b.goal && G.time < (b.strollUntil || 0) && dist(b, b.goal) > 40) return;
+    if (b.mode === 'zone' && b.goal && G.time < (b.strollUntil || 0) && dist(b, b.goal) > 40 && !b.chopTree) return;
+    // Until the fort's done, most of the team are off chopping wood
+    if (F.next[b.team] < F.plans[b.team].length && (b.lumberjack ?? (b.lumberjack = Math.random() < Math.min(0.8, 10 / G.war.size)))) {
+        let tr = b.chopTree;
+        if (!tr || tr.broken) {
+            const near = F.trees[b.team].filter(o => !o.broken).sort((p, q) => dist(b, p) - dist(b, q)).slice(0, 5);
+            tr = b.chopTree = near.length ? pick(near) : null;
+        }
+        if (tr) {
+            const d = Math.hypot(b.x - tr.x, b.y - tr.y) || 1;
+            b.nextThink = G.time + rand(150, 260);
+            if (d - tr.r < 70) {
+                b.mode = 'zone'; b.goal = { x: b.x, y: b.y }; b.strollUntil = 0;
+                const ax = b.inv.indexOf('Axe');
+                if (ax >= 0) b.slot = ax;
+                b.angle = Math.atan2(tr.y - b.y, tr.x - b.x);
+                tryAttack(b);
+            } else {
+                b.mode = 'zone'; b.goal = { x: tr.x + (b.x - tr.x) / d * (tr.r + b.r + 12), y: tr.y + (b.y - tr.y) / d * (tr.r + b.r + 12) };
+                b.strollUntil = G.time + 4000;
+            }
+            return;
+        }
+    }
+    b.chopTree = null;
     // (behind where the front wall goes, inside the side walls)
     const s = b.team === 0 ? 1 : -1;
     b.mode = 'zone'; b.goal = { x: base.x + s * rand(-260, 130), y: base.y + rand(-300, 300) };
@@ -5155,7 +5236,7 @@ function drawFort() {
         ctx.fillStyle = `rgba(220,245,255,${0.7 * pu})`; ctx.fillRect(F.cx - 1.5, top, 3, bot - top);
         ctx.restore();
         const p = G.player;
-        if (p && !p.dead && G.mode === 'playing' && p.fortLeft > 0) {
+        if (p && !p.dead && G.mode === 'playing' && (p.wood || 0) >= FORT.wall && !fortTreeAhead(p)) {
             const a = fortAim(p, inputOf(p).world()), ok = fortSpotOk(a.x, a.y, a.hw, a.hh, p.team);
             ctx.fillStyle = ok ? 'rgba(120,255,150,0.3)' : 'rgba(255,90,90,0.3)';
             ctx.strokeStyle = ok ? 'rgba(160,255,180,0.9)' : 'rgba(255,120,120,0.9)'; ctx.lineWidth = 2;
@@ -6058,6 +6139,7 @@ function damagePlant(o, amount, attacker) {
     if (o.broken) return;
     o.hp -= amount;
     o.hitAt = G.time;
+    if (G.fort && G.fort.build && attacker && o.type === 'tree' && WEAPONS[held(attacker)] && WEAPONS[held(attacker)].melee) fortChopped(attacker, o);
     if (inView(o.x, o.y, 100)) {
         burst(o.x + rand(-o.r, o.r), o.y + rand(-o.r, o.r), 4, pick(['#3f7a34', '#5ea84a', '#2c5a28']), 140, 'leaf');
         if (o.type === 'tree') burst(o.x, o.y, 3, '#9a6b45', 120);
@@ -6087,6 +6169,7 @@ function destroyPlant(o) {
     }
     if (o.type === 'tree') {
         G.stumps.push({ x: o.x, y: o.y, r: o.r });
+        if (G.fort && G.fort.build) (G.fort.regrow || (G.fort.regrow = [])).push({ o, at: G.time + 18000 });
         Sound.timber(Sound.volAt(o.x, o.y));
     } else {
         Sound.noiseBurst(2500, 0.25, 0.3 * Sound.volAt(o.x, o.y));
@@ -7318,7 +7401,10 @@ function updatePlayer(p, dt) {
         // A grenade in hand: the trigger pulls the pin, and letting go throws it where you're aiming
         if (mouse.down && !p.cook) { playerCook(p); if (p.cook) p.cookByTrigger = true; }
         else if (!mouse.down && p.cook && p.cookByTrigger) { p.cookByTrigger = false; playerRelease(p); }
-    } else if (mouse.down) { if (G.fort && G.fort.build) placeFortBlock(p, m); else tryAttack(p); }
+    } else if (mouse.down) {
+        // Fort Wars build: swing at a tree in front of you to chop it, anywhere else puts down a wooden wall
+        if (G.fort && G.fort.build && !fortTreeAhead(p)) placeFortBlock(p, m); else tryAttack(p);
+    }
 }
 
 // ---------- Bot AI ----------
@@ -9559,6 +9645,34 @@ function drawContainer(o, x, y, w, h) {
     ctx.fillRect(x + w * 0.3, y, w * 0.12, h); ctx.fillRect(x + w * 0.72, y, w * 0.08, h);
     ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x, y, w, 3);
 }
+
+// Fort Wars walls: planks nailed side by side along the wall, darker where they've been hit
+function drawPlankWall(o, x, y, w, h) {
+    const horiz = w > h, long = horiz ? w : h, thick = horiz ? h : w, n = Math.max(2, Math.round(thick / 8)), rnd = seededRand(o.seed || 1);
+    ctx.fillStyle = '#3e2512'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    const hurt = o.maxHp ? 1 - o.hp / o.maxHp : 0;
+    for (let i = 0; i < n; i++) {
+        const a = thick * i / n + 0.6, b = thick / n - 1.2;
+        ctx.fillStyle = shade(pick2(rnd, ['#8a5a32', '#9c6a3c', '#7d5029', '#a8743f']), -hurt * 0.35);
+        if (horiz) ctx.fillRect(x + 1, y + a, w - 2, b); else ctx.fillRect(x + a, y + 1, b, h - 2);
+        // grain
+        ctx.fillStyle = 'rgba(60,32,14,0.35)';
+        const g = a + b * (0.3 + rnd() * 0.4);
+        if (horiz) ctx.fillRect(x + 4 + rnd() * 10, y + g, long * (0.4 + rnd() * 0.4), 1); else ctx.fillRect(x + g, y + 4 + rnd() * 10, 1, long * (0.4 + rnd() * 0.4));
+    }
+    // cross battens with nails
+    ctx.fillStyle = '#5e3a1e';
+    for (let k = 1; k < Math.max(2, Math.round(long / 26)); k++) {
+        const c = long * k / Math.max(2, Math.round(long / 26));
+        if (horiz) ctx.fillRect(x + c - 2.5, y, 5, h); else ctx.fillRect(x, y + c - 2.5, w, 5);
+        ctx.fillStyle = '#c9c4b8';
+        if (horiz) { ctx.fillRect(x + c - 1, y + 3, 2, 2); ctx.fillRect(x + c - 1, y + h - 5, 2, 2); } else { ctx.fillRect(x + 3, y + c - 1, 2, 2); ctx.fillRect(x + w - 5, y + c - 1, 2, 2); }
+        ctx.fillStyle = '#5e3a1e';
+    }
+    ctx.fillStyle = 'rgba(255,230,190,0.14)';
+    if (horiz) ctx.fillRect(x, y, w, 2); else ctx.fillRect(x, y, 2, h);
+}
+const pick2 = (rnd, a) => a[Math.floor(rnd() * a.length)];
 
 function drawSandbagWall(o, x, y, w, h) {
     const horiz = w > h, n = Math.max(2, Math.round((horiz ? w : h) / 22));
@@ -12892,6 +13006,7 @@ function drawBox(o) {
     if (o.car) { o.rust ? drawRustCar(o, x, y, w, h) : drawCar(o, x, y, w, h); return; }
     if (o.barrel) { drawBarrel(o); return; }
     if (o.container) { drawContainer(o, x, y, w, h); return; }
+    if (o.planks) { drawPlankWall(o, x, y, w, h); return; }
     if (o.sandbags) { drawSandbagWall(o, x, y, w, h); return; }
     if (o.furn) {
         if (o.house) { if (o.house.roofAlpha < 0.99) paintFurniture(ctx, o, seededRand(o.seed)); return; }
@@ -14231,7 +14346,7 @@ function updateHUD() {
     else if (G.assassin) zt = p.assassin ? "Take them all out · don't get caught" : 'Find the assassin and catch him';
     else if (G.murder) { const r = murderRole(p), n = G.fighters.filter(f => !f.dead && !f.murderer).length; zt = `${MURDER_ROLE[r]} · ${r === 'murderer' ? `${n} left to get` : r === 'sheriff' ? 'find the murderer' : 'stay alive'} · ${fmtTime(Math.max(0, (G.murderEnd - G.time) / 1000))}`; }
     else if (G.ghostMode) zt = p.ghost ? `Haunt them all · ${G.fighters.filter(f => !f.dead && !f.ghost).length} hunters left` : 'Find the ghost · follow its glowing footprints';
-    else if (G.fort) zt = G.fort.build ? `Build your fort · ${p.fortLeft || 0} blocks left · fight in ${fmtTime(Math.max(0, (FORT.build - G.time) / 1000))}` : 'Shoot their fort apart and wipe them out';
+    else if (G.fort) zt = G.fort.build ? `Build your fort · 🪵 ${p.wood || 0} wood (${FORT.wall} a wall) · fight in ${fmtTime(Math.max(0, (FORT.build - G.time) / 1000))}` : 'Shoot their fort apart and wipe them out';
     else if (G.escape) {
         const F = G.world.floor;
         if (!F && G.extract) zt = `Reach the extraction helicopter · ${Math.round(dist(p, G.extract) / 10)}m`;
@@ -14569,7 +14684,7 @@ const MODES = [
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
     { id: 'murder', name: 'MURDER MYSTERY', desc: 'One murderer with a knife, one sheriff with a gun, and everyone else innocent. Nobody knows who\'s who. Find the murderer before everyone is gone.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
-    { id: 'fort', name: 'FORT WARS', desc: 'Two teams get 2 minutes to build a fort out of sandbags and crates. Then the wall in the middle drops and it\'s war: shoot their fort apart.' }
+    { id: 'fort', name: 'FORT WARS', desc: 'Two teams get 2 minutes to chop trees with their axes and build a wooden fort. Then the wall in the middle drops and it\'s war: shoot their fort apart.' }
 ];
 let murderRolePick = 'random', ghostRolePick = 'hunter';
 // After the mode and its settings, you pick how the fight is armed
@@ -15148,7 +15263,7 @@ function startGame(map = lastMap) {
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
     if (G.murder) { const r = murderRole(G.player); showBanner(`YOU ARE ${r === 'innocent' ? 'INNOCENT' : 'THE ' + MURDER_ROLE[r]}`, true, r === 'murderer' ? 'Take everyone out. Switch to your knife (slot 2) to stab: one stab kills. Anyone who sees the knife knows it\'s you!' : r === 'sheriff' ? 'One shot kills. Find the murderer and shoot them, but if you shoot an innocent, you die too!' : 'Stay alive for 3 minutes. Watch for anyone with a knife out, and grab the gun if the sheriff goes down.'); }
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
-    else if (G.fort) showBanner('FORT WARS', true, `${G.war.size} a side. 2 minutes to build: aim and ${TOUCH.enabled ? 'push the right stick' : 'click'} to put down sandbag walls. Then the wall drops!`);
+    else if (G.fort) showBanner('FORT WARS', true, `${G.war.size} a side. Chop trees with your axe for wood, then aim at open ground and ${TOUCH.enabled ? 'push the right stick' : 'click'} to build wooden walls. 2 minutes, then the wall drops!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
     else if (G.hightech && war) showBanner(`HIGH TECH TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Find quantum guns in the crates and grab a mech!');
