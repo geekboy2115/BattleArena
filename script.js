@@ -574,6 +574,7 @@ function playerAction(p, code) {
         if (tryLaunchStrike(p)) return;
         if (nearOwnPad(p)) { if (p.remote) loadAllAmmo(p); else openStrikeLoad(p); return; }
         if (!p.car && G.xm && G.xm.use && G.xm.use(p)) return;
+        if (!p.car && G.survival && !nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE) && !nearestCar(p, 90) && campfireUse(p)) return;
         if (p.car) exitCar(p);
         else if (!nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE) && nearestCar(p, 90) && !p.zombie && (!p.up || nearestCar(p, 90).tower === p.up) && !(nearestCar(p, 90).type === 'bigtower' && nearestCar(p, 90).tower && !nearestCar(p, 90).tower.fallen && p.up !== nearestCar(p, 90).tower)) enterCar(p, nearestCar(p, 90));
         else playerPickup(p);
@@ -1219,7 +1220,6 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'cavern') return generateCavern();
     if (type === 'haunted') return generateHaunted();
     if (type === 'prison') return generatePrison();
-    if (type === 'island') return generateIsland();
     // Wasteland (Assassin's map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
@@ -4731,7 +4731,7 @@ function newState(mode, setup) {
     // Buildings can be blown apart in every mode; the rusty facility starts out half wrecked
     initChaos();
     if (G.world.rusty) ruinWorld();
-    if (survival) { makePonds(); spawnAnimals(); }
+    if (survival) { makePonds(); spawnAnimals(); G.camps = []; for (let i = 0; i < CAMP.axes * MAP_AREA; i++) { const q = findSpawn(null, 0); spawnLoot(q.x, q.y, 'Axe'); } }
     // (no vehicles at all on the Assassin's wasteland)
     if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !murder && !ghostMode && !(xm && xm.noCars)) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
@@ -5030,7 +5030,7 @@ function drawGhostSteps(camX, camY, zoom) {
     ctx.restore();
 }
 
-// ---------- Story modes: Nuclear Fallout, Prison Break, Hunted, Shipwreck Island, Blizzard, Mech Assault ----------
+// ---------- Story modes: Prison Break, Hunted, Shipwreck Island, Blizzard ----------
 // Each mode is one entry in XM. The game calls into it from a handful of places (set-up, every frame, the bots' thinking,
 // deaths, the HUD, the drawing and the lighting), and G.xs keeps that game's own state.
 const XM = {};
@@ -5045,7 +5045,11 @@ function xmSees(b, R = CONFIG.BOT_SIGHT) {
     });
     return e;
 }
-const xmGo = (b, x, y, ms = 5000) => { b.mode = 'zone'; b.goal = { x, y }; b.strollUntil = G.time + ms; return true; };
+// (keeps the same goal when it's close to the last one, so the bot gets to plan a route round the walls to it)
+const xmGo = (b, x, y, ms = 5000) => {
+    if (b.mode === 'zone' && b.goal && !b.goal.huntOf && Math.hypot(b.goal.x - x, b.goal.y - y) < 120) { b.strollUntil = Math.max(b.strollUntil || 0, G.time + ms * 0.5); return true; }
+    b.mode = 'zone'; b.goal = { x, y }; b.strollUntil = G.time + ms; return true;
+};
 const xmHasGun = f => f.inv.some(n => n && WEAPONS[n] && !WEAPONS[n].melee);
 // A point on the minimap with a label
 function xmMark(g, k, x, y, col, label, sq) {
@@ -5061,8 +5065,9 @@ function mmZoom(cx, cy, half) { const k = 200 / (half * 2); return { ox: cx - ha
 
 // ----- Things lying on the ground that you just walk over to take (pills, masks, coats, flares) -----
 const PICKS = {
-    radpill: { name: 'Anti-rad pills', icon: '💊', color: '#7dff6a', take: f => { f.pills = (f.pills || 0) + 1; return true; } },
-    gasmask: { name: 'Gas mask', icon: '😷', color: '#c8d0d8', take: f => { if (f.mask) return false; f.mask = true; return true; } },
+    heatpack: { name: 'Heat pack', icon: '🔥', color: '#ffae42', take: f => { if (f.warm === undefined || f.warm > 85) return false; f.warm = Math.min(100, f.warm + 50); return true; } },
+    uniform: { name: 'Guard uniform', icon: '👮', color: '#6a8ad8', take: f => { if (!f.prisoner || f.disguised) return false; f.disguised = true; f.wanted = false; f.color = '#2c4470'; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35); if (f.isPlayer) showBanner('DISGUISED', true, 'The guards think you\'re one of them. Shooting or hitting a guard gives you away!'); return true; } },
+    keycard: { name: 'Keycard', icon: '🪪', color: '#5ac8ff', take: f => { if (!f.prisoner) return false; G.xs.keycard = true; if (G.mode === 'playing') showBanner('KEYCARD!', true, `${f.isPlayer ? 'You' : f.name} grabbed an officer\'s keycard. It opens the armory door!`); return true; } },
     coat: { name: 'Warm coat', icon: '🧥', color: '#d87a3a', take: f => { if (f.coat) return false; f.coat = true; return true; } },
     flare: { name: 'Signal flare', icon: '🧨', color: '#ff5a3a', take: f => { if (f.team !== 0) return false; G.xs.flares = (G.xs.flares || 0) + 1; return true; }, banner: true }
 };
@@ -5103,7 +5108,7 @@ function drawPicks(L, T, R, B, now) {
 function makeDog(x, y, team, wolf) {
     const d = createFighter(x, y, { name: wolf ? 'Wolf' : 'Tracker Dog', color: wolf ? '#8a8d94' : '#7a5230', team });
     d.dog = true; d.wolf = !!wolf; d.r = 13; d.hp = d.maxHp = wolf ? 80 : 70;
-    d.inv = ['Claws', 'Claws']; d.slot = 0; d.speedMul = wolf ? 1.3 : 1.45; d.likesCars = false;
+    d.inv = ['Claws', 'Claws']; d.slot = 0; d.speedMul = wolf ? 1.15 : HUNTED.dogSpeed; d.dmgMul = wolf ? 0.45 : HUNTED.bite; d.likesCars = false;
     G.fighters.push(d);
     return d;
 }
@@ -5152,193 +5157,15 @@ function dogThink(b, scentOf) {
     return true;
 }
 
-// ================= NUCLEAR FALLOUT =================
-// Radiation creeps in from the edges toward the one bunker, and nukes keep coming down and leave hot spots.
-// Pills knock your rads back down, a gas mask halves what you breathe in. At 6 minutes the bunker's blast doors seal:
-// whoever's inside lives, everyone outside is finished.
-const FALLOUT = { seal: 360000, endR: 430, rate: 5, hot: 16, hotR: 700, every: 50000, first: 35000, warn: 9000, boomR: 560, boomDmg: 260, hurt: 7, pill: 45, mask: 0.45, half: 190, door: 120, rush: 150000 };
-const inBunker = (f, m = 0) => { const k = G.xs.bunker; return !!k && Math.abs(f.x - k.x) < FALLOUT.half - 24 - m && Math.abs(f.y - k.y) < FALLOUT.half - 24 - m; };
-XM.fallout = {
-    name: 'NUCLEAR FALLOUT', maps: ['city', 'ordinary'], slider: { label: 'Other players', cap: 150 },
-    desc: 'Radiation spreads across the map and nukes keep falling. Grab anti-rad pills and gas masks, and get into the bunker before its blast doors seal. Anyone left outside is finished.',
-    brief: [['☢️', '<b>Goal:</b> be inside the bunker when its blast doors seal at 6 minutes.'], ['🟢', 'Radiation closes in from the edges toward the bunker. Outside the green line your rads climb, and at 100% they start killing you.'], ['💊', 'Anti-rad pills knock your rads down (taken automatically at 70%). A gas mask halves what you breathe in.'], ['💥', 'Nukes keep falling and leave glowing hot spots behind. Everyone else wants that bunker too.']],
-    setup() {
-        const W = CONFIG.WORLD_SIZE, C = W / 2, S = G.xs;
-        // The bunker: somewhere open, not too far from the middle
-        let at = null;
-        for (let t = 0; t < 300 && !at; t++) {
-            const x = C + rand(-1600, 1600), y = C + rand(-1600, 1600), m = FALLOUT.half + 120;
-            if (G.world.buildings.some(b => x + m > b.x0 && x - m < b.x1 && y + m > b.y0 && y - m < b.y1)) continue;
-            if (G.world.roads && G.world.roads.some(pts => pts.some((p, i) => i > 0 && segHitsCircle(pts[i - 1].x, pts[i - 1].y, p.x, p.y, x, y, m)))) continue;
-            at = { x, y };
-        }
-        at = at || { x: C, y: C };
-        const H = FALLOUT.half, side = randInt(0, 3);
-        const gone = [];
-        G.world.grid.query(at.x, at.y, H + 160, o => { const ox = o.x, oy = o.y; if (Math.abs(ox - at.x) < H + 90 && Math.abs(oy - at.y) < H + 90) gone.push(o); });
-        for (const o of gone) { o.broken = true; isBox(o) ? G.world.grid.removeBox(o) : G.world.grid.remove(o); }
-        for (const c of G.world.cars || []) if (!c.dead && Math.abs(c.x - at.x) < H + 160 && Math.abs(c.y - at.y) < H + 160) { unparkCar(c); c.dead = true; }
-        const add = o => { G.world.obstacles.push(o); G.world.grid.insertBox(o); return o; };
-        const Tk = 24, D = FALLOUT.door;
-        // Four thick concrete walls, the doorway on one side
-        const wallH = (y, gap) => { if (gap) { add({ type: 'wall', bunker: true, color: '#6b6e70', x: at.x - (H + D / 2) / 2 - D / 4, y, hw: (H - D / 2) / 2 + Tk / 2, hh: Tk / 2 }); add({ type: 'wall', bunker: true, color: '#6b6e70', x: at.x + (H + D / 2) / 2 + D / 4, y, hw: (H - D / 2) / 2 + Tk / 2, hh: Tk / 2 }); } else add({ type: 'wall', bunker: true, color: '#6b6e70', x: at.x, y, hw: H + Tk / 2, hh: Tk / 2 }); };
-        const wallV = (x, gap) => { if (gap) { add({ type: 'wall', bunker: true, color: '#6b6e70', x, y: at.y - (H + D / 2) / 2 - D / 4, hw: Tk / 2, hh: (H - D / 2) / 2 }); add({ type: 'wall', bunker: true, color: '#6b6e70', x, y: at.y + (H + D / 2) / 2 + D / 4, hw: Tk / 2, hh: (H - D / 2) / 2 }); } else add({ type: 'wall', bunker: true, color: '#6b6e70', x, y: at.y, hw: Tk / 2, hh: H }); };
-        wallH(at.y - H, side === 0); wallH(at.y + H, side === 2); wallV(at.x - H, side === 3); wallV(at.x + H, side === 1);
-        const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]][side];
-        S.bunker = { x: at.x, y: at.y, side, door: { x: at.x + dirs[0] * H, y: at.y + dirs[1] * H }, out: { x: at.x + dirs[0] * (H + 110), y: at.y + dirs[1] * (H + 110) } };
-        // Radiation closes in on the bunker
-        Object.assign(G.zone, { cx: at.x, cy: at.y, tcx: at.x, tcy: at.y, r: W, tr: W, state: 'final', dmg: 0 });
-        S.r0 = Math.max(...[[0, 0], [W, 0], [0, W], [W, W]].map(([x, y]) => Math.hypot(x - at.x, y - at.y)));
-        S.hots = []; S.booms = []; S.nextBoom = FALLOUT.first;
-        for (let i = 0; i < 110 * MAP_AREA; i++) { const s = findSpawn(null, 0); addPick('radpill', s.x, s.y); }
-        for (let i = 0; i < 40 * MAP_AREA; i++) { const s = findSpawn(null, 0); addPick('gasmask', s.x, s.y); }
-        for (const f of G.fighters) { f.rad = 0; f.pills = 0; f.mask = false; }
-    },
-    update(dt) {
-        const S = G.xs, z = G.zone, k = S.bunker, t = G.time;
-        // The safe ground shrinks toward the bunker
-        const p = clamp(t / FALLOUT.seal, 0, 1);
-        z.r = z.tr = lerp(S.r0, FALLOUT.endR, Math.pow(p, 0.75));
-        updatePicks();
-        // Nukes
-        if (t >= S.nextBoom && !S.sealed) {
-            S.nextBoom = t + FALLOUT.every * rand(0.8, 1.2);
-            let x, y;
-            for (let i = 0; i < 30; i++) {
-                const f = pick(G.fighters.filter(q => !q.dead)) || G.player;
-                x = f.x + rand(-700, 700); y = f.y + rand(-700, 700);
-                if (Math.hypot(x - k.x, y - k.y) > 1100) break;
-            }
-            S.booms.push({ x, y, at: t + FALLOUT.warn });
-            const pl = G.player;
-            if (pl && !pl.dead && Math.hypot(pl.x - x, pl.y - y) < 2600) showBanner('NUKE INCOMING', true, `${Math.round(FALLOUT.warn / 1000)} seconds! Get out of the red circle!`);
-            Sound.siren(Sound.volAt(x, y) * 0.8 + 0.2);
-        }
-        for (const b of S.booms) if (!b.done && t >= b.at) {
-            b.done = true;
-            blast(b.x, b.y, null, FALLOUT.boomR, FALLOUT.boomDmg, 'Nuke');
-            G.particles.push({ type: 'boom', x: b.x, y: b.y, vx: 0, vy: 0, life: 1.2, max: 1.2, size: FALLOUT.boomR * 0.9 });
-            G.particles.push({ type: 'ring', x: b.x, y: b.y, vx: 0, vy: 0, life: 0.9, max: 0.9, size: FALLOUT.boomR * 1.6, color: '#fff2a8' });
-            for (let i = 0; i < 26; i++) { const a = rand(0, TAU), sp = rand(60, 220); G.particles.push({ type: 'smoke', x: b.x + rand(-80, 80), y: b.y + rand(-80, 80), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(2, 4), max: 4, size: rand(40, 90), color: '90,110,60' }); }
-            if (inView(b.x, b.y, 1200)) { G.flash = 0.8; G.flashColor = '255,250,200'; G.shake = Math.max(G.shake, 30); }
-            Sound.noiseBurst(120, 2.2, 0.9 * Sound.volAt(b.x, b.y) + 0.2);
-            S.hots.push({ x: b.x, y: b.y, r: FALLOUT.hotR });
-        }
-        S.booms = S.booms.filter(b => !b.done || t - b.at < 3000);
-        // Rads
-        for (const f of G.fighters) {
-            if (f.dead || f.dog) continue;
-            if (f.rad === undefined) { f.rad = 0; f.pills = 0; }
-            let r = 0;
-            const dz = Math.hypot(f.x - z.cx, f.y - z.cy);
-            if (dz > z.r) r += FALLOUT.rate * (1 + (dz - z.r) / 1500);
-            for (const h of S.hots) { const d = Math.hypot(f.x - h.x, f.y - h.y); if (d < h.r) r += FALLOUT.hot * (1 - d / h.r); }
-            if (S.sealed || inBunker(f)) r = 0;
-            if (f.mask) r *= FALLOUT.mask;
-            f.rad = r > 0 ? Math.min(160, f.rad + r * dt) : Math.max(0, f.rad - (inBunker(f) ? 4 : 0.4) * dt);
-            if (f.rad >= 70 && f.pills > 0) {
-                f.pills--; f.rad = Math.max(0, f.rad - FALLOUT.pill);
-                if (f.isPlayer) { addFloat(f.x, f.y - 36, 'Took an anti-rad pill', '#7dff6a', true); Sound.tone(500, 0.15, 'sine', 0.1, 700); }
-            }
-            if (f.rad >= 100) {
-                f.hp -= FALLOUT.hurt * (1 + (f.rad - 100) / 40) * dt;
-                if (f.isPlayer) G.hurt = Math.max(G.hurt, 0.3);
-                if (f.hp <= 0) killFighter(f, null, 'radiation');
-            }
-        }
-        // The countdown, then the doors
-        const left = FALLOUT.seal - t;
-        if (!S.warned60 && left < 60000 && G.mode === 'playing') { S.warned60 = true; showBanner('ONE MINUTE!', true, 'The bunker doors seal in 60 seconds. Get inside!'); Sound.siren(1); }
-        if (!S.warned10 && left < 10000 && G.mode === 'playing') { S.warned10 = true; showBanner('10 SECONDS!', true, 'The blast doors are closing!'); }
-        if (!S.sealed && left <= 0) {
-            S.sealed = true;
-            const d = FALLOUT.door, H = FALLOUT.half, horiz = k.side === 0 || k.side === 2;
-            const door = { type: 'wall', bunker: true, blastDoor: true, color: '#c9a227', x: k.door.x, y: k.door.y, hw: horiz ? d / 2 + 2 : 12, hh: horiz ? 12 : d / 2 + 2 };
-            G.world.obstacles.push(door); G.world.grid.insertBox(door);
-            Sound.thud(1); G.shake = Math.max(G.shake, 18);
-            const pl = G.player, safe = G.fighters.filter(f => !f.dead && !f.dog && inBunker(f, -10));
-            if (pl && !pl.dead && safe.includes(pl)) {
-                const sub = `The blast doors sealed with you and ${safe.length - 1} other${safe.length === 2 ? '' : 's'} inside.`;
-                G.result = { won: true, place: 1, title: 'SURVIVED THE FALLOUT', sub };
-                G.overAt = G.time + 3500;
-                startVictory(sub);
-            }
-            for (const f of G.fighters) if (!f.dead && !safe.includes(f)) killFighter(f, null, 'fallout');
-        }
-    },
-    idle(b) {
-        const S = G.xs, k = S.bunker;
-        if (S.sealed) return false;
-        const late = G.time > FALLOUT.rush || b.rad > 55 || Math.hypot(b.x - k.x, b.y - k.y) > G.zone.r - 300;
-        if (late) {
-            if (inBunker(b, 20)) return xmGo(b, k.x + rand(-100, 100), k.y + rand(-100, 100), 3000);
-            // round to the doorway, then in
-            if (dist(b, S.bunker.out) > 70 && !inBunker(b, -60)) return xmGo(b, k.out.x, k.out.y, 4000);
-            return xmGo(b, k.x + rand(-80, 80), k.y + rand(-80, 80), 3000);
-        }
-        const q = nearestPick(b, b.mask ? ['radpill'] : ['radpill', 'gasmask'], 650);
-        if (q) return xmGo(b, q.x, q.y, 3000);
-        return false;
-    },
-    hud(p) {
-        const S = G.xs, k = S.bunker;
-        if (S.sealed) return 'The blast doors are sealed';
-        const left = fmtTime(Math.max(0, (FALLOUT.seal - G.time) / 1000));
-        return inBunker(p) ? `In the bunker · doors seal in ${left}` : `Get to the bunker · ${Math.round(dist(p, k) / 10)}m · doors seal in ${left}`;
-    },
-    bar(p) { const r = p.rad || 0; return { v: r / 100, label: `RADIATION ${Math.round(r)}%${p.mask ? ' · MASK ON' : ''}${p.pills ? ` · ${p.pills} PILL${p.pills > 1 ? 'S' : ''}` : ''}`, low: r >= 70 }; },
-    banner() { return `Radiation is closing in and nukes are falling. Get to the bunker (yellow on your map) before its doors seal in ${fmtTime(FALLOUT.seal / 1000)}!`; },
-    deathSub(t, killer, weapon) { return weapon === 'fallout' ? 'The bunker doors sealed without you.' : weapon === 'radiation' ? 'The radiation got you.' : null; },
-    minimap(g, k) {
-        const S = G.xs;
-        for (const h of S.hots) { g.fillStyle = 'rgba(120,255,80,0.35)'; g.beginPath(); g.arc(h.x * k, h.y * k, Math.max(3, h.r * k), 0, TAU); g.fill(); }
-        for (const b of S.booms) if (!b.done) { g.strokeStyle = '#ff3b3b'; g.lineWidth = 2; g.beginPath(); g.arc(b.x * k, b.y * k, Math.max(4, FALLOUT.boomR * k), 0, TAU); g.stroke(); }
-        xmMark(g, k, S.bunker.x, S.bunker.y, '#ffd23a', 'BUNKER', true);
-    },
-    zoneColor: true,
-    drawWorld(L, T, R, B, now) {
-        const S = G.xs, k = S.bunker;
-        for (const h of S.hots) {
-            if (h.x + h.r < L || h.x - h.r > R || h.y + h.r < T || h.y - h.r > B) continue;
-            const g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
-            g.addColorStop(0, `rgba(130,255,70,${0.28 + Math.sin(now * 3) * 0.05})`); g.addColorStop(1, 'rgba(130,255,70,0)');
-            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.fill();
-        }
-        for (const b of S.booms) if (!b.done) {
-            const u = 1 - (b.at - G.time) / FALLOUT.warn;
-            ctx.strokeStyle = `rgba(255,50,50,${0.5 + Math.sin(now * 10) * 0.3})`; ctx.lineWidth = 8;
-            ctx.beginPath(); ctx.arc(b.x, b.y, FALLOUT.boomR, 0, TAU); ctx.stroke();
-            ctx.fillStyle = 'rgba(255,40,40,0.14)'; ctx.beginPath(); ctx.arc(b.x, b.y, FALLOUT.boomR * u, 0, TAU); ctx.fill();
-        }
-        // The bunker floor: a hazard-striped hatch in the middle and the radiation sign
-        if (Math.abs(k.x - (L + R) / 2) < (R - L) / 2 + 300 && Math.abs(k.y - (T + B) / 2) < (B - T) / 2 + 300) {
-            const H = FALLOUT.half - 12;
-            ctx.fillStyle = '#4a4c4e'; ctx.fillRect(k.x - H, k.y - H, H * 2, H * 2);
-            ctx.fillStyle = 'rgba(255,255,255,0.05)'; for (let i = -H; i < H; i += 40) ctx.fillRect(k.x + i, k.y - H, 2, H * 2);
-            ctx.fillStyle = '#c9a227'; ctx.beginPath(); ctx.arc(k.x, k.y, 46, 0, TAU); ctx.fill();
-            ctx.fillStyle = '#1a1a1a';
-            for (let i = 0; i < 3; i++) { const a = i * TAU / 3 - Math.PI / 2; ctx.beginPath(); ctx.moveTo(k.x, k.y); ctx.arc(k.x, k.y, 40, a - 0.5, a + 0.5); ctx.closePath(); ctx.fill(); }
-            ctx.fillStyle = '#c9a227'; ctx.beginPath(); ctx.arc(k.x, k.y, 9, 0, TAU); ctx.fill();
-            ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(k.x, k.y, 6, 0, TAU); ctx.fill();
-        }
-        drawPicks(L, T, R, B, now);
-    },
-    drawTop(L, T, R, B, now) {
-        const p = G.player, r = p && !p.dead ? p.rad || 0 : 0;
-        ctx.fillStyle = `rgba(120,150,40,${0.06 + Math.min(0.2, r * 0.0018)})`;
-        ctx.fillRect(L - 50, T - 50, R - L + 100, B - T + 100);
-    }
-};
-
 // ================= HUNTED =================
 // You, alone in the woods at night with a revolver, a knife and a few traps. An elite team of hunters with thermal
 // sights (they see you through the trees) and tracking dogs (they follow your scent) are after you. Water hides you
 // from both. Survive until dawn.
-const HUNTED = { length: 300000, dawn: 45000, dark: 0.82, scent: 40000, trailEvery: 400, sniff: 650, ping: 45000, firstPing: 30000, pingLife: 20000, cap: 30 };
+const HUNTED = { length: 300000, dawn: 45000, dark: 0.82, scent: 30000, trailEvery: 400, sniff: 550, ping: 55000, firstPing: 45000, pingLife: 15000, cap: 20, release: 30000, bite: 0.33, dogSpeed: 1.15, radio: 5, heli: 60000, caches: 8 };
 XM.hunted = {
     name: 'HUNTED', maps: ['ordinary'], slider: { label: 'Hunters', cap: HUNTED.cap },
     desc: 'Night in the forest. An elite team of hunters with thermal scopes and tracking dogs is after you. Set traps, hide in the water and survive until dawn.',
-    brief: [['🌲', '<b>Goal:</b> survive until dawn (5 minutes), or take every hunter out.'], ['🌡️', 'The hunters have thermal scopes: hiding under trees won\'t hide you from them.'], ['🐕', 'Their dogs follow your scent. Get into water to hide completely and make the dogs lose your trail.'], ['🛰️', 'Every so often their drone sweeps the forest and shows them where you are (unless you\'re in water).'], ['💣', 'You have a revolver, a knife, land mines to use as traps, and smoke.']],
+    brief: [['🌲', '<b>Goal:</b> survive until dawn (5 minutes), or take every hunter out.'], ['🌡️', 'The hunters have thermal scopes: hiding under trees won\'t hide you from them.'], ['🐕', 'Their dogs follow your scent. Get into water to hide completely and make the dogs lose your trail.'], ['🛰️', 'Every so often their drone sweeps the forest and shows them where you are (unless you\'re in water).'], ['📻', 'Or find the ranger station (yellow on your map) and radio for a helicopter to come and get you.'], ['💣', 'You have a revolver, a knife, land mines to use as traps, and smoke.']],
     noCars: true,
     spawn(n) {
         const W = CONFIG.WORLD_SIZE, C = W / 2;
@@ -5362,11 +5189,31 @@ XM.hunted = {
             const h = createFighter(q.x, q.y, { name: `Hunter ${i + 1}`, color: '#7a6a3a', team: 1 });
             h.hunter = true; h.likesCars = false;
             applyLoot(h, pick(['Sniper', 'Assault Rifle', 'Assault Rifle', 'Shotgun', 'Machine Gun']), -1);
-            h.armor = 40; h.items.bandage = 2;
+            h.armor = 20; h.items.bandage = 2; h.dmgMul = 0.7;
             G.fighters.push(h);
-            if (i % 2 === 0) { const d2 = makeDog(q.x + 30, q.y, 1, false); d2.pack = h; }
+            if (i % 3 === 0) { const d2 = makeDog(q.x + 30, q.y, 1, false); d2.pack = h; }
         }
         G.xs.trail = []; G.xs.nextTrail = 0; G.xs.nextPing = HUNTED.firstPing; G.xs.ping = null;
+        // The ranger station: a cabin with a radio, far off in the woods. Call for a helicopter from it
+        let st = null;
+        for (let k = 0; k < 80 && !st; k++) {
+            const a = rand(0, TAU), d = rand(2200, 3000), x = clamp(p.x + Math.cos(a) * d, 500, W - 500), y = clamp(p.y + Math.sin(a) * d, 500, W - 500);
+            if (!buildingAt(x, y, 200) && !inPond({ x, y }, null, 250)) st = { x, y };
+        }
+        st = st || { x: clamp(p.x + 2400, 500, W - 500), y: p.y };
+        const gone = []; G.world.grid.query(st.x, st.y, 320, o => { if (Math.abs(o.x - st.x) < 260 && Math.abs(o.y - st.y) < 260) gone.push(o); });
+        for (const o of gone) { o.broken = true; isBox(o) ? G.world.grid.removeBox(o) : G.world.grid.remove(o); }
+        const add = o => { G.world.obstacles.push(o); G.world.grid.insertBox(o); };
+        const hw = 110, hd = 85, T = 14, col = '#5e4128';
+        add({ type: 'wall', cabin: true, color: col, x: st.x, y: st.y - hd, hw: hw + T / 2, hh: T / 2 });
+        add({ type: 'wall', cabin: true, color: col, x: st.x - hw / 2 - 20, y: st.y + hd, hw: hw / 2 - 20 + T / 2, hh: T / 2 });
+        add({ type: 'wall', cabin: true, color: col, x: st.x + hw / 2 + 20, y: st.y + hd, hw: hw / 2 - 20 + T / 2, hh: T / 2 });
+        add({ type: 'wall', cabin: true, color: col, x: st.x - hw, y: st.y, hw: T / 2, hh: hd });
+        add({ type: 'wall', cabin: true, color: col, x: st.x + hw, y: st.y, hw: T / 2, hh: hd });
+        G.xs.station = { x: st.x, y: st.y, radio: { x: st.x + 50, y: st.y - 40 }, pad: { x: st.x, y: st.y + 230 }, t: 0 };
+        addLootBox(st.x - 60, st.y); addLootBox(st.x + 60, st.y + 30);
+        // Supply caches hidden round the woods
+        for (let k = 0; k < HUNTED.caches; k++) { const q = spawnNear({ x: p.x + rand(-1800, 1800), y: p.y + rand(-1800, 1800) }, 300, 34); addLootBox(q.x, q.y); }
     },
     dark() {
         const left = HUNTED.length - G.time;
@@ -5386,6 +5233,18 @@ XM.hunted = {
             if (inPond(p)) { if (G.mode === 'playing') showBanner('DRONE SWEEP', false, 'It passed right over you. The water hid you!'); }
             else { S.ping = { x: p.x, y: p.y, t }; if (G.mode === 'playing') showBanner('THE DRONE SPOTTED YOU', true, 'Every hunter knows where you are. Move, or get into water!'); Sound.tone(880, 0.3, 'square', 0.08, 1320); }
         }
+        // The radio at the ranger station, then the helicopter to the pad outside
+        const st = S.station;
+        if (st && !S.called) {
+            const on = Math.hypot(p.x - st.radio.x, p.y - st.radio.y) < 50;
+            st.t = on ? st.t + dt : Math.max(0, st.t - dt);
+            if (st.t >= HUNTED.radio) { S.called = true; S.heliAt = t + HUNTED.heli; if (G.mode === 'playing') showBanner('HELP IS COMING', true, `A rescue helicopter lands at the ranger station in ${HUNTED.heli / 1000} seconds. The hunters heard that call too!`); S.ping = { x: p.x, y: p.y, t }; Sound.tone(660, 0.4, 'square', 0.08, 880); }
+        }
+        if (S.called && !S.landed && t >= S.heliAt) { S.landed = true; if (G.mode === 'playing') showBanner('THE HELICOPTER IS HERE!', true, 'Get to the landing pad outside the ranger station!'); }
+        if (S.landed && !G.result && Math.hypot(p.x - st.pad.x, p.y - st.pad.y) < 110) {
+            const sub = 'The helicopter lifted you out of the woods.';
+            G.result = { won: true, place: 1, title: 'RESCUED!', sub }; G.overAt = G.time + 3000; startVictory(sub);
+        }
         const hunters = G.fighters.filter(f => !f.dead && f.hunter).length;
         if (!G.result && hunters === 0) {
             const sub = 'You hunted the hunters.';
@@ -5399,6 +5258,8 @@ XM.hunted = {
     bot(b) {
         if (!b.dog) return false;
         const S = G.xs;
+        // (the dogs are let off their leads a little way in)
+        if (G.time < HUNTED.release) { b.nextThink = G.time + 400; const h = b.pack && !b.pack.dead ? b.pack : b; return xmGo(b, h.x + rand(-40, 40), h.y + rand(-40, 40), 1000); }
         return dogThink(b, d => {
             // the freshest bit of trail within sniffing range
             for (let i = S.trail.length - 1; i >= 0; i--) { const q = S.trail[i]; if (Math.hypot(q.x - d.x, q.y - d.y) < HUNTED.sniff) return q; }
@@ -5414,11 +5275,19 @@ XM.hunted = {
         const c = S.ping || { x: CONFIG.WORLD_SIZE / 2, y: CONFIG.WORLD_SIZE / 2 };
         return xmGo(b, clamp(c.x + rand(-1400, 1400), 300, CONFIG.WORLD_SIZE - 300), clamp(c.y + rand(-1400, 1400), 300, CONFIG.WORLD_SIZE - 300), rand(6000, 11000));
     },
-    hud(p) { return `Survive until dawn · ${fmtTime(Math.max(0, (HUNTED.length - G.time) / 1000))} · ${G.fighters.filter(f => !f.dead && f.hunter).length} hunters${inPond(p) ? ' · hidden in the water' : ''}`; },
+    hud(p) {
+        const S = G.xs, st = S.station, n = G.fighters.filter(f => !f.dead && f.hunter).length;
+        if (S.landed) return `Get to the helicopter at the ranger station · ${Math.round(dist(p, st.pad) / 10)}m`;
+        if (S.called) return `Helicopter in ${fmtTime(Math.max(0, (S.heliAt - G.time) / 1000))} · hold out · ${n} hunters`;
+        if (st && st.t > 0) return `Calling for help... ${Math.round(st.t / HUNTED.radio * 100)}%`;
+        return `Survive until dawn (${fmtTime(Math.max(0, (HUNTED.length - G.time) / 1000))}) or radio for help from the ranger station · ${n} hunters${inPond(p) ? ' · hidden in the water' : G.time < HUNTED.release ? ` · dogs loose in ${Math.ceil((HUNTED.release - G.time) / 1000)}s` : ''}`;
+    },
     banner() { return `${G.fighters.filter(f => f.hunter).length} hunters and their dogs are coming for you. Survive until dawn. Water hides you from their thermal scopes and the dogs!`; },
     deathSub(t, killer) { return killer && killer.dog ? 'The dogs found you.' : 'The hunters got you.'; },
     lights(light) {
         // the hunters' flashlights sweeping the woods
+        const st = G.xs.station;
+        if (st) { light(st.x, st.y, 260, 0.8); if (G.xs.landed) light(st.pad.x, st.pad.y, 260, 0.9); }
         for (const f of G.fighters) {
             if (f.dead || !f.hunter) continue;
             for (let i = 1; i <= 3; i++) light(f.x + Math.cos(f.angle) * i * 120, f.y + Math.sin(f.angle) * i * 120, 50 + i * 30, 0.5);
@@ -5426,7 +5295,27 @@ XM.hunted = {
     },
     minimap(g, k) {
         const S = G.xs;
+        if (S.station) xmMark(g, k, S.station.x, S.station.y, S.landed ? '#7dff9a' : '#ffd23a', S.landed ? 'HELICOPTER' : 'RANGERS', true);
         if (S.ping && G.time - S.ping.t < HUNTED.pingLife) { g.strokeStyle = '#ff5a5a'; g.lineWidth = 2; g.beginPath(); g.arc(S.ping.x * k, S.ping.y * k, 8, 0, TAU); g.stroke(); }
+    },
+    drawWorld(L, T, R, B, now) {
+        const S = G.xs, st = S.station;
+        if (!st || st.x < L - 400 || st.x > R + 400 || st.y < T - 400 || st.y > B + 400) return;
+        ctx.fillStyle = 'rgba(90,60,36,0.9)'; ctx.fillRect(st.x - 103, st.y - 78, 206, 156);
+        ctx.fillStyle = 'rgba(40,24,12,0.35)'; for (let y = st.y - 70; y < st.y + 78; y += 14) ctx.fillRect(st.x - 103, y, 206, 1.5);
+        // the radio on its desk
+        const r = st.radio;
+        ctx.fillStyle = '#3a2a1c'; ctx.fillRect(r.x - 30, r.y - 16, 60, 32);
+        ctx.fillStyle = '#2a2e34'; ctx.fillRect(r.x - 16, r.y - 10, 32, 20);
+        ctx.fillStyle = S.called ? '#3aff7a' : (Math.sin(now * 6) > 0 ? '#ff4a4a' : '#5a1a1a'); ctx.beginPath(); ctx.arc(r.x + 10, r.y - 4, 3, 0, TAU); ctx.fill();
+        if (!S.called) { ctx.strokeStyle = 'rgba(255,210,58,0.7)'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(r.x, r.y, 50, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+        if (st.t > 0 && !S.called) { ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(r.x, r.y, 38, -Math.PI / 2, -Math.PI / 2 + TAU * st.t / HUNTED.radio); ctx.stroke(); }
+        // the landing pad, and the helicopter once it's down
+        const pd = st.pad;
+        ctx.fillStyle = '#4a4c50'; ctx.beginPath(); ctx.arc(pd.x, pd.y, 100, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#e8e8e8'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(pd.x, pd.y, 86, 0, TAU); ctx.stroke();
+        ctx.fillStyle = '#e8e8e8'; ctx.fillRect(pd.x - 30, pd.y - 34, 12, 68); ctx.fillRect(pd.x + 18, pd.y - 34, 12, 68); ctx.fillRect(pd.x - 18, pd.y - 6, 36, 12);
+        if (S.landed) drawHelicopter(pd.x, pd.y, now);
     },
     drawTop(L, T, R, B, now) {
         // the drone's sweep: a red scan line across the screen while it's looking
@@ -5442,12 +5331,12 @@ XM.hunted = {
 // ================= BLIZZARD =================
 // A frozen mountain in a howling storm. The cold drains you outside; fires and cabins warm you up, and a warm coat
 // slows the chill. Wolves roam, everyone else wants your spot by the fire. Last one alive wins.
-const BLIZZ = { drain: 1.4, high: 1.0, coat: 0.45, warm: 12, fireR: 175, freeze: 5, slow: 30, cabins: 10, fires: 16, coats: 34, dark: 0.32, see: 430 };
+const BLIZZ = { surgeEvery: 100000, surgeLen: 25000, heatpacks: 30, drain: 1.1, high: 1.0, coat: 0.45, warm: 12, fireR: 175, freeze: 5, slow: 30, cabins: 10, fires: 16, coats: 34, dark: 0.32, see: 430 };
 const nearWarmth = f => G.xs.heat && G.xs.heat.some(h => Math.hypot(f.x - h.x, f.y - h.y) < h.r);
 XM.blizzard = {
     name: 'BLIZZARD', maps: ['mountain'], slider: { label: 'Opponents', cap: 100 },
     desc: 'A frozen mountain in a howling blizzard. The cold kills you outside. Fight over the fires, the cabins and the warm coats, and watch out for the wolves. Last one alive wins.',
-    brief: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🥶', 'Your warmth drains outside, faster up high. At zero you freeze to death.'], ['🔥', 'Campfires and cabins warm you back up. A warm coat makes the cold drain much slower.'], ['🐺', 'Wolf packs hunt in the snow, and it\'s hard to see far in the storm.']],
+    brief: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🥶', 'Your warmth drains outside, faster up high. At zero you freeze to death.'], ['🔥', 'Campfires and cabins warm you back up. A warm coat makes the cold drain much slower.'], ['🐺', 'Wolf packs hunt in the snow, and it\'s hard to see far in the storm.'], ['🌨️', 'Every so often the storm surges: the cold bites twice as hard for a while. Heat packs give you a quick burst of warmth.']],
     noCars: true,
     setup() {
         const W = CONFIG.WORLD_SIZE, S = G.xs, h = G.world.height || (() => 0.4);
@@ -5479,6 +5368,8 @@ XM.blizzard = {
             i++;
         }
         for (let i = 0; i < BLIZZ.coats; i++) { const s = findSpawn(null, 0); addPick('coat', s.x, s.y); }
+        for (let i = 0; i < BLIZZ.heatpacks; i++) { const s = findSpawn(null, 0); addPick('heatpack', s.x, s.y); }
+        S.nextSurge = BLIZZ.surgeEvery * 0.7; S.surgeUntil = 0;
         // Wolf packs
         const packs = Math.min(6, 2 + Math.floor(G.cpuCount / 30));
         for (let i = 0; i < packs; i++) {
@@ -5492,12 +5383,14 @@ XM.blizzard = {
     dark: () => BLIZZ.dark,
     update(dt) {
         updatePicks();
+        const S = G.xs, surge = G.time < S.surgeUntil;
+        if (G.time >= S.nextSurge) { S.nextSurge = G.time + BLIZZ.surgeEvery * rand(0.85, 1.15); S.surgeUntil = G.time + BLIZZ.surgeLen; if (G.mode === 'playing') showBanner('THE STORM IS GETTING WORSE!', true, `For ${BLIZZ.surgeLen / 1000} seconds the cold bites twice as hard. Get to a fire!`); Sound.noiseBurst(400, 1.5, 0.3); }
         const h = G.world.height || (() => 0.4);
         for (const f of G.fighters) {
             if (f.dead || f.dog) continue;
             if (f.warm === undefined) f.warm = 100;
             if (nearWarmth(f)) f.warm = Math.min(100, f.warm + BLIZZ.warm * dt);
-            else f.warm = Math.max(0, f.warm - (BLIZZ.drain + (h(f.x, f.y) > 0.7 ? BLIZZ.high : 0)) * (f.coat ? BLIZZ.coat : 1) * (f.car ? 0.5 : 1) * dt);
+            else f.warm = Math.max(0, f.warm - (BLIZZ.drain + (h(f.x, f.y) > 0.7 ? BLIZZ.high : 0)) * (f.coat ? BLIZZ.coat : 1) * (f.car ? 0.5 : 1) * (surge ? 2 : 1) * dt);
             f.speedMul = f.warm < BLIZZ.slow ? 0.8 : 1;
             if (f.warm <= 0) {
                 f.hp -= BLIZZ.freeze * dt;
@@ -5516,11 +5409,11 @@ XM.blizzard = {
             if (best) return xmGo(b, best.x + rand(-60, 60), best.y + rand(-50, 50), 2500);
         }
         b.warming = false;
-        const q = !b.coat && nearestPick(b, ['coat'], 900);
+        const q = (!b.coat && nearestPick(b, ['coat'], 900)) || (b.warm < 70 && nearestPick(b, ['heatpack'], 600));
         if (q) return xmGo(b, q.x, q.y, 3000);
         return false;
     },
-    hud(p) { const n = G.fighters.filter(f => !f.dead && !f.dog).length; return `Last one alive wins · ${n} left${p.warm < 35 ? ' · FIND A FIRE!' : nearWarmth(p) ? ' · warming up' : ''}`; },
+    hud(p) { const n = G.fighters.filter(f => !f.dead && !f.dog).length, sg = G.time < (G.xs.surgeUntil || 0); return `${sg ? '🌨️ STORM SURGE · ' : ''}Last one alive wins · ${n} left${p.warm < 35 ? ' · FIND A FIRE!' : nearWarmth(p) ? ' · warming up' : ''}`; },
     bar(p) { const w = p.warm === undefined ? 100 : p.warm; return { v: w / 100, label: w <= 0 ? 'FREEZING!' : `WARMTH ${Math.ceil(w)}${p.coat ? ' · COAT' : ''}`, low: w < 35 }; },
     banner() { return `${G.alive} players on a frozen mountain. Stay warm by the fires and in the cabins, grab a coat, and watch out for wolves!`; },
     deathSub(t, killer, weapon) { return weapon === 'froze' ? 'You froze to death.' : killer && killer.wolf ? 'The wolves got you.' : null; },
@@ -5558,7 +5451,7 @@ XM.blizzard = {
     drawTop(L, T, R, B, now) {
         // The whiteout: you can only see so far through the storm
         const p = G.player && !G.player.dead ? G.player : null, c = p || G.cam;
-        const g = ctx.createRadialGradient(c.x, c.y, BLIZZ.see * 0.45, c.x, c.y, BLIZZ.see * 1.25);
+        const sk = G.time < (G.xs.surgeUntil || 0) ? 0.6 : 1, g = ctx.createRadialGradient(c.x, c.y, BLIZZ.see * 0.45 * sk, c.x, c.y, BLIZZ.see * 1.25 * sk);
         g.addColorStop(0, 'rgba(225,232,240,0)'); g.addColorStop(0.5, 'rgba(225,232,240,0.45)'); g.addColorStop(1, 'rgba(225,232,240,0.92)');
         ctx.fillStyle = g; ctx.fillRect(L - 50, T - 50, R - L + 100, B - T + 100);
         // wind-blown snow streaks
@@ -5572,252 +5465,21 @@ XM.blizzard = {
     }
 };
 
-// ================= MECH ASSAULT =================
-// Teams of giant walking mechs fight across the city: twin miniguns and rocket pods, and they smash straight
-// through buildings. When yours is destroyed you're thrown clear and fight on foot: find an empty mech, wait for a
-// mech drop, or hijack a badly damaged enemy one (get close and press F / USE).
-const MECHA = { every: 40000, first: 25000, spares: 8, hijack: 0.35, reach: 120, smash: 1100, teamCap: 40 };
-function hijackMech(p, c) {
-    const d = c.driver;
-    if (!d || !foe(p, d) || c.hp > vt(c).hp * MECHA.hijack) return false;
-    exitCar(d);
-    d.stunUntil = G.time + 1500; d.protectUntil = 0;
-    d.carCool = G.time + 8000;
-    enterCar(p, c);
-    c.color = shade(TEAMS[p.team] ? TEAMS[p.team].color : '#888', -0.35);
-    if (inView(c.x, c.y, 200)) { addFloat(c.x, c.y - 60, 'HIJACKED!', '#ffd166', true); Sound.tone(300, 0.3, 'sawtooth', 0.12, 600); }
-    if (d.isPlayer) showBanner('HIJACKED!', true, `${p.name} pulled you out of your mech!`);
-    return true;
-}
-const enemyMechNear = p => (G.world.cars || []).find(c => !c.dead && c.driver && vt(c).mech && foe(p, c.driver) && c.hp <= vt(c).hp * MECHA.hijack && Math.hypot(c.x - p.x, c.y - p.y) < MECHA.reach);
-XM.mech = {
-    name: 'MECH ASSAULT', maps: ['city'], teams: true, teamCap: MECHA.teamCap,
-    desc: 'Teams of giant battle mechs with miniguns and rocket pods fight across the city, smashing straight through buildings. Lose your mech and you fight on: find another, or hijack a wrecked enemy one.',
-    brief: [['🤖', '<b>Goal:</b> wipe out every other team.'], ['🚀', 'Everyone starts in an Assault Mech: twin miniguns and rocket pods. Walk into buildings to smash through them.'], ['🪂', 'When your mech is destroyed you\'re thrown clear. Find an empty mech, wait for a mech drop, or hijack an enemy mech once it\'s badly damaged (get close and press F / USE).'], ['💥', 'Rockets and minigun fire bring buildings down.']],
-    stayIn: true,
-    setup() {
-        const S = G.xs;
-        // Each team lines up in a block, a mech for everyone
-        const teams = {};
-        for (const f of G.fighters) (teams[f.team] || (teams[f.team] = [])).push(f);
-        const C = CONFIG.WORLD_SIZE / 2;
-        for (const t in teams) {
-            const list = teams[t], cx = list.reduce((s, f) => s + f.x, 0) / list.length, cy = list.reduce((s, f) => s + f.y, 0) / list.length;
-            const face = Math.atan2(C - cy, C - cx), cols = Math.ceil(Math.sqrt(list.length));
-            list.forEach((f, i) => {
-                const gx = (i % cols - (cols - 1) / 2) * 150, gy = (Math.floor(i / cols) - (Math.ceil(list.length / cols) - 1) / 2) * 150;
-                const s = spawnNear({ x: cx + gx, y: cy + gy }, 60, 70);
-                f.x = s.x; f.y = s.y;
-                const c = spawnVehicle('assaultmech', s.x, s.y, face);
-                c.color = shade(TEAMS[f.team].color, -0.35);
-                c.turret = face;
-                enterCar(f, c);
-                f.tanker = true; f.driveUntil = Infinity; f.likesCars = true;
-                applyLoot(f, 'Assault Rifle', -1);
-                f.items.bandage = 2;
-            });
-        }
-        for (let i = 0; i < MECHA.spares; i++) this.drop(true);
-        S.nextDrop = MECHA.first;
-    },
-    drop(quiet) {
-        for (let t = 0; t < 40; t++) {
-            const s = findSpawn(null, 0);
-            if (blockedAt(G.world.grid, s.x, s.y, 80) || buildingAt(s.x, s.y, 60)) continue;
-            const c = spawnVehicle('assaultmech', s.x, s.y);
-            c.color = '#3a3f4a';
-            if (!quiet) {
-                G.particles.push({ type: 'ring', x: s.x, y: s.y, vx: 0, vy: 0, life: 0.8, max: 0.8, size: 160, color: '#7cf7ff' });
-                burst(s.x, s.y, 30, '#9a948a', 300);
-                if (G.mode === 'playing') showBanner('MECH DROP', false, 'A fresh mech just landed (cyan on your map)');
-            }
-            return c;
-        }
-    },
-    update(dt) {
-        const S = G.xs;
-        if (G.time >= S.nextDrop) { S.nextDrop = G.time + MECHA.every; this.drop(false); }
-        // Mechs walking into buildings smash their way through
-        for (const c of G.world.cars || []) {
-            if (c.dead || !c.driver || !vt(c).mech || Math.abs(c.speed) < 40) continue;
-            const T = vt(c), dir = c.speed > 0 ? c.a : c.a + Math.PI, px = c.x + Math.cos(dir) * (T.len / 2 + 14), py = c.y + Math.sin(dir) * (T.len / 2 + 14);
-            if (buildingAt(px, py, 0)) {
-                damageBuildings(px, py, 110, MECHA.smash * dt);
-                if (Math.random() < dt * 8 && inView(px, py, 100)) { burst(px, py, 6, '#a8a39a', 220); Sound.crunch(Sound.volAt(px, py) * 0.6); }
-            }
-            if (c.driver.isPlayer) G.shake = Math.max(G.shake, Math.abs(Math.sin((c.walk || 0) * 2)) * 3);
-        }
-    },
-    bot(b) {
-        // On foot: hijack a wrecked enemy mech, or head for an empty one
-        if (b.car || b.dead) return false;
-        const e = enemyMechNear(b);
-        if (e && hijackMech(b, e)) { b.tanker = true; b.driveUntil = Infinity; b.nextThink = G.time + 300; return true; }
-        return false;
-    },
-    idle(b) {
-        if (b.car) return false;
-        let best = null, bd = 2200;
-        for (const c of G.world.cars || []) if (!c.dead && !c.driver && vt(c).mech) { const d = dist(b, c); if (d < bd) { bd = d; best = c; } }
-        if (best) { b.likesCars = true; b.carCool = 0; b.mode = 'tocar'; b.goal = best; b.tanker = true; return true; }
-        return false;
-    },
-    eject(p) { p.protectUntil = G.time + 900; if (p.isPlayer) showBanner('EJECTED!', true, 'Your mech is gone. Find another one, or hijack a wrecked enemy mech (F / USE)!'); },
-    use(p) { const c = enemyMechNear(p); return !!(c && hijackMech(p, c)); },
-    useLabel(p) { return enemyMechNear(p) ? 'HIJACK MECH' : ''; },
-    hud(p) {
-        if (p.car && !p.car.dead) return `Your mech ${Math.ceil(p.car.hp / vt(p.car).hp * 100)}% · walk into buildings to smash them`;
-        const e = enemyMechNear(p);
-        return e ? 'Press F / USE to hijack that mech!' : 'On foot: find an empty mech (cyan on your map) or hijack a wrecked one';
-    },
-    banner() { return `${G.war.teams} teams of ${G.war.size} mechs. Twin miniguns, rocket pods, and buildings to smash. Wipe them out!`; },
-    minimap(g, k) {
-        for (const c of G.world.cars || []) if (!c.dead && !c.driver && vt(c).mech) xmMark(g, k, c.x, c.y, '#7cf7ff', null, true);
-    }
-};
 
-// ================= PRISON BREAK (and its map) =================
-// A walled prison at night: a cell block, the yard, the mess hall, the guards' barracks, the control room that works
-// the main gate, and the armory. You start in a cell with nothing. Guards leave prisoners alone until they cause
-// trouble; once the alarm goes, every guard comes for you. Get a weapon, open the gate from the control room, and get
-// out to the getaway truck.
-const PRISON = { half: 1300, wall: 30, gate: 170, truck: 650, switchT: 4, prisoners: 18, guardCap: 24, riot: 45000, hp: 150, dark: 0.7, spot: 95, radio: 1500 };
-function generatePrison() {
-    const W = CONFIG.WORLD_SIZE, C = W / 2, H = PRISON.half, grid = new Grid(256, 90), obstacles = [], lootSpots = [], glows = [], paint = [], doors = [];
-    const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
-    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
-    const wall = (horiz, at, a, b, gaps = [], extra = {}, T = 16) => {
-        const cuts = gaps.map(([c, w]) => [c - w / 2, c + w / 2]).sort((p, q) => p[0] - q[0]);
-        for (const [c0, c1] of cuts) doors.push(horiz ? { x: (c0 + c1) / 2, y: at } : { x: at, y: (c0 + c1) / 2 });
-        let s = a;
-        for (const [g0, g1] of [...cuts, [b, b]]) {
-            const e = Math.min(g0, b);
-            if (e - s > 4) addBox(horiz ? { type: 'wall', x: (s + e) / 2, y: at, hw: (e - s) / 2, hh: T / 2, color: '#8a8b88', pwall: true, ...extra } : { type: 'wall', x: at, y: (s + e) / 2, hw: T / 2, hh: (e - s) / 2, color: '#8a8b88', pwall: true, ...extra });
-            s = Math.max(s, g1);
-        }
-    };
-    const room = (x0, y0, x1, y1, gaps, extra) => { wall(true, y0, x0 - 8, x1 + 8, gaps.top || [], extra); wall(true, y1, x0 - 8, x1 + 8, gaps.bottom || [], extra); wall(false, x0, y0, y1, gaps.left || [], extra); wall(false, x1, y0, y1, gaps.right || [], extra); };
-    const nearDoor = (x, y, hw, hh) => doors.some(d => Math.abs(d.x - x) < hw + 70 && Math.abs(d.y - y) < hh + 70);
-    const prop = (kind, x, y, hw, hh, extra = {}) => (nearDoor(x, y, hw, hh) || blockedAt(grid, x, y, 2)) ? null : addBox({ type: 'crate', pprop: kind, x, y, hw, hh, seed: randInt(1, 1e9), ...extra });
-    const lamp = (x, y, r = 30) => glows.push({ x, y, r, c: '#fff2c8', lamp: true, seed: Math.random() * 100 });
-    // The outer wall, with the main gate in the south side
-    wall(true, C - H, C - H - 15, C + H + 15, [], { outer: true }, PRISON.wall);
-    wall(true, C + H, C - H - 15, C + H + 15, [[C, PRISON.gate]], { outer: true }, PRISON.wall);
-    wall(false, C - H, C - H, C + H, [], { outer: true }, PRISON.wall);
-    wall(false, C + H, C - H, C + H, [], { outer: true }, PRISON.wall);
-    const gate = addBox({ type: 'wall', x: C, y: C + H, hw: PRISON.gate / 2 + 2, hh: 13, color: '#4a4d52', pgate: true });
-    // Guard towers in the corners
-    const towers = [];
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) { const x = C + sx * (H - 75), y = C + sy * (H - 75); addBox({ type: 'wall', x, y, hw: 60, hh: 60, color: '#6e6f6c', ptower: true }); towers.push({ x, y, sx, sy, a: Math.atan2(-sy, -sx), ph: rand(0, TAU) }); }
-    // The cell block: two rows of cells off a long corridor
-    const bx0 = C - 900, bx1 = C + 900, by0 = C - 1150, by1 = C - 500, rowA = C - 895, rowB = C - 755, cw = 120, cells = [];
-    wall(true, by0, bx0 - 8, bx1 + 8, []);
-    wall(false, bx0, by0, by1, [[C - 825, 120]]);
-    wall(false, bx1, by0, by1, [[C - 825, 120]]);
-    wall(true, by1, bx0 - 8, bx1 + 8, [[C, 110]]);
-    wall(true, rowA, bx0, bx1, Array.from({ length: 15 }, (_, i) => [bx0 + cw / 2 + i * cw, 56]), { pcell: true }, 10);
-    wall(true, rowB, bx0, bx1, Array.from({ length: 15 }, (_, i) => [bx0 + cw / 2 + i * cw, i === 7 ? 110 : 56]), { pcell: true }, 10);
-    for (let i = 1; i < 15; i++) { wall(false, bx0 + i * cw, by0, rowA, [], {}, 12); wall(false, bx0 + i * cw, rowB, by1, [], {}, 12); }
-    for (let i = 0; i < 15; i++) for (const [y0, y1, top] of [[by0, rowA, true], [rowB, by1, false]]) {
-        if (!top && i === 7) continue;
-        const x = bx0 + cw / 2 + i * cw;
-        cells.push({ x, y: (y0 + y1) / 2 + (top ? -30 : 30), top });
-        addBox({ type: 'crate', pprop: 'bunk', x: x - 34, y: top ? y0 + 50 : y1 - 50, hw: 16, hh: 34, seed: randInt(1, 1e9) });
-        paint.push({ k: 'toilet', x: x + 38, y: top ? y0 + 26 : y1 - 26, r: 20 });
-    }
-    for (let x = bx0 + 150; x < bx1; x += 300) lamp(x, C - 825, 26);
-    // The yard: a basketball court, benches and weights, floodlights in the corners
-    paint.push({ k: 'court', x: C + 420, y: C - 70, w: 520, h: 300, r: 400 });
-    for (let i = 0; i < 5; i++) prop('bench', C - 700 + i * 140, C + 250, 40, 10);
-    prop('weights', C - 500, C - 250, 40, 22); prop('weights', C - 380, C - 250, 40, 22);
-    for (const [x, y] of [[C - 1150, C - 420], [C + 1150, C - 420], [C - 1150, C + 300], [C + 1150, C + 300]]) lamp(x, y, 46);
-    // Mess hall
-    room(C - 1250, C + 420, C - 450, C + 1000, { top: [[C - 850, 130]], right: [[C + 700, 110]] });
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) prop('table', C - 1060 + c * 420, C + 560 + r * 150, 120, 24);
-    prop('counter', C - 850, C + 960, 260, 18);
-    lamp(C - 850, C + 700, 34);
-    const knives = [{ x: C - 1060, y: C + 600 }, { x: C - 640, y: C + 750 }, { x: C - 850, y: C + 920 }];
-    // Guard barracks
-    room(C - 420, C + 700, C - 140, C + 1250, { top: [[C - 280, 100]] });
-    for (let k = 0; k < 3; k++) { prop('bunk', C - 380, C + 820 + k * 140, 18, 40); prop('bunk', C - 180, C + 820 + k * 140, 18, 40); }
-    lamp(C - 280, C + 950, 30);
-    // Control room (works the main gate)
-    room(C + 140, C + 760, C + 540, C + 1250, { top: [[C + 340, 100]] });
-    prop('console', C + 200, C + 1000, 18, 90); prop('console', C + 480, C + 1000, 18, 90);
-    const swt = { x: C + 340, y: C + 1120 };
-    lamp(C + 340, C + 950, 30);
-    // Armory
-    room(C + 600, C + 620, C + 1250, C + 1250, { top: [[C + 925, 110]] });
-    for (let k = 0; k < 4; k++) prop('rack', C + 660, C + 720 + k * 130, 16, 46);
-    for (let k = 0; k < 4; k++) prop('rack', C + 1190, C + 720 + k * 130, 16, 46);
-    lamp(C + 925, C + 940, 34);
-    const armory = { x0: C + 600, y0: C + 620, x1: C + 1250, y1: C + 1250 }, control = { x0: C + 140, y0: C + 760, x1: C + 540, y1: C + 1250 };
-    const guns = [];
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) guns.push({ x: C + 760 + c * 110, y: C + 760 + r * 150 });
-    // Outside: a road from the gate, fields and trees, the getaway truck waiting
-    paint.push({ k: 'road', x: C, y: C + H + (W / 2 - H) / 2, w: 200, h: W / 2 - H, r: W / 2 });
-    const truck = { x: C + 40, y: C + H + PRISON.truck };
-    for (let i = 0; i < 700; i++) {
-        const x = rand(200, W - 200), y = rand(200, W - 200);
-        if (Math.abs(x - C) < H + 260 && Math.abs(y - C) < H + 260) continue;
-        if (Math.abs(x - C) < 200 && y > C) continue;
-        const canopy = rand(60, 95), o = { type: 'tree', x, y, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 };
-        if (!blockedAt(grid, x, y, o.r + 40)) addCircle(o);
-    }
-    // Where the guards stand and walk
-    const posts = [{ x: C + 925, y: C + 560, k: 'armory' }, { x: C + 860, y: C + 560, k: 'armory' }, { x: C + 990, y: C + 560, k: 'armory' }, { x: C + 300, y: C + 700, k: 'control' }, { x: C + 380, y: C + 700, k: 'control' },
-        { x: C - 90, y: C + H - 90, k: 'gate' }, { x: C + 90, y: C + H - 90, k: 'gate' }, { x: C, y: C + H - 160, k: 'gate' }, ...towers.map(t => ({ x: t.x - t.sx * 110, y: t.y - t.sy * 110, k: 'tower' }))];
-    const patrol = [{ x: C - 600, y: C - 825 }, { x: C + 600, y: C - 825 }, { x: C, y: C - 825 }, { x: C - 300, y: C - 200 }, { x: C + 300, y: C + 150 }, { x: C - 900, y: C + 200 },
-        { x: C + 900, y: C - 200 }, { x: C - 850, y: C + 700 }, { x: C, y: C + 600 }, { x: C + 600, y: C + 450 }, { x: C - 1100, y: C - 300 }, { x: C + 1100, y: C + 450 }];
-    const pgrid = new Grid(400, 900);
-    for (const q of paint) pgrid.insert(q);
-    // The map, zoomed in on the prison
-    const mt = mmZoom(C, C + 300, H + 700), [mm, g] = makeCanvas(200, 200), X = x => (x - mt.ox) * mt.k, Y = y => (y - mt.oy) * mt.k;
-    g.fillStyle = '#34482c'; g.fillRect(0, 0, 200, 200);
-    g.fillStyle = '#5a5c5e'; g.fillRect(X(C - 100), Y(C + H), 200 * mt.k, 200);
-    g.fillStyle = '#6e706e'; g.fillRect(X(C - H), Y(C - H), H * 2 * mt.k, H * 2 * mt.k);
-    for (const o of obstacles) { if (o.type === 'tree') { g.fillStyle = '#244a22'; g.fillRect(X(o.x) - 1, Y(o.y) - 1, 2, 2); continue; } g.fillStyle = o.pgate ? '#d8a23a' : o.type === 'crate' ? '#4a4a4a' : '#d8d8d4'; g.fillRect(X(o.x - o.hw), Y(o.y - o.hh), Math.max(1, o.hw * 2 * mt.k), Math.max(1, o.hh * 2 * mt.k)); }
-    const mid = { x: C, y: C };
-    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, mmT: mt, city: null, stairs: [], floor: null, terrain: 'prison', glows, maze: null, mazeExtra: null, height: null, escapeStart: mid, escapeEnd: mid,
-        prison: { H, gate, swt, truck, armory, control, rooms: [armory, control, { x0: bx0, y0: by0, x1: bx1, y1: by1 }, { x0: C - 1250, y0: C + 420, x1: C - 450, y1: C + 1000 }, { x0: C - 420, y0: C + 700, x1: C - 140, y1: C + 1250 }], cells, towers, posts, patrol, guns, knives, pgrid, cellBlock: { x0: bx0, y0: by0, x1: bx1, y1: by1 } } };
-}
-const inBox = (f, r, m = 0) => f.x > r.x0 - m && f.x < r.x1 + m && f.y > r.y0 - m && f.y < r.y1 + m;
-function paintPrison(g, x0, y0, S) {
-    const P = G.world.prison, C = CONFIG.WORLD_SIZE / 2, H = P.H, B = 16;
-    const rooms = [P.armory, P.control, P.cellBlock, { x0: C - 1250, y0: C + 420, x1: C - 450, y1: C + 1000 }, { x0: C - 420, y0: C + 700, x1: C - 140, y1: C + 1250 }];
-    for (let x = x0; x < x0 + S; x += B) for (let y = y0; y < y0 + S; y += B) {
-        const mx = x + B / 2, my = y + B / 2, v = ((Math.sin(mx * 0.013) * Math.cos(my * 0.011) + Math.sin(mx * 0.004 + my * 0.0035)) * 5) | 0;
-        let col;
-        if (Math.abs(mx - C) < H && Math.abs(my - C) < H) {
-            const inside = rooms.some(r => mx > r.x0 && mx < r.x1 && my > r.y0 && my < r.y1);
-            col = inside ? (((Math.floor(mx / 48) + Math.floor(my / 48)) & 1) ? `rgb(${150 + v},${152 + v},${146 + v})` : `rgb(${136 + v},${138 + v},${132 + v})`) : `rgb(${98 + v},${100 + v},${98 + v})`;
-        } else col = `rgb(${66 + v},${96 + v},${52 + v})`;
-        g.fillStyle = col; g.fillRect(x, y, B + 1, B + 1);
-    }
-    P.pgrid.query(x0 + S / 2, y0 + S / 2, S / 2 + 900, q => {
-        if (q.k === 'road') {
-            g.fillStyle = '#4c4e50'; g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h);
-            g.fillStyle = '#d8c060'; for (let y = q.y - q.h / 2; y < q.y + q.h / 2; y += 80) g.fillRect(q.x - 3, y, 6, 40);
-        } else if (q.k === 'court') {
-            g.fillStyle = '#7a4a34'; g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h);
-            g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 3; g.strokeRect(q.x - q.w / 2 + 8, q.y - q.h / 2 + 8, q.w - 16, q.h - 16);
-            g.beginPath(); g.moveTo(q.x, q.y - q.h / 2 + 8); g.lineTo(q.x, q.y + q.h / 2 - 8); g.stroke();
-            g.beginPath(); g.arc(q.x, q.y, 40, 0, TAU); g.stroke();
-            for (const s of [-1, 1]) { g.beginPath(); g.arc(q.x + s * (q.w / 2 - 8), q.y, 70, s > 0 ? Math.PI / 2 : -Math.PI / 2, s > 0 ? Math.PI * 1.5 : Math.PI / 2); g.stroke(); }
-        } else if (q.k === 'toilet') {
-            g.fillStyle = '#c8ccd0'; g.beginPath(); g.ellipse(q.x, q.y, 9, 12, 0, 0, TAU); g.fill();
-            g.fillStyle = '#8a9098'; g.beginPath(); g.ellipse(q.x, q.y + 2, 5, 7, 0, 0, TAU); g.fill();
-        }
-    });
-    // the yellow line round the restricted rooms
-    g.strokeStyle = 'rgba(230,190,40,0.6)'; g.lineWidth = 6; g.setLineDash([24, 16]);
-    for (const r of [P.armory, P.control]) g.strokeRect(r.x0 - 40, r.y0 - 40, r.x1 - r.x0 + 80, 40);
-    g.setLineDash([]);
-}
 // Cabins (log walls), island huts (bamboo and thatch), the bunker (concrete, hazard-striped door), wreck timbers, the signal fire's base
 function drawStoryBox(o, x, y, w, h) {
     const horiz = w > h;
     if (o.beacon) return;  // drawn with the fire
+    if (o.townProp) {
+        const k = o.townProp, now = G.time / 1000;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x + 5, y + 7, w, h);
+        if (k === 'bench') { ctx.fillStyle = '#4a3018'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4); ctx.fillStyle = '#8a6a3a'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#5a5a60'; ctx.fillRect(x + 8, y + 5, 16, 6); ctx.fillStyle = '#9a7a4a'; ctx.fillRect(x + w - 26, y + 4, 4, h - 8); ctx.fillStyle = '#6a6a70'; ctx.fillRect(x + w - 32, y + 4, 16, 6); }
+        else if (k === 'forge') { ctx.fillStyle = '#3a3a40'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4); ctx.fillStyle = '#6a6a72'; ctx.fillRect(x, y, w, h); ctx.fillStyle = `rgba(255,${110 + Math.sin(now * 7) * 30},30,0.9)`; ctx.fillRect(x + 10, y + 10, w - 20, h - 20); ctx.fillStyle = '#2a2a2e'; ctx.fillRect(x + w + 4, o.y - 8, 18, 16); }
+        else if (k === 'well') { ctx.fillStyle = '#6a6a70'; ctx.beginPath(); ctx.arc(o.x, o.y, o.hw, 0, TAU); ctx.fill(); ctx.fillStyle = '#2a5a7a'; ctx.beginPath(); ctx.arc(o.x, o.y, o.hw - 7, 0, TAU); ctx.fill(); ctx.fillStyle = '#5a3a1a'; ctx.fillRect(o.x - o.hw - 4, o.y - 3, o.hw * 2 + 8, 6); }
+        else if (k === 'garden') { ctx.fillStyle = '#5a3a20'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#3a7a2a'; for (let r = 0; r < 3; r++) for (let c = 0; c < 7; c++) { ctx.beginPath(); ctx.arc(x + 12 + c * (w - 24) / 6, y + 14 + r * (h - 28) / 2, 6, 0, TAU); ctx.fill(); } ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h); }
+        else if (k === 'tower') { ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x + 14, y + 18, w, h); ctx.fillStyle = '#4a3018'; ctx.fillRect(x - 4, y - 4, w + 8, h + 8); ctx.fillStyle = '#8a6a3a'; ctx.fillRect(x, y, w, h); ctx.strokeStyle = '#4a3018'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y + h); ctx.moveTo(x + w, y); ctx.lineTo(x, y + h); ctx.stroke(); ctx.fillStyle = '#c8a060'; ctx.beginPath(); ctx.moveTo(o.x, y - 14); ctx.lineTo(x + w + 6, o.y); ctx.lineTo(o.x, y + h + 14); ctx.lineTo(x - 6, o.y); ctx.closePath(); ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1; }
+        return;
+    }
     if (o.cabin || o.hut) {
         ctx.fillStyle = o.cabin ? '#2e1e12' : '#4a3418'; ctx.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
         const logs = o.cabin ? ['#6e4a2c', '#5e4128', '#7a5432'] : ['#a08048', '#8a6a3a', '#b8945a'];
@@ -5889,10 +5551,220 @@ function drawPrisonBox(o, x, y, w, h) {
     else if (K === 'weights') { ctx.fillStyle = '#111'; ctx.fillRect(x + 4, o.y - 2, w - 8, 4); ctx.beginPath(); ctx.arc(x + 8, o.y, 9, 0, TAU); ctx.arc(x + w - 8, o.y, 9, 0, TAU); ctx.fill(); }
     else if (K === 'table') { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x + 3, y + 3, w - 6, 4); }
 }
+// ================= PRISON BREAK (and its map) =================
+// A huge maximum-security prison at night. Two cell blocks, the yard, the mess hall, a workshop, the infirmary, the
+// guards' barracks, the warden's office, a locked armory, the control room that works the inner gate - then a strip of
+// no-man's land between the inner wall and the outer fence, patrolled by guard dogs, with the outer gate worked from a
+// guard booth. Towers with searchlights, security cameras, officers carrying the armory keycard, and once the alarm
+// goes, reinforcements keep coming.
+const PRISON = { half: 2000, outer: 2380, wall: 34, gate: 170, truck: 650, switchT: 4, outerT: 5, prisoners: 24, guardCap: 60, riot: 60000, hp: 150, dark: 0.74,
+    spot: 100, radio: 1200, grate: 14, keyT: 2.5, dogs: 6, officers: 3, reinf: 30000, reinfN: 4, reinfCap: 24, camRange: 420, camFov: 0.55 };
+function generatePrison() {
+    const W = CONFIG.WORLD_SIZE, C = W / 2, H = PRISON.half, HO = PRISON.outer, grid = new Grid(256, 90), obstacles = [], lootSpots = [], glows = [], paint = [], doors = [];
+    const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
+    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
+    const wall = (horiz, at, a, b, gaps = [], extra = {}, T = 16) => {
+        const cuts = gaps.map(([c, w]) => [c - w / 2, c + w / 2]).sort((p, q) => p[0] - q[0]);
+        for (const [c0, c1] of cuts) doors.push(horiz ? { x: (c0 + c1) / 2, y: at } : { x: at, y: (c0 + c1) / 2 });
+        let s = a;
+        for (const [g0, g1] of [...cuts, [b, b]]) {
+            const e = Math.min(g0, b);
+            if (e - s > 4) addBox(horiz ? { type: 'wall', x: (s + e) / 2, y: at, hw: (e - s) / 2, hh: T / 2, color: '#8a8b88', pwall: true, ...extra } : { type: 'wall', x: at, y: (s + e) / 2, hw: T / 2, hh: (e - s) / 2, color: '#8a8b88', pwall: true, ...extra });
+            s = Math.max(s, g1);
+        }
+    };
+    const room = (x0, y0, x1, y1, gaps, extra) => { wall(true, y0, x0 - 8, x1 + 8, gaps.top || [], extra); wall(true, y1, x0 - 8, x1 + 8, gaps.bottom || [], extra); wall(false, x0, y0, y1, gaps.left || [], extra); wall(false, x1, y0, y1, gaps.right || [], extra); return { x0, y0, x1, y1 }; };
+    const nearDoor = (x, y, hw, hh) => doors.some(d => Math.abs(d.x - x) < hw + 70 && Math.abs(d.y - y) < hh + 70);
+    const prop = (kind, x, y, hw, hh, extra = {}) => (nearDoor(x, y, hw, hh) || blockedAt(grid, x, y, 2)) ? null : addBox({ type: 'crate', pprop: kind, x, y, hw, hh, seed: randInt(1, 1e9), ...extra });
+    const lamp = (x, y, r = 30) => glows.push({ x, y, r, c: '#fff2c8', lamp: true, seed: Math.random() * 100 });
+    // The inner wall (gate in the south), and the outer fence with its own gate
+    wall(true, C - H, C - H - 17, C + H + 17, [], { outer: true }, PRISON.wall);
+    wall(true, C + H, C - H - 17, C + H + 17, [[C, PRISON.gate]], { outer: true }, PRISON.wall);
+    wall(false, C - H, C - H, C + H, [], { outer: true }, PRISON.wall);
+    wall(false, C + H, C - H, C + H, [], { outer: true }, PRISON.wall);
+    wall(true, C - HO, C - HO - 6, C + HO + 6, [], { fence: true }, 12);
+    wall(true, C + HO, C - HO - 6, C + HO + 6, [[C, PRISON.gate]], { fence: true }, 12);
+    wall(false, C - HO, C - HO, C + HO, [], { fence: true }, 12);
+    wall(false, C + HO, C - HO, C + HO, [], { fence: true }, 12);
+    const gate = addBox({ type: 'wall', x: C, y: C + H, hw: PRISON.gate / 2 + 2, hh: 15, color: '#4a4d52', pgate: true });
+    const gate2 = addBox({ type: 'wall', x: C, y: C + HO, hw: PRISON.gate / 2 + 2, hh: 10, color: '#4a4d52', pgate: true });
+    // Guard towers on the inner wall (corners and the middle of each side) and at the fence's corners
+    const towers = [];
+    const tower = (x, y, a) => { addBox({ type: 'wall', x, y, hw: 60, hh: 60, color: '#6e6f6c', ptower: true }); towers.push({ x, y, a, ph: rand(0, TAU) }); };
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) { tower(C + sx * (H - 75), C + sy * (H - 75), Math.atan2(-sy, -sx)); tower(C + sx * (HO - 70), C + sy * (HO - 70), Math.atan2(sy, sx) + Math.PI); }
+    tower(C, C - H + 75, Math.PI / 2); tower(C - H + 75, C, 0); tower(C + H - 75, C, Math.PI); tower(C - 600, C + H - 75, -Math.PI / 2);
+    // Two cell blocks: two rows of cells off a long corridor each
+    const cells = [], blocks = [];
+    const cellBlock = (bx0, bx1, by0, by1) => {
+        const rowA = by0 + 255, rowB = by1 - 255, n = Math.round((bx1 - bx0) / 120), cw = (bx1 - bx0) / n, mid = Math.floor(n / 2), cy = (rowA + rowB) / 2;
+        wall(true, by0, bx0 - 8, bx1 + 8, []);
+        wall(false, bx0, by0, by1, [[cy, 120]]);
+        wall(false, bx1, by0, by1, [[cy, 120]]);
+        wall(true, by1, bx0 - 8, bx1 + 8, [[bx0 + cw * (mid + 0.5), 110]]);
+        wall(true, rowA, bx0, bx1, Array.from({ length: n }, (_, i) => [bx0 + cw / 2 + i * cw, 56]), { pcell: true }, 10);
+        wall(true, rowB, bx0, bx1, Array.from({ length: n }, (_, i) => [bx0 + cw / 2 + i * cw, i === mid ? 110 : 56]), { pcell: true }, 10);
+        for (let i = 1; i < n; i++) { wall(false, bx0 + i * cw, by0, rowA, [], {}, 12); wall(false, bx0 + i * cw, rowB, by1, [], {}, 12); }
+        for (let i = 0; i < n; i++) for (const [y0, y1, top] of [[by0, rowA, true], [rowB, by1, false]]) {
+            if (!top && i === mid) continue;
+            const x = bx0 + cw / 2 + i * cw;
+            cells.push({ x, y: (y0 + y1) / 2 + (top ? -30 : 30), top });
+            addBox({ type: 'crate', pprop: 'bunk', x: x - 34, y: top ? y0 + 50 : y1 - 50, hw: 16, hh: 34, seed: randInt(1, 1e9) });
+            paint.push({ k: 'toilet', x: x + 38, y: top ? y0 + 26 : y1 - 26, r: 20 });
+        }
+        for (let x = bx0 + 150; x < bx1; x += 300) lamp(x, cy, 26);
+        blocks.push({ x0: bx0, y0: by0, x1: bx1, y1: by1, cy, exit: { x: bx0 + cw * (mid + 0.5), y: by1 + 80 } });
+    };
+    cellBlock(C - 1850, C - 250, C - 1850, C - 1200);
+    cellBlock(C + 250, C + 1850, C - 1850, C - 1200);
+    // The yard
+    paint.push({ k: 'court', x: C + 700, y: C - 600, w: 560, h: 320, r: 400 });
+    paint.push({ k: 'court', x: C - 700, y: C - 600, w: 560, h: 320, r: 400 });
+    for (let i = 0; i < 7; i++) prop('bench', C - 900 + i * 300, C - 150, 40, 10);
+    prop('weights', C - 150, C - 850, 40, 22); prop('weights', C + 150, C - 850, 40, 22);
+    for (const [x, y] of [[C - 1850, C - 1050], [C + 1850, C - 1050], [C - 1850, C + 150], [C + 1850, C + 150], [C, C - 450]]) lamp(x, y, 50);
+    // Mess hall (with the sewer grate in the kitchen)
+    const mess = room(C - 1900, C + 350, C - 1000, C + 1000, { top: [[C - 1450, 130]], right: [[C + 700, 110]] });
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) prop('table', C - 1700 + c * 440, C + 480 + r * 150, 120, 24);
+    prop('counter', C - 1450, C + 960, 300, 18);
+    lamp(C - 1450, C + 700, 34);
+    const knives = [{ x: C - 1700, y: C + 520 }, { x: C - 1260, y: C + 670 }, { x: C - 1450, y: C + 900 }];
+    const grate = { x: C - 1820, y: C + 930 }, manhole = { x: C - HO - 260, y: C + 930 };
+    // Workshop (tools you can fight with) and the infirmary
+    const shop = room(C - 900, C + 350, C - 320, C + 900, { top: [[C - 610, 110]] });
+    for (let k = 0; k < 3; k++) prop('table', C - 780 + k * 230, C + 620, 70, 24);
+    const tools = [{ x: C - 780, y: C + 500 }, { x: C - 550, y: C + 500 }, { x: C - 450, y: C + 780 }, { x: C - 780, y: C + 780 }];
+    const infirmary = room(C - 220, C + 350, C + 300, C + 800, { top: [[C + 40, 100]] });
+    for (let k = 0; k < 3; k++) prop('bunk', C - 160 + k * 170, C + 700, 18, 40);
+    const meds = [{ x: C - 100, y: C + 500 }, { x: C + 120, y: C + 500 }, { x: C + 220, y: C + 560 }];
+    lamp(C + 40, C + 560, 30);
+    // Guard barracks
+    const barracks = room(C + 420, C + 350, C + 1100, C + 900, { top: [[C + 760, 100]] });
+    for (let k = 0; k < 3; k++) { prop('bunk', C + 500, C + 480 + k * 140, 18, 40); prop('bunk', C + 1020, C + 480 + k * 140, 18, 40); }
+    lamp(C + 760, C + 620, 30);
+    // The armory: its door is locked (an officer's keycard opens it)
+    const armory = room(C + 1250, C + 350, C + 1900, C + 1050, { top: [[C + 1575, 110]] });
+    const adoor = addBox({ type: 'wall', x: C + 1575, y: C + 350, hw: 57, hh: 10, color: '#4a4d52', pgate: true, plock: true });
+    for (let k = 0; k < 4; k++) { prop('rack', C + 1310, C + 460 + k * 140, 16, 46); prop('rack', C + 1840, C + 460 + k * 140, 16, 46); }
+    lamp(C + 1575, C + 700, 34);
+    const guns = [];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) guns.push({ x: C + 1410 + c * 110, y: C + 500 + r * 150 });
+    // Control room (works the inner gate) and the warden's office
+    const control = room(C + 1250, C + 1250, C + 1850, C + 1850, { top: [[C + 1550, 100]] });
+    prop('console', C + 1310, C + 1550, 18, 120); prop('console', C + 1790, C + 1550, 18, 120);
+    const swt = { x: C + 1550, y: C + 1700 };
+    lamp(C + 1550, C + 1450, 30);
+    const warden = room(C - 1850, C + 1250, C - 1150, C + 1850, { top: [[C - 1500, 100]] });
+    prop('desk', C - 1500, C + 1650, 70, 26); prop('rack', C - 1800, C + 1550, 16, 60);
+    lamp(C - 1500, C + 1500, 30);
+    // The guard booth out in no-man's land: works the outer gate
+    const booth = room(C + 250, C + H + 90, C + 450, C + HO - 60, { left: [[C + H + (HO - H) / 2 + 15, 90]] });
+    const swt2 = { x: C + 370, y: C + H + (HO - H) / 2 + 15 };
+    lamp(swt2.x, swt2.y, 26);
+    // Security cameras watching the corridors, doors and yard
+    const cams = [
+        { x: C - 1050, y: C - 1190, a: Math.PI / 2 }, { x: C + 1050, y: C - 1190, a: Math.PI / 2 }, { x: C, y: C - 1000, a: Math.PI / 2 }, { x: C - 1200, y: C + 340, a: -Math.PI / 2 }, { x: C + 1575, y: C + 330, a: -Math.PI / 2 },
+        { x: C + 1550, y: C + 1240, a: -Math.PI / 2 }, { x: C - 160, y: C + H - 40, a: -Math.PI / 2 }, { x: C - 1500, y: C + 1240, a: -Math.PI / 2 }, { x: C + 1900, y: C + 1150, a: Math.PI }, { x: C - 1900, y: C + 1150, a: 0 }
+    ].map(c => ({ ...c, ph: rand(0, TAU) }));
+    // Outside: a road from the gates, fields and trees, the getaway truck waiting
+    paint.push({ k: 'road', x: C, y: C + HO + (W / 2 - HO) / 2, w: 200, h: W / 2 - HO, r: W / 2 });
+    paint.push({ k: 'road', x: C, y: C + H + (HO - H) / 2, w: 200, h: HO - H, r: 400 });
+    const truck = { x: C + 40, y: C + HO + PRISON.truck };
+    for (let i = 0; i < 700; i++) {
+        const x = rand(200, W - 200), y = rand(200, W - 200);
+        if (Math.abs(x - C) < HO + 260 && Math.abs(y - C) < HO + 260) continue;
+        if (Math.abs(x - C) < 200 && y > C) continue;
+        const canopy = rand(60, 95), o = { type: 'tree', x, y, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 };
+        if (!blockedAt(grid, x, y, o.r + 40)) addCircle(o);
+    }
+    // Where the guards stand and walk
+    const posts = [
+        { x: C + 1520, y: C + 280, k: 'armory' }, { x: C + 1630, y: C + 280, k: 'armory' }, { x: C + 1500, y: C + 1180, k: 'control' }, { x: C + 1600, y: C + 1180, k: 'control' }, { x: C + 1550, y: C + 1400, k: 'control' },
+        { x: C - 90, y: C + H - 90, k: 'gate' }, { x: C + 90, y: C + H - 90, k: 'gate' }, { x: C, y: C + H - 180, k: 'gate' }, { x: swt2.x, y: swt2.y + 60, k: 'booth' }, { x: C + 120, y: C + HO - 70, k: 'gate2' },
+        { x: C - 1500, y: C + 1180, k: 'warden' }, ...towers.map(t => ({ x: t.x + Math.cos(t.a) * 110, y: t.y + Math.sin(t.a) * 110, k: 'tower' }))
+    ];
+    const patrol = [
+        ...blocks.flatMap(b => [{ x: b.x0 + 200, y: b.cy }, { x: (b.x0 + b.x1) / 2, y: b.cy }, { x: b.x1 - 200, y: b.cy }]),
+        { x: C - 1200, y: C - 600 }, { x: C + 1200, y: C - 600 }, { x: C, y: C - 300 }, { x: C - 600, y: C + 100 }, { x: C + 600, y: C + 100 }, { x: C - 1450, y: C + 650 },
+        { x: C - 610, y: C + 650 }, { x: C + 40, y: C + 1100 }, { x: C + 760, y: C + 1100 }, { x: C - 900, y: C + 1100 }, { x: C + 1600, y: C + 1150 }, { x: C - 1600, y: C + 1150 }
+    ];
+    const ring = [];
+    for (const [x, y] of [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0.5, 1], [-0.5, 1], [-1, 1], [-1, 0]]) ring.push({ x: C + x * (H + (HO - H) / 2), y: C + y * (H + (HO - H) / 2) });
+    // How bots get round: big open hubs to head for on long trips
+    const hubs = [{ x: C, y: C - 600 }, { x: C, y: C + 200 }, { x: C, y: C + 1300 }, { x: C, y: C + H - 120 }, { x: C, y: C + H + 190 }, { x: C - 1200, y: C + 1150 }, { x: C + 1200, y: C + 1150 }, { x: C - 1450, y: C + 250 }, { x: C + 1575, y: C + 230 },
+        ...blocks.map(b => b.exit), ...blocks.flatMap(b => [{ x: b.x0 - 90, y: b.cy }, { x: b.x1 + 90, y: b.cy }])];
+    const outHubs = [[-1, -1], [-1, 1], [1, 1], [1, -1], [-0.5, 1], [0.5, 1], [-1, 0], [1, 0], [0, -1]].map(([x, y]) => ({ x: C + x * (HO + 260), y: C + y * (HO + 260) }));
+    const pgrid = new Grid(400, 900);
+    for (const q of paint) pgrid.insert(q);
+    // The map, zoomed in on the prison
+    const mt = mmZoom(C, C + 300, HO + 400), [mm, g] = makeCanvas(200, 200), X = x => (x - mt.ox) * mt.k, Y = y => (y - mt.oy) * mt.k;
+    g.fillStyle = '#34482c'; g.fillRect(0, 0, 200, 200);
+    g.fillStyle = '#5a5c5e'; g.fillRect(X(C - 100), Y(C + H), 200 * mt.k, 200);
+    g.fillStyle = '#4e5a44'; g.fillRect(X(C - HO), Y(C - HO), HO * 2 * mt.k, HO * 2 * mt.k);
+    g.fillStyle = '#6e706e'; g.fillRect(X(C - H), Y(C - H), H * 2 * mt.k, H * 2 * mt.k);
+    for (const o of obstacles) { if (o.type === 'tree') { g.fillStyle = '#244a22'; g.fillRect(X(o.x) - 1, Y(o.y) - 1, 2, 2); continue; } g.fillStyle = o.pgate ? '#d8a23a' : o.type === 'crate' ? '#4a4a4a' : o.fence ? '#9a9aa0' : '#d8d8d4'; g.fillRect(X(o.x - o.hw), Y(o.y - o.hh), Math.max(1, o.hw * 2 * mt.k), Math.max(1, o.hh * 2 * mt.k)); }
+    const mid = { x: C, y: C };
+    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, mmT: mt, city: null, stairs: [], floor: null, terrain: 'prison', glows, maze: null, mazeExtra: null, height: null, escapeStart: mid, escapeEnd: mid,
+        prison: { H, HO, gate, gate2, adoor, grate, manhole, swt, swt2, truck, armory, control, warden, booth, mess, shop, infirmary, barracks, blocks, cells, towers, cams, posts, patrol, ring, hubs, outHubs, guns, knives, tools, meds, pgrid,
+            rooms: [armory, control, warden, mess, shop, infirmary, barracks, booth, ...blocks], restricted: [armory, control, warden, barracks, booth] } };
+}
+function paintPrison(g, x0, y0, S) {
+    const P = G.world.prison, C = CONFIG.WORLD_SIZE / 2, H = P.H, HO = P.HO, B = 16;
+    for (let x = x0; x < x0 + S; x += B) for (let y = y0; y < y0 + S; y += B) {
+        const mx = x + B / 2, my = y + B / 2, v = ((Math.sin(mx * 0.013) * Math.cos(my * 0.011) + Math.sin(mx * 0.004 + my * 0.0035)) * 5) | 0;
+        let col;
+        if (Math.abs(mx - C) < H && Math.abs(my - C) < H) {
+            const inside = P.rooms.some(r => mx > r.x0 && mx < r.x1 && my > r.y0 && my < r.y1);
+            col = inside ? (((Math.floor(mx / 48) + Math.floor(my / 48)) & 1) ? `rgb(${150 + v},${152 + v},${146 + v})` : `rgb(${136 + v},${138 + v},${132 + v})`) : `rgb(${98 + v},${100 + v},${98 + v})`;
+        } else if (Math.abs(mx - C) < HO && Math.abs(my - C) < HO) col = `rgb(${92 + v},${86 + v},${66 + v})`;
+        else col = `rgb(${66 + v},${96 + v},${52 + v})`;
+        g.fillStyle = col; g.fillRect(x, y, B + 1, B + 1);
+    }
+    P.pgrid.query(x0 + S / 2, y0 + S / 2, S / 2 + 900, q => {
+        if (q.k === 'road') {
+            g.fillStyle = '#4c4e50'; g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h);
+            g.fillStyle = '#d8c060'; for (let y = q.y - q.h / 2; y < q.y + q.h / 2; y += 80) g.fillRect(q.x - 3, y, 6, 40);
+        } else if (q.k === 'court') {
+            g.fillStyle = '#7a4a34'; g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h);
+            g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 3; g.strokeRect(q.x - q.w / 2 + 8, q.y - q.h / 2 + 8, q.w - 16, q.h - 16);
+            g.beginPath(); g.moveTo(q.x, q.y - q.h / 2 + 8); g.lineTo(q.x, q.y + q.h / 2 - 8); g.stroke();
+            g.beginPath(); g.arc(q.x, q.y, 40, 0, TAU); g.stroke();
+        } else if (q.k === 'toilet') {
+            g.fillStyle = '#c8ccd0'; g.beginPath(); g.ellipse(q.x, q.y, 9, 12, 0, 0, TAU); g.fill();
+            g.fillStyle = '#8a9098'; g.beginPath(); g.ellipse(q.x, q.y + 2, 5, 7, 0, 0, TAU); g.fill();
+        }
+    });
+    // the yellow line in front of the restricted rooms
+    g.strokeStyle = 'rgba(230,190,40,0.6)'; g.lineWidth = 6; g.setLineDash([24, 16]);
+    for (const r of P.restricted) g.strokeRect(r.x0 - 40, r.y0 - 40, r.x1 - r.x0 + 80, 40);
+    g.setLineDash([]);
+}
+const inBox = (f, r, m = 0) => f.x > r.x0 - m && f.x < r.x1 + m && f.y > r.y0 - m && f.y < r.y1 + m;
+const inNoMans = f => { const P = G.world.prison, C = CONFIG.WORLD_SIZE / 2; return Math.max(Math.abs(f.x - C), Math.abs(f.y - C)) > P.H + 10 && Math.max(Math.abs(f.x - C), Math.abs(f.y - C)) < P.HO; };
+const outsidePrison = f => { const P = G.world.prison, C = CONFIG.WORLD_SIZE / 2; return Math.max(Math.abs(f.x - C), Math.abs(f.y - C)) > P.HO + 10; };
+// A long trip across the prison: head for the open spot that best gets you on your way, so the route-finding can cope
+function prisonVia(b, t) {
+    const d = dist(b, t);
+    if (d < 1400) return t;
+    let best = t, bs = Infinity;
+    for (const h of outsidePrison(b) ? G.world.prison.outHubs : G.world.prison.hubs) {
+        const dh = dist(b, h);
+        if (dh < 150 || dh > 2600 || dist(h, t) > d - 150) continue;
+        const sc = dh + dist(h, t);
+        if (sc < bs) { bs = sc; best = h; }
+    }
+    return best;
+}
+const pGo = (b, t, ms = 4000) => { const v = prisonVia(b, t); return xmGo(b, v.x + rand(-10, 10), v.y + rand(-10, 10), ms); };
+function openDoorBox(o) {
+    if (o.broken) return;
+    o.broken = true; G.world.grid.removeBox(o);
+    const i = G.world.obstacles.indexOf(o); if (i >= 0) G.world.obstacles.splice(i, 1);
+    Sound.thud(1);
+}
 XM.prison = {
     name: 'PRISON BREAK', maps: ['prison'], slider: { label: 'Guards', cap: PRISON.guardCap },
-    desc: 'Start in a cell with nothing. Find a weapon, get past the guards, take the armory, open the gate from the control room and break out to the getaway truck.',
-    brief: [['⛓️', '<b>Goal:</b> get out of the prison to the getaway truck.'], ['🔪', 'You start with nothing. There are shivs hidden in some cells and knives in the mess hall. The guns are in the armory.'], ['👮', 'Guards leave prisoners alone until you cause trouble: hit a guard, carry a gun, go into the armory or control room, or get caught in a searchlight. Once the alarm goes off, they all come for you.'], ['🚪', 'Stand at the switch in the control room to open the main gate, then run for the truck.']],
+    desc: 'A huge maximum-security prison. Start in a cell with nothing. Get a weapon, steal an officer\'s keycard, raid the armory, open the inner gate and then the outer gate past the dogs, and reach the getaway truck.',
+    brief: [['⛓️', '<b>Goal:</b> break out of the prison to the getaway truck past the outer fence.'], ['🔪', 'You start with nothing. Shivs in some cells, knives in the mess hall, tools in the workshop, medkits in the infirmary.'], ['🪪', 'The armory is locked. Officers (and the warden) carry keycards: take one, then stand at the armory door.'], ['🚪', 'The control room opens the inner gate. Between the wall and the fence is no-man\'s land with guard dogs; the guard booth out there opens the outer gate.'], ['👮', 'Guards leave you alone until you cause trouble: hit a guard, carry a gun, walk into a restricted room or no-man\'s land, or get seen by a camera or searchlight. Once the alarm goes, reinforcements keep coming.'], ['🕳️', 'Or pry open the sewer grate in the mess hall kitchen (it takes a while) and crawl out beyond the fence. A fallen guard\'s uniform lets you walk past the others in disguise.']],
     noCars: true, noLoot: true,
     spawn(n) {
         const P = G.world.prison, S = G.xs;
@@ -5901,41 +5773,58 @@ XM.prison = {
         const used = new Set([top[0]]);
         const pl = G.player;
         pl.color = '#ff8a2a'; pl.dark = shade(pl.color, -0.45); pl.light = shade(pl.color, 0.35);
+        pl.prisoner = true; pl.hp = pl.maxHp = PRISON.hp;
         for (let i = 0; i < PRISON.prisoners; i++) {
             const c = cells.find(q => !used.has(q)); used.add(c);
             const b = createFighter(c.x, c.y, { name: botName(i), color: '#ff8a2a', team: 0 });
-            b.prisoner = true; b.breakAt = PRISON.riot + rand(0, 9000); b.hp = b.maxHp = PRISON.hp; b.likesCars = false;
+            b.prisoner = true; b.breakAt = PRISON.riot + rand(0, 12000); b.hp = b.maxHp = PRISON.hp; b.likesCars = false;
             G.fighters.push(b);
         }
-        pl.prisoner = true; pl.hp = pl.maxHp = PRISON.hp;
-        const guards = clamp(n, 4, PRISON.guardCap);
-        for (let i = 0; i < guards; i++) {
-            const post = i < P.posts.length ? P.posts[i] : null, at = post || pick(P.patrol);
-            const s = spawnNear(at, post ? 20 : 120, 30);
-            const g = createFighter(s.x, s.y, { name: `Guard ${i + 1}`, color: '#2c4470', team: 1 });
-            g.guard = true; g.post = post; g.likesCars = false;
-            applyLoot(g, post && post.k === 'tower' ? 'Sniper' : pick(['Revolver', 'Revolver', 'Mac10', 'Shotgun', 'Revolver']), -1);
-            g.armor = 20; g.items.bandage = 1;
-            G.fighters.push(g);
-        }
-        // Shivs in a few cells, knives on the mess hall tables, the armory stacked with guns
-        for (const c of cells.slice(1, 7)) spawnLoot(c.x + rand(-20, 20), c.y + rand(-15, 15), 'Dagger');
-        for (const k of P.knives) spawnLoot(k.x, k.y, pick(['Dagger', 'Dagger', 'Mace']));
+        const guards = clamp(n, 8, PRISON.guardCap);
+        for (let i = 0; i < guards; i++) this.guard(i < P.posts.length ? P.posts[i] : null, i);
+        // Officers with keycards, and the warden in his office
+        for (let i = 0; i < PRISON.officers; i++) { const g = this.guard(null, 100 + i); g.officer = true; g.name = `Officer ${i + 1}`; g.hp = g.maxHp = 140; g.color = '#1c2c50'; g.dark = shade(g.color, -0.45); g.light = shade(g.color, 0.35); }
+        const w = this.guard({ x: (P.warden.x0 + P.warden.x1) / 2, y: (P.warden.y0 + P.warden.y1) / 2, k: 'warden' }, 200);
+        w.officer = true; w.name = 'The Warden'; w.hp = w.maxHp = 320; w.armor = 80; w.inv = ['Shotgun', 'Revolver']; w.ammo.Shotgun = 60; w.ammo.Revolver = 60; w.color = '#5a1a24'; w.dark = shade(w.color, -0.45); w.light = shade(w.color, 0.35);
+        // Dogs in no-man's land
+        for (let i = 0; i < PRISON.dogs; i++) { const q = P.ring[i % P.ring.length]; const d = makeDog(q.x, q.y, 1, false); d.guardDog = true; d.ringAt = i; }
+        // Shivs in a few cells, knives in the mess hall, tools in the workshop, medkits in the infirmary, the armory full of guns
+        for (const c of cells.slice(1, 9)) spawnLoot(c.x + rand(-20, 20), c.y + rand(-15, 15), 'Dagger');
+        for (const k of P.knives) spawnLoot(k.x, k.y, 'Dagger');
+        for (const t of P.tools) spawnLoot(t.x, t.y, pick(['Mace', 'Axe', 'War Hammer', 'Mace']));
+        for (const m of P.meds) spawnLoot(m.x, m.y, pick(['medkit', 'bandage', 'bandage']));
         const GUNS = ['Shotgun', 'Assault Rifle', 'Mac10', 'Revolver', 'Machine Gun', 'Assault Rifle', 'Shotgun', 'Sniper', 'Double Barrel', 'Breacher', 'Mac10', 'Assault Rifle'];
         P.guns.forEach((q, i) => spawnLoot(q.x, q.y, GUNS[i % GUNS.length]));
-        for (let i = 0; i < 6; i++) spawnLoot(P.armory.x0 + rand(80, 560), P.armory.y0 + rand(80, 560), pick(['ammo', 'ammo', 'armor', 'grenade', 'bandage', 'medkit']));
-        S.alarm = false; S.gateOpen = false; S.switchT = 0; S.escaped = 0; S.seen = 0;
+        for (let i = 0; i < 8; i++) spawnLoot(P.armory.x0 + rand(80, 560), P.armory.y0 + rand(80, 620), pick(['ammo', 'ammo', 'armor', 'grenade', 'bandage', 'medkit']));
+        Object.assign(S, { alarm: false, gateOpen: false, gate2Open: false, armoryOpen: false, keycard: false, switchT: 0, switch2T: 0, keyT: 0, grateT: 0, escaped: 0, seen: 0, reinf: 0 });
+    },
+    guard(post, i) {
+        const P = G.world.prison, at = post || pick(P.patrol), s = spawnNear(at, post ? 20 : 120, 30);
+        const g = createFighter(s.x, s.y, { name: `Guard ${i + 1}`, color: '#2c4470', team: 1 });
+        g.guard = true; g.post = post; g.likesCars = false;
+        applyLoot(g, post && post.k === 'tower' ? 'Sniper' : pick(['Revolver', 'Mac10', 'Shotgun', 'Assault Rifle', 'Revolver', 'Mac10']), -1);
+        g.armor = 30; g.items.bandage = 2; g.hp = g.maxHp = 110; g.dmgMul = post && post.k === 'tower' ? 0.55 : 0.85;
+        G.fighters.push(g);
+        return g;
     },
     setup() { Object.assign(G.zone, { r: CONFIG.WORLD_SIZE, tr: CONFIG.WORLD_SIZE, state: 'final', dmg: 0 }); },
     foe(a, b) {
-        // Before the alarm, guards leave prisoners alone unless they're wanted
-        if (a.guard && b.prisoner) return !!b.wanted || (G.xs.alarm && !inBox(b, G.world.prison.cellBlock, -20));
+        // Before the alarm, guards leave prisoners alone unless they're wanted (dogs go for anyone in no-man's land)
+        if (a.guard && b.prisoner) return !b.disguised && (!!b.wanted || (G.xs.alarm && !G.world.prison.blocks.some(r => inBox(b, r, -20))));
+        if (a.guardDog && b.prisoner) return !b.disguised && (!!b.wanted || G.xs.alarm || inNoMans(b));
         if (a.prisoner && b.prisoner) return false;
-        // (prisoner bots keep their heads down too, until the alarm or until they're wanted)
-        if (a.prisoner && b.guard && !isHuman(a)) return G.xs.alarm || !!a.wanted;
+        if (a.prisoner && (b.guard || b.guardDog) && !isHuman(a)) return G.xs.alarm || !!a.wanted;
         return undefined;
     },
-    hurt(t, attacker) { if (attacker && attacker.prisoner && t.guard && !attacker.wanted) this.want(attacker, 'attacked a guard'); },
+    hurt(t, attacker) {
+        if (!attacker || !attacker.prisoner || !(t.guard || t.guardDog)) return;
+        if (attacker.disguised) this.unmask(attacker);
+        if (!attacker.wanted) this.want(attacker, 'attacked a guard');
+    },
+    unmask(f) {
+        f.disguised = false; f.color = '#ff8a2a'; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
+        if (f.isPlayer) showBanner('YOUR COVER IS BLOWN!', true, 'The guards know who you are now!');
+    },
     want(f, why) {
         if (f.wanted) return;
         f.wanted = true;
@@ -5944,26 +5833,45 @@ XM.prison = {
     raise(why) {
         const S = G.xs;
         if (S.alarm) return;
-        S.alarm = true;
-        if (G.mode === 'playing') showBanner('🚨 ALARM! 🚨', true, `${why} Every guard is coming!`);
+        S.alarm = true; S.nextReinf = G.time + PRISON.reinf;
+        if (G.mode === 'playing') showBanner('🚨 ALARM! 🚨', true, `${why} Every guard is coming, and more are on the way!`);
         Sound.siren(1);
     },
     dark: () => PRISON.dark,
+    hold(key, spot, R, need, dt, decay = 0.5) {
+        // standing on a spot (any prisoner) fills up S[key]; returns true once it's full
+        const S = G.xs;
+        let on = false;
+        G.fgrid.query(spot.x, spot.y, R + 10, f => { if (f.prisoner && !f.dead && Math.hypot(f.x - spot.x, f.y - spot.y) < R) on = true; });
+        S[key] = on ? S[key] + dt : Math.max(0, S[key] - dt * decay);
+        return S[key] >= need;
+    },
     update(dt) {
-        const S = G.xs, P = G.world.prison, t = G.time, pl = G.player;
+        const S = G.xs, P = G.world.prison, t = G.time;
         // Who's breaking the rules
         for (const f of G.fighters) {
             if (f.dead || !f.prisoner) continue;
+            if (f.disguised) { if (G.time - (f.lastShot || -1e9) < 300 && WEAPONS[held(f)] && !WEAPONS[held(f)].melee) this.unmask(f); continue; }
             if (!f.wanted && xmHasGun(f)) this.want(f, 'picked up a gun');
-            if (!f.wanted && (inBox(f, P.armory) || inBox(f, P.control))) this.want(f, 'went into a restricted area');
-            if (!f.wanted && (Math.abs(f.x - P.gate.x) < 160 && f.y > P.gate.y - 120)) this.want(f, 'went to the gate');
+            if (!f.wanted && P.restricted.some(r => inBox(f, r))) this.want(f, 'went into a restricted area');
+            if (!f.wanted && inNoMans(f)) this.want(f, 'got into no-man\'s land');
+            if (!f.wanted && Math.abs(f.x - P.gate.x) < 160 && f.y > P.gate.y - 140) this.want(f, 'went to the gate');
         }
-        // The searchlights sweep the yard
+        // Searchlights sweep the yard and no-man's land; cameras watch the doors and corridors
         for (const tw of P.towers) {
-            const a = tw.a + Math.sin(t / 2600 + tw.ph) * 0.75, d = 520 + Math.sin(t / 1900 + tw.ph * 2) * 300;
+            const a = tw.a + Math.sin(t / 2600 + tw.ph) * 0.8, d = 520 + Math.sin(t / 1900 + tw.ph * 2) * 320;
             tw.sx2 = tw.x + Math.cos(a) * d; tw.sy2 = tw.y + Math.sin(a) * d;
-            if (S.alarm) continue;
-            G.fgrid.query(tw.sx2, tw.sy2, PRISON.spot, f => { if (f.prisoner && !f.dead && (isHuman(f) || G.time > f.breakAt) && !P.rooms.some(r => inBox(f, r, -10)) && Math.hypot(f.x - tw.sx2, f.y - tw.sy2) < PRISON.spot) this.want(f, 'got caught in a searchlight'); });
+            G.fgrid.query(tw.sx2, tw.sy2, PRISON.spot, f => { if (f.prisoner && !f.dead && !f.wanted && !f.disguised && (isHuman(f) || G.time > f.breakAt) && !P.rooms.some(r => inBox(f, r, -10)) && Math.hypot(f.x - tw.sx2, f.y - tw.sy2) < PRISON.spot) this.want(f, 'got caught in a searchlight'); });
+        }
+        for (const c of P.cams) {
+            if (c.broken) continue;
+            c.look = c.a + Math.sin(t / 2200 + c.ph) * 0.7;
+            G.fgrid.query(c.x, c.y, PRISON.camRange, f => {
+                if (!f.prisoner || f.dead || f.wanted || f.disguised || (!isHuman(f) && G.time < f.breakAt)) return;
+                if (Math.hypot(f.x - c.x, f.y - c.y) > PRISON.camRange || Math.abs(angleDiff(c.look, Math.atan2(f.y - c.y, f.x - c.x))) > PRISON.camFov || !lineOfSight(c, f)) return;
+                // (the cells and the yard are fine to be in: cameras flag people carrying weapons or where they shouldn't be)
+                if (held(f) !== 'Fist' || P.restricted.some(r => inBox(f, r, 60))) this.want(f, 'was seen on camera');
+            });
         }
         // A guard who sees a wanted prisoner radios it in
         if (!S.alarm) {
@@ -5976,74 +5884,108 @@ XM.prison = {
             S.seen = spotted ? S.seen + dt * 1000 : Math.max(0, S.seen - dt * 500);
             if (S.seen > PRISON.radio) this.raise('A guard radioed it in.');
         }
-        // The gate switch: stand on it to open the gate
-        if (!S.gateOpen) {
-            let on = false;
-            G.fgrid.query(P.swt.x, P.swt.y, 50, f => { if (f.prisoner && !f.dead && Math.hypot(f.x - P.swt.x, f.y - P.swt.y) < 45) on = true; });
-            S.switchT = on ? S.switchT + dt : Math.max(0, S.switchT - dt * 0.5);
-            if (S.switchT >= PRISON.switchT) {
-                S.gateOpen = true;
-                G.world.grid.removeBox(P.gate); P.gate.broken = true;
-                const i = G.world.obstacles.indexOf(P.gate); if (i >= 0) G.world.obstacles.splice(i, 1);
-                if (G.mode === 'playing') showBanner('THE GATE IS OPEN!', true, 'Run for the getaway truck outside the main gate!');
-                Sound.thud(1);
-                this.raise('Someone opened the main gate!');
-            }
+        if (!S.rioted && t >= PRISON.riot) { S.rioted = true; if (G.mode === 'playing') showBanner('RIOT!', true, 'The other prisoners are breaking out. Go with them, or slip away while the guards are busy!'); }
+        // Reinforcements once the alarm's gone
+        if (S.alarm && t >= S.nextReinf && S.reinf < PRISON.reinfCap) {
+            S.nextReinf = t + PRISON.reinf;
+            const from = { x: P.truck.x, y: P.truck.y - 200 };
+            for (let i = 0; i < PRISON.reinfN; i++) { const g = this.guard({ x: from.x, y: from.y, k: 'reinf' }, 300 + S.reinf); g.post = null; g.armor = 60; S.reinf++; }
+            if (G.mode === 'playing') showBanner('REINFORCEMENTS', false, `${PRISON.reinfN} more guards just arrived at the main gate`);
         }
-        if (!S.rioted && t >= PRISON.riot) { S.rioted = true; if (G.mode === 'playing') showBanner('RIOT!', true, 'The other prisoners are breaking out. Go with them, or slip out while the guards are busy!'); }
+        updatePicks();
+        // The armory door (keycard), the inner gate (control room), the outer gate (guard booth), the sewer grate
+        if (!S.armoryOpen && S.keycard && this.hold('keyT', { x: P.adoor.x, y: P.adoor.y - 40 }, 55, PRISON.keyT, dt)) { S.armoryOpen = true; openDoorBox(P.adoor); if (G.mode === 'playing') showBanner('THE ARMORY IS OPEN', true, 'Grab the guns!'); }
+        if (!S.gateOpen && this.hold('switchT', P.swt, 45, PRISON.switchT, dt)) { S.gateOpen = true; openDoorBox(P.gate); if (G.mode === 'playing') showBanner('THE INNER GATE IS OPEN!', true, 'Now the outer gate: the switch is in the guard booth out in no-man\'s land. Watch for the dogs!'); this.raise('Someone opened the inner gate!'); }
+        if (!S.gate2Open && this.hold('switch2T', P.swt2, 40, PRISON.outerT, dt)) { S.gate2Open = true; openDoorBox(P.gate2); if (G.mode === 'playing') showBanner('THE OUTER GATE IS OPEN!', true, 'Run for the getaway truck!'); this.raise('Someone opened the outer gate!'); }
+        const gr = P.grate;
+        if (!S.grateOpen) { if (this.hold('grateT', gr, 40, PRISON.grate, dt, 0.25)) { S.grateOpen = true; if (G.mode === 'playing') showBanner('THE SEWER GRATE IS OPEN', false, 'Step onto it to crawl through the tunnel to the outside!'); Sound.crunch(1); } }
+        else G.fgrid.query(gr.x, gr.y, 40, f => {
+            if (!f.prisoner || f.dead || Math.hypot(f.x - gr.x, f.y - gr.y) > 28 || G.time < (f.tunnelAt || 0)) return;
+            f.tunnelAt = G.time + 4000;
+            f.x = P.manhole.x + rand(-20, 20); f.y = P.manhole.y + rand(-20, 20); f.vx = f.vy = 0;
+            if (f.isPlayer) { G.cam.x = f.x; G.cam.y = f.y; G.flash = 0.6; G.flashColor = '20,16,10'; addFloat(f.x, f.y - 40, 'Out through the sewer!', '#9dffb0', true); }
+        });
         // Getting away
         for (const f of G.fighters) {
             if (f.dead || !f.prisoner || Math.hypot(f.x - P.truck.x, f.y - P.truck.y) > 140) continue;
             if (f.isPlayer) {
                 if (G.result) continue;
-                const sub = `You broke out${S.escaped ? ` with ${S.escaped} other prisoner${S.escaped === 1 ? '' : 's'}` : ''}.`;
+                const sub = `You broke out${S.escaped ? ` with ${S.escaped} other prisoner${S.escaped === 1 ? '' : 's'}` : ''}${S.alarm ? '' : ' without ever setting off the alarm'}.`;
                 G.result = { won: true, place: 1, title: 'ESCAPED!', sub }; G.overAt = G.time + 3000; startVictory(sub);
                 f.escaped = true;
             } else { f.dead = true; f.escaped = true; G.alive--; S.escaped++; if (G.mode === 'playing') addKillfeed(f, null, 'escaped'); }
         }
     },
-    death(t, killer) { if (t.guard && killer && killer.prisoner) { this.want(killer, 'killed a guard'); this.raise('A guard is down!'); } },
+    death(t, killer) {
+        if (!t.guard) return;
+        addPick('uniform', t.x, t.y);
+        if (t.officer) addPick('keycard', t.x + 20, t.y);
+        if (killer && killer.prisoner) { if (!killer.disguised) this.want(killer, 'killed a guard'); this.raise('A guard is down!'); }
+    },
+    bot(b) {
+        if (!b.guardDog) return false;
+        // Guard dogs: go for anyone they're allowed to, otherwise trot round no-man's land
+        const P = G.world.prison;
+        if (dogThink(b, null)) {
+            if (b.mode !== 'fight') { if (dist(b, P.ring[b.ringAt]) < 80) b.ringAt = (b.ringAt + 1) % P.ring.length; const q = P.ring[b.ringAt]; xmGo(b, q.x, q.y, 4000); }
+            return true;
+        }
+        return false;
+    },
     idle(b) {
         const S = G.xs, P = G.world.prison;
         if (b.guard) {
-            if (b.post && (!S.alarm || b.post.k !== 'tower' ? true : true)) {
-                if (dist(b, b.post) > 40) return xmGo(b, b.post.x, b.post.y, 4000);
+            if (b.post) {
+                if (dist(b, b.post) > 40) return pGo(b, b.post, 4000);
                 b.mode = 'zone'; b.goal = { x: b.post.x, y: b.post.y }; return true;
             }
             if (S.alarm) {
-                // hunt: toward the nearest prisoner they know about
-                let best = null, bd = 2500;
-                for (const f of G.fighters) if (!f.dead && f.prisoner && f.wanted) { const d = dist(b, f); if (d < bd) { bd = d; best = f; } }
-                if (best) return xmGo(b, best.x + rand(-150, 150), best.y + rand(-150, 150), 3000);
+                let best = null, bd = 3000;
+                for (const f of G.fighters) if (!f.dead && f.prisoner && (f.wanted || !P.blocks.some(r => inBox(f, r))) && !f.disguised) { const d = dist(b, f); if (d < bd) { bd = d; best = f; } }
+                if (best) return pGo(b, best, 3000);
             }
             if (b.mode === 'zone' && b.goal && dist(b, b.goal) > 60 && G.time < (b.strollUntil || 0)) return true;
             const w = pick(P.patrol);
-            return xmGo(b, w.x + rand(-60, 60), w.y + rand(-60, 60), rand(6000, 12000));
+            return pGo(b, { x: w.x + rand(-60, 60), y: w.y + rand(-60, 60) }, rand(6000, 12000));
         }
         if (!b.prisoner) return false;
-        // Prisoners: grab any shiv or knife lying close, hang about until it's time, then weapon, gate, truck
+        // Prisoners: grab any shiv or tool lying close, hang about until the riot, then: weapon, keycard, armory, gates, truck
         if (!b.inv.some(n => n)) { const l = nearestLoot(b.x, b.y, 320, q => WEAPONS[q.key] && !claimedByOther(q, b)); if (l) { b.mode = 'loot'; b.goal = l; l.claim = b; return true; } }
         if (G.time < b.breakAt && !S.alarm) {
             if (b.mode === 'zone' && b.goal && dist(b, b.goal) > 50 && G.time < (b.strollUntil || 0)) return true;
             const C = CONFIG.WORLD_SIZE / 2;
-            return xmGo(b, C + rand(-1000, 1000), C + rand(-420, 300), rand(5000, 10000));
+            return pGo(b, { x: C + rand(-1500, 1500), y: C + rand(-1000, 100) }, rand(5000, 10000));
         }
-        if (S.gateOpen) return xmGo(b, P.truck.x, P.truck.y, 4000);
+        // (keycards and flares lying about get picked up)
+        const kc = nearestPick(b, ['keycard', 'uniform'], 500);
+        if (kc && (kc.kind === 'keycard' || !b.wanted)) return xmGo(b, kc.x, kc.y, 3000);
+        if (outsidePrison(b) || S.gate2Open) return pGo(b, P.truck, 4000);
+        if (b.sewer === undefined) b.sewer = Math.random() < 0.3;
+        if (b.sewer) return pGo(b, P.grate, 4000);
         if (!xmHasGun(b)) {
-            if (inBox(b, P.armory, -40)) return false;  // (in the armory: grab what's lying about)
-            return xmGo(b, (P.armory.x0 + P.armory.x1) / 2, P.armory.y0 + 140, 5000);
+            if (S.armoryOpen) { if (inBox(b, P.armory, -40)) return false; return pGo(b, { x: (P.armory.x0 + P.armory.x1) / 2, y: P.armory.y0 + 160 }, 5000); }
+            if (S.keycard) return pGo(b, { x: P.adoor.x, y: P.adoor.y - 40 }, 4000);
+            // no keycard yet: go after an officer
+            let off = null, bd = Infinity;
+            for (const f of G.fighters) if (!f.dead && f.officer) { const d = dist(b, f); if (d < bd) { bd = d; off = f; } }
+            if (off) return pGo(b, off, 3000);
+            return false;
         }
-        if (dist(b, P.swt) > 30) return xmGo(b, P.swt.x, P.swt.y, 4000);
-        b.mode = 'zone'; b.goal = { x: P.swt.x, y: P.swt.y }; return true;
+        if (!S.gateOpen) return pGo(b, P.swt, 4000);
+        return pGo(b, P.swt2, 4000);
     },
     hud(p) {
-        const S = G.xs;
-        const pre = S.alarm ? '🚨 ALARM · ' : p.wanted ? 'WANTED · ' : '';
-        if (S.gateOpen) return `${pre}The gate is open: get to the getaway truck · ${Math.round(dist(p, G.world.prison.truck) / 10)}m`;
-        if (S.switchT > 0) return `${pre}Opening the gate... ${Math.round(S.switchT / PRISON.switchT * 100)}%`;
-        return `${pre}${xmHasGun(p) ? 'Open the main gate: stand at the switch in the control room' : 'Find a weapon: shivs in the cells, knives in the mess hall, guns in the armory'}`;
+        const S = G.xs, P = G.world.prison;
+        const pre = `${S.alarm ? '🚨 ALARM · ' : p.wanted ? 'WANTED · ' : ''}${p.disguised ? 'DISGUISED · ' : ''}`;
+        if (outsidePrison(p)) return `${pre}You're out! Get to the getaway truck · ${Math.round(dist(p, P.truck) / 10)}m`;
+        for (const [k, need, label] of [['switchT', PRISON.switchT, 'Opening the inner gate'], ['switch2T', PRISON.outerT, 'Opening the outer gate'], ['keyT', PRISON.keyT, 'Unlocking the armory'], ['grateT', PRISON.grate, 'Prying open the sewer grate']])
+            if (S[k] > 0 && S[k] < need && ((k === 'grateT' && !S.grateOpen) || (k === 'keyT' && !S.armoryOpen) || (k === 'switchT' && !S.gateOpen) || (k === 'switch2T' && !S.gate2Open))) return `${pre}${label}... ${Math.round(S[k] / need * 100)}%`;
+        if (S.gate2Open) return `${pre}Both gates are open: get to the getaway truck · ${Math.round(dist(p, P.truck) / 10)}m`;
+        if (S.gateOpen) return `${pre}Inner gate open. Get to the guard booth in no-man's land to open the outer gate`;
+        if (!xmHasGun(p)) return `${pre}${S.armoryOpen ? 'The armory is open: get a gun' : S.keycard ? 'You have a keycard: unlock the armory door' : 'Find a weapon, then take a keycard from an officer or the warden'}`;
+        return `${pre}Open the inner gate: stand at the switch in the control room`;
     },
-    banner() { return 'You\'re in a cell with nothing. Find a weapon, take the armory, open the gate from the control room and get to the getaway truck. Guards leave you alone until you cause trouble!'; },
+    banner() { return 'You\'re in a cell with nothing. Arm yourself, steal a keycard, raid the armory, open both gates and get to the getaway truck. Guards leave you alone until you cause trouble!'; },
     deathSub() { return G.xs.alarm ? 'The guards got you.' : 'You didn\'t make it out.'; },
     lights(light) {
         const P = G.world.prison;
@@ -6052,19 +5994,39 @@ XM.prison = {
     },
     minimap(g, k) {
         const P = G.world.prison, S = G.xs;
-        xmMark(g, k, (P.armory.x0 + P.armory.x1) / 2, (P.armory.y0 + P.armory.y1) / 2, '#ff5a5a', 'ARMORY', true);
-        xmMark(g, k, P.swt.x, P.swt.y, '#ffd23a', 'SWITCH');
+        xmMark(g, k, (P.armory.x0 + P.armory.x1) / 2, (P.armory.y0 + P.armory.y1) / 2, S.armoryOpen ? '#9dffb0' : '#ff5a5a', 'ARMORY', true);
+        xmMark(g, k, (P.warden.x0 + P.warden.x1) / 2, (P.warden.y0 + P.warden.y1) / 2, '#c86a7a', 'WARDEN', true);
+        xmMark(g, k, P.swt.x, P.swt.y, '#ffd23a', 'GATE 1');
+        xmMark(g, k, P.swt2.x, P.swt2.y, '#ffd23a', 'GATE 2');
         xmMark(g, k, P.truck.x, P.truck.y, '#7dff9a', 'TRUCK', true);
-        if (!S.gateOpen) xmMark(g, k, P.gate.x, P.gate.y, '#d8a23a', null, true);
+        xmMark(g, k, P.grate.x, P.grate.y, S.grateOpen ? '#9dffb0' : '#8a8a90', 'SEWER');
+        g.fillStyle = '#1c2c50'; for (const f of G.fighters) if (!f.dead && f.officer && (S.alarm || dist(f, G.player) < 900)) g.fillRect(f.x * k - 2, f.y * k - 2, 4, 4);
     },
     drawWorld(L, T, R, B, now) {
         const P = G.world.prison, S = G.xs;
-        // the switch, and how far along it is
-        const sw = P.swt;
-        ctx.fillStyle = '#2a2c30'; ctx.fillRect(sw.x - 22, sw.y - 22, 44, 44);
-        ctx.fillStyle = S.gateOpen ? '#3aff7a' : '#ff4a4a'; ctx.beginPath(); ctx.arc(sw.x, sw.y, 12, 0, TAU); ctx.fill();
-        ctx.strokeStyle = 'rgba(255,210,58,0.7)'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(sw.x, sw.y, 45, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
-        if (S.switchT > 0 && !S.gateOpen) { ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(sw.x, sw.y, 32, -Math.PI / 2, -Math.PI / 2 + TAU * S.switchT / PRISON.switchT); ctx.stroke(); }
+        // the sewer grate and the manhole it comes out of
+        for (const q of [P.grate, P.manhole]) {
+            ctx.fillStyle = '#1a1a1c'; ctx.beginPath(); ctx.arc(q.x, q.y, 24, 0, TAU); ctx.fill();
+            if (!S.grateOpen) { ctx.strokeStyle = '#5a5c60'; ctx.lineWidth = 3; ctx.beginPath(); for (let i = -16; i <= 16; i += 8) { ctx.moveTo(q.x - 18, q.y + i); ctx.lineTo(q.x + 18, q.y + i); } ctx.stroke(); }
+            ctx.strokeStyle = '#4a4c50'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(q.x, q.y, 24, 0, TAU); ctx.stroke();
+        }
+        // the switches, the armory's card reader, and how far along each one is
+        const ring = (q, R, v, need, done) => {
+            if (done) return;
+            ctx.strokeStyle = 'rgba(255,210,58,0.7)'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(q.x, q.y, R, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+            if (v > 0) { ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(q.x, q.y, R - 12, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, v / need)); ctx.stroke(); }
+        };
+        for (const [q, open] of [[P.swt, S.gateOpen], [P.swt2, S.gate2Open]]) { ctx.fillStyle = '#2a2c30'; ctx.fillRect(q.x - 22, q.y - 22, 44, 44); ctx.fillStyle = open ? '#3aff7a' : '#ff4a4a'; ctx.beginPath(); ctx.arc(q.x, q.y, 12, 0, TAU); ctx.fill(); }
+        ring(P.swt, 45, S.switchT, PRISON.switchT, S.gateOpen); ring(P.swt2, 40, S.switch2T, PRISON.outerT, S.gate2Open);
+        if (!S.armoryOpen) { const q = { x: P.adoor.x, y: P.adoor.y - 40 }; ctx.fillStyle = S.keycard ? '#3aff7a' : '#ff4a4a'; ctx.fillRect(q.x + 62, P.adoor.y - 26, 10, 14); if (S.keycard) ring(q, 55, S.keyT, PRISON.keyT, false); }
+        if (!S.grateOpen && S.grateT > 0) ring(P.grate, 40, S.grateT, PRISON.grate, false);
+        // cameras
+        for (const c of P.cams) {
+            ctx.fillStyle = '#2a2c30'; ctx.fillRect(c.x - 7, c.y - 7, 14, 14);
+            ctx.fillStyle = Math.sin(now * 5) > 0 ? '#ff3a3a' : '#5a1a1a'; ctx.beginPath(); ctx.arc(c.x, c.y, 3, 0, TAU); ctx.fill();
+            if (c.look === undefined) continue;
+            ctx.fillStyle = 'rgba(255,60,60,0.07)'; ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, PRISON.camRange, c.look - PRISON.camFov, c.look + PRISON.camFov); ctx.closePath(); ctx.fill();
+        }
         // the getaway truck
         const tr = P.truck;
         ctx.save(); ctx.translate(tr.x, tr.y);
@@ -6075,10 +6037,10 @@ XM.prison = {
         ctx.fillStyle = '#fff6c2'; ctx.fillRect(42, -20, 4, 8); ctx.fillRect(42, 12, 4, 8);
         ctx.restore();
         ctx.strokeStyle = `rgba(125,255,154,${0.5 + Math.sin(now * 4) * 0.3})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(tr.x, tr.y, 140, 0, TAU); ctx.stroke();
+        drawPicks(L, T, R, B, now);
     },
     drawTop(L, T, R, B, now) {
         const P = G.world.prison, S = G.xs;
-        // searchlight beams
         ctx.save(); ctx.globalCompositeOperation = 'lighter';
         for (const tw of P.towers) {
             if (!tw.sx2) continue;
@@ -6092,274 +6054,91 @@ XM.prison = {
     }
 };
 
-// ================= SHIPWRECK ISLAND (and its map) =================
-// You wash up on a jungle island with the other survivors of the wreck. Hunt, drink and rest (Survival rules),
-// find the three signal flares, light the signal fire on the hill, and get to the dock when the rescue ship comes.
-// Every night pirates land on the beach and raid.
-const ISLAND = { R: 2600, beach: 190, cap: 30, signal: 3, rescue: 90000, board: 150, raid: [5, 3], raidCap: 30 };
-function generateIsland() {
-    const W = CONFIG.WORLD_SIZE, C = W / 2, R = ISLAND.R, grid = new Grid(256, 90), obstacles = [], lootSpots = [], paint = [];
-    const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
-    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
-    const p1 = rand(0, TAU), p2 = rand(0, TAU), p3 = rand(0, TAU);
-    const edge = a => R * (1 + 0.1 * Math.sin(3 * a + p1) + 0.06 * Math.sin(5 * a + p2) + 0.04 * Math.sin(8 * a + p3));
-    const a0 = rand(0, TAU), shoreAt = (a, inset) => ({ x: C + Math.cos(a) * (edge(a) - inset), y: C + Math.sin(a) * (edge(a) - inset) });
-    // The dock sticks out into the sea on the far side from the wreck
-    const ad = a0 + Math.PI, dockBase = shoreAt(ad, 60), dockEnd = { x: C + Math.cos(ad) * (edge(ad) + 340), y: C + Math.sin(ad) * (edge(ad) + 340) };
-    const onPier = (x, y) => { const dx = dockEnd.x - dockBase.x, dy = dockEnd.y - dockBase.y, L2 = dx * dx + dy * dy, t = clamp(((x - dockBase.x) * dx + (y - dockBase.y) * dy) / L2, 0, 1); return Math.hypot(x - (dockBase.x + dx * t), y - (dockBase.y + dy * t)) < 40; };
-    const inside = (x, y, m = 0) => Math.hypot(x - C, y - C) < edge(Math.atan2(y - C, x - C)) - m || (m <= 60 && onPier(x, y));
-    const start = shoreAt(a0, 260), wreckAt = shoreAt(a0, 40);
-    const hill = { x: C + Math.cos(a0 + Math.PI / 2) * R * 0.42, y: C + Math.sin(a0 + Math.PI / 2) * R * 0.42, r: 480 };
-    const beacon = { x: hill.x, y: hill.y };
-    // Freshwater ponds
-    const ponds = [];
-    for (let i = 0, tries = 0; i < 4 && tries < 200; tries++) {
-        const a = rand(0, TAU), d = rand(500, R * 0.7), x = C + Math.cos(a) * d, y = C + Math.sin(a) * d;
-        if (!inside(x, y, 500) || Math.hypot(x - hill.x, y - hill.y) < hill.r + 200 || Math.hypot(x - start.x, y - start.y) < 500 || ponds.some(p => Math.hypot(p.x - x, p.y - y) < 900)) continue;
-        ponds.push({ x, y, rx: rand(120, 200), ry: rand(80, 140), a: rand(-0.5, 0.5), seed: randInt(1, 1e9) });
-        i++;
+// A campfire: a ring of stones, crossed logs and flames (k = how big)
+function drawCampfire(x, y, k, now) {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x + 3, y + 4, 26 * k, 20 * k, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#6a6a70'; for (let i = 0; i < 9; i++) { const a = i / 9 * TAU; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 24 * k, y + Math.sin(a) * 19 * k, 5 * Math.sqrt(k), 0, TAU); ctx.fill(); }
+    ctx.fillStyle = '#4a3020'; for (let i = 0; i < 3; i++) { ctx.save(); ctx.translate(x, y); ctx.rotate(i * 1.05); ctx.fillRect(-18 * k, -3.5 * k, 36 * k, 7 * k); ctx.restore(); }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 7; i++) {
+        const fx = x + Math.sin(now * 9 + i * 2.3) * 6 * k, fy = y - i * 3.5 * k + Math.cos(now * 11 + i) * 3, r = (13 - i * 1.5) * k + Math.random() * 3;
+        ctx.fillStyle = `rgba(255,${120 + i * 20},40,${0.55 - i * 0.06})`; ctx.beginPath(); ctx.arc(fx, fy, r, 0, TAU); ctx.fill();
     }
-    const inAnyPond = (x, y, pad) => ponds.some(p => { const c = Math.cos(-p.a), s = Math.sin(-p.a), dx = x - p.x, dy = y - p.y, lx = dx * c - dy * s, ly = dx * s + dy * c; return (lx / (p.rx + pad)) ** 2 + (ly / (p.ry + pad)) ** 2 < 1; });
-    // Huts
-    const huts = [];
-    for (let i = 0, tries = 0; i < 6 && tries < 300; tries++) {
-        const a = rand(0, TAU), d = rand(400, R * 0.75), x = C + Math.cos(a) * d, y = C + Math.sin(a) * d;
-        if (!inside(x, y, 450) || inAnyPond(x, y, 220) || Math.hypot(x - hill.x, y - hill.y) < hill.r + 120 || huts.some(h => Math.hypot(h.x - x, h.y - y) < 800) || Math.hypot(x - start.x, y - start.y) < 400) continue;
-        const hw = 80, hh = 65, T = 12, col = '#8a6a3a';
-        addBox({ type: 'wall', hut: true, color: col, x, y: y - hh, hw: hw + T / 2, hh: T / 2 });
-        addBox({ type: 'wall', hut: true, color: col, x: x - hw / 2 - 18, y: y + hh, hw: hw / 2 - 18 + T / 2, hh: T / 2 });
-        addBox({ type: 'wall', hut: true, color: col, x: x + hw / 2 + 18, y: y + hh, hw: hw / 2 - 18 + T / 2, hh: T / 2 });
-        addBox({ type: 'wall', hut: true, color: col, x: x - hw, y, hw: T / 2, hh });
-        addBox({ type: 'wall', hut: true, color: col, x: x + hw, y, hw: T / 2, hh });
-        huts.push({ x, y, hw, hh });
-        paint.push({ k: 'hutfloor', x, y, w: hw * 2, h: hh * 2, r: 120 });
-        lootSpots.push({ x: x + rand(-40, 40), y: y + rand(-30, 20), box: true, good: Math.random() < 0.4 });
-        i++;
-    }
-    // The wreck on the beach where everyone washes up
-    for (let i = 0; i < 5; i++) {
-        const a = a0 + rand(-0.1, 0.1), q = shoreAt(a, rand(-10, 80)), horiz = Math.random() < 0.5;
-        addBox({ type: 'crate', wreckPiece: true, x: q.x + rand(-60, 60), y: q.y + rand(-60, 60), hw: horiz ? rand(40, 70) : 14, hh: horiz ? 14 : rand(40, 70), seed: randInt(1, 1e9) });
-    }
-    for (let i = 0; i < 5; i++) { const q = shoreAt(a0 + rand(-0.12, 0.12), rand(60, 200)); lootSpots.push({ x: q.x, y: q.y, box: true, good: false }); }
-    // Jungle, bushes and rocks (none on the beach, the hilltop, the paths or in the water)
-    const clearSpot = (x, y, r) => !inAnyPond(x, y, 60) && Math.hypot(x - start.x, y - start.y) > 260 && Math.hypot(x - beacon.x, y - beacon.y) > 160 && Math.hypot(x - dockBase.x, y - dockBase.y) > 260 && !blockedAt(grid, x, y, r) && !huts.some(h => Math.abs(h.x - x) < h.hw + 70 && Math.abs(h.y - y) < h.hh + 70);
-    for (let x = C - R * 1.2; x < C + R * 1.2; x += 105) for (let y = C - R * 1.2; y < C + R * 1.2; y += 105) {
-        const qx = x + rand(-40, 40), qy = y + rand(-40, 40);
-        if (!inside(qx, qy, ISLAND.beach + 30)) continue;
-        const onHill = Math.hypot(qx - hill.x, qy - hill.y) < hill.r, r = Math.random();
-        if (r < (onHill ? 0.06 : 0.3)) { const canopy = rand(70, 115), o = { type: 'tree', x: qx, y: qy, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999, palm: Math.random() < 0.4 }; if (clearSpot(qx, qy, o.r + 30)) addCircle(o); }
-        else if (r < (onHill ? 0.14 : 0.4)) { const o = { type: 'bush', x: qx, y: qy, r: rand(30, 44), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999 }; if (clearSpot(qx, qy, o.r + 20)) addCircle(o); }
-        else if (r < (onHill ? 0.26 : 0.44)) { const o = { type: 'rock', x: qx, y: qy, r: rand(22, onHill ? 60 : 40), spr: randInt(0, 5), rot: rand(0, TAU) }; if (clearSpot(qx, qy, o.r + 20)) addCircle(o); }
-    }
-    // Stones ringing the signal fire
-    addBox({ type: 'crate', beacon: true, x: beacon.x, y: beacon.y, hw: 22, hh: 22, seed: 1 });
-    for (let i = 0; i < 26; i++) { const a = rand(0, TAU), d = rand(150, R * 0.85), q = { x: C + Math.cos(a) * d, y: C + Math.sin(a) * d }; if (inside(q.x, q.y, 300) && !blockedAt(grid, q.x, q.y, 30) && !inAnyPond(q.x, q.y, 30)) lootSpots.push({ x: q.x, y: q.y, box: Math.random() < 0.4, good: Math.random() < 0.2 }); }
-    // The three flares: in a hut, on the hill's slope, and far round the coast
-    const flares = [];
-    if (huts.length) { const h = pick(huts); flares.push({ x: h.x, y: h.y }); }
-    flares.push({ x: hill.x + Math.cos(a0) * (hill.r - 80), y: hill.y + Math.sin(a0) * (hill.r - 80) });
-    while (flares.length < 3) { const a = a0 + rand(1.6, 4.6), q = shoreAt(a, 280); if (!blockedAt(grid, q.x, q.y, 30)) flares.push(q); }
-    paint.push({ k: 'pier', x: (dockBase.x + dockEnd.x) / 2, y: (dockBase.y + dockEnd.y) / 2, r: 400 });
-    const pgrid = new Grid(400, 900);
-    for (const q of paint) pgrid.insert(q);
-    // The map, zoomed in on the island
-    const mt = mmZoom(C, C, R * 1.25), [mm, g] = makeCanvas(200, 200), X = x => (x - mt.ox) * mt.k, Y = y => (y - mt.oy) * mt.k;
-    g.fillStyle = '#1b5f8f'; g.fillRect(0, 0, 200, 200);
-    for (const [col, inset] of [['#e2cf9a', 0], ['#4f7a3a', ISLAND.beach]]) { g.fillStyle = col; g.beginPath(); for (let a = 0; a <= TAU + 0.01; a += 0.04) { const e = edge(a) - inset; g.lineTo(X(C + Math.cos(a) * e), Y(C + Math.sin(a) * e)); } g.fill(); }
-    g.fillStyle = '#7c8a5a'; g.beginPath(); g.arc(X(hill.x), Y(hill.y), hill.r * mt.k, 0, TAU); g.fill();
-    for (const p of ponds) { g.fillStyle = '#3f8fb8'; g.beginPath(); g.ellipse(X(p.x), Y(p.y), p.rx * mt.k, p.ry * mt.k, p.a, 0, TAU); g.fill(); }
-    for (const o of obstacles) { if (o.type === 'tree') { g.fillStyle = '#2a5626'; g.fillRect(X(o.x) - 1, Y(o.y) - 1, 2, 2); } else if (o.hut) { g.fillStyle = '#c8a060'; g.fillRect(X(o.x - o.hw), Y(o.y - o.hh), Math.max(1, o.hw * 2 * mt.k), Math.max(1, o.hh * 2 * mt.k)); } }
-    g.strokeStyle = '#a07a4a'; g.lineWidth = 3; g.beginPath(); g.moveTo(X(dockBase.x), Y(dockBase.y)); g.lineTo(X(dockEnd.x), Y(dockEnd.y)); g.stroke();
-    const cave = { inside: (x, y, m = 0) => inside(x, y, Math.max(60, m * 0.5)) };
-    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, mmT: mt, city: null, stairs: [], floor: null, terrain: 'island', cave, glows: [], maze: null, mazeExtra: null, height: null, escapeStart: start, escapeEnd: start,
-        island: { C, R, edge, inside, start, wreckAt, a0, dockBase, dockEnd, hill, beacon, ponds, flares, huts, pgrid } };
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 90 * k); g.addColorStop(0, 'rgba(255,150,60,0.25)'); g.addColorStop(1, 'rgba(255,150,60,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 90 * k, 0, TAU); ctx.fill();
+    ctx.restore();
+    if (Math.random() < 0.12 * k) G.particles.push({ type: 'smoke', x: x + rand(-6, 6), y, vx: rand(10, 40), vy: rand(-50, -20), life: 2, max: 2, size: rand(8, 14) * k, color: '60,60,66' });
 }
-function paintIsland(g, x0, y0, S) {
-    const I = G.world.island, C = I.C, B = 16;
-    for (let x = x0; x < x0 + S; x += B) for (let y = y0; y < y0 + S; y += B) {
-        const mx = x + B / 2, my = y + B / 2, d = Math.hypot(mx - C, my - C) - I.edge(Math.atan2(my - C, mx - C)), v = ((Math.sin(mx * 0.012) * Math.cos(my * 0.014) + Math.sin(mx * 0.0042 - my * 0.0038)) * 6) | 0;
-        let col;
-        if (d > 0) { const k = clamp(d / 700, 0, 1); col = `rgb(${Math.round(lerp(70, 22, k)) + v / 2},${Math.round(lerp(190, 92, k)) + v / 2},${Math.round(lerp(200, 150, k)) + v / 2})`; }
-        else if (d > -ISLAND.beach) { const wet = d > -40; col = wet ? `rgb(${196 + v},${178 + v},${120 + v})` : `rgb(${226 + v},${207 + v},${154 + v})`; }
-        else { const h = Math.hypot(mx - I.hill.x, my - I.hill.y) < I.hill.r; col = h ? `rgb(${118 + v},${132 + v},${86 + v})` : `rgb(${72 + v},${112 + v},${52 + v})`; }
-        g.fillStyle = col; g.fillRect(x, y, B + 1, B + 1);
-    }
-    I.pgrid.query(x0 + S / 2, y0 + S / 2, S / 2 + 900, q => {
-        if (q.k === 'hutfloor') { g.fillStyle = '#9a7a4a'; g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h); g.fillStyle = 'rgba(60,40,20,0.3)'; for (let y = q.y - q.h / 2 + 10; y < q.y + q.h / 2; y += 12) g.fillRect(q.x - q.w / 2, y, q.w, 1.5); }
-        if (q.k === 'pier') {
-            const a = Math.atan2(I.dockEnd.y - I.dockBase.y, I.dockEnd.x - I.dockBase.x), L = Math.hypot(I.dockEnd.x - I.dockBase.x, I.dockEnd.y - I.dockBase.y);
-            g.save(); g.translate(I.dockBase.x, I.dockBase.y); g.rotate(a);
-            g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(6, -34, L, 76);
-            g.fillStyle = '#8a6a44'; g.fillRect(0, -38, L, 76);
-            g.fillStyle = 'rgba(40,24,12,0.5)'; for (let s = 0; s < L; s += 14) g.fillRect(s, -38, 2, 76);
-            g.fillStyle = '#5a4028'; for (let s = 30; s < L; s += 90) { g.fillRect(s, -44, 10, 10); g.fillRect(s, 34, 10, 10); }
-            g.restore();
-        }
-    });
-    // the ponds are drawn by the game's own pond drawing
+
+// ---------- Survival campfires ----------
+// Chop trees for wood (an axe is three times as fast as your fists). With enough wood, F / USE builds a campfire at
+// your feet; standing by one, F / USE throws more wood on to make it bigger. A fire heals and rests whoever's round it,
+// lights up the night and keeps animals away, and slowly burns down unless it's fed.
+const CAMP = { build: 6, feed: 3, max: 5, burn: 70000, wood: { axe: 3, fist: 1, fell: 4 }, reach: 95, axes: 40 };
+const campR = c => 110 + c.lvl * 45;
+function survivalChop(f, o) {
+    const w = WEAPONS[held(f)], n = (w && w.blade === 'axe' ? CAMP.wood.axe : CAMP.wood.fist) + (o.hp <= 0 ? CAMP.wood.fell : 0);
+    f.wood = (f.wood || 0) + n;
+    if (f.isPlayer) addFloat(o.x, o.y - o.r - 10, `+${n} wood`, '#e6b97a');
 }
-XM.island = {
-    name: 'SHIPWRECK ISLAND', maps: ['island'], slider: { label: 'Survivors (with you)', cap: ISLAND.cap },
-    desc: 'You wash up on a jungle island with the other survivors. Hunt, drink and rest to stay alive, fight off the pirates who raid every night, find three signal flares and light the signal fire for a rescue ship.',
-    brief: [['🏝️', '<b>Goal:</b> get rescued. Find the 3 signal flares, light the signal fire on the hill, then get to the dock when the ship comes.'], ['🍖', 'Survival rules: hunt animals for meat (C to eat), drink at ponds (V), rest when tired (B).'], ['🏴‍☠️', 'Every night pirates land on the beach and raid, more of them each night.'], ['👥', 'The other survivors are on your side.']],
-    noCars: true,
-    spawn(n) {
-        const I = G.world.island;
-        G.world.ponds = I.ponds.map(p => ({ ...p, muddy: false }));
-        const count = clamp(n, 1, ISLAND.cap);
-        addPlayer(spawnNear(I.start, 120, 30), 0);
-        for (let i = 0; i < count - 1; i++) {
-            const s = spawnNear(I.start, 300, 30);
-            const b = createFighter(s.x, s.y, { name: botName(i), color: SURVIVOR_COLOR, team: 0 });
-            b.likesCars = false; b.scout = Math.random() < 0.5;
-            G.fighters.push(b);
-        }
-        G.survival = true; G.dayCycle = true; G.dayPhase = 0.18;
-        spawnAnimals();
-        // (a small island: far fewer animals than a whole map, and no wolves or more than a couple of bears)
-        let bears = 0;
-        G.animals = shuffle(G.animals.filter(a => a.kind !== 'wolf' && (a.kind !== 'bear' || bears++ < 2))).slice(0, 45);
-        for (const a of G.animals) if (Math.hypot(a.x - I.start.x, a.y - I.start.y) < 600) a.dead = true;
-        G.animals = G.animals.filter(a => !a.dead);
-        for (const q of I.flares) addPick('flare', q.x, q.y);
-        Object.assign(G.xs, { flares: 0, lit: false, rescueAt: 0, nights: 0, wasNight: false, boats: [] });
-    },
-    setup() { Object.assign(G.zone, { r: CONFIG.WORLD_SIZE, tr: CONFIG.WORLD_SIZE, state: 'final', dmg: 0 }); },
-    raid() {
-        const S = G.xs, I = G.world.island;
-        S.nights++;
-        const n = Math.min(ISLAND.raidCap, ISLAND.raid[0] + ISLAND.raid[1] * (S.nights - 1));
-        const p = G.player, away = p ? Math.atan2(p.y - I.C, p.x - I.C) + Math.PI + rand(-0.8, 0.8) : rand(0, TAU);
-        const land = { x: I.C + Math.cos(away) * (I.edge(away) - 90), y: I.C + Math.sin(away) * (I.edge(away) - 90) };
-        S.boats.push({ x: I.C + Math.cos(away) * (I.edge(away) + 70), y: I.C + Math.sin(away) * (I.edge(away) + 70), a: away });
-        for (let i = 0; i < n; i++) {
-            const s = spawnNear(land, 160, 30);
-            const f = createFighter(s.x, s.y, { name: `Pirate`, color: '#3a2a2e', team: 2 });
-            f.pirate = true; f.likesCars = false;
-            applyLoot(f, pick(['Sword', 'Revolver', 'Shotgun', 'Double Barrel', 'Sword', 'Mac10']), -1);
-            f.armor = 20 + S.nights * 10;
-            G.fighters.push(f);
-        }
-        if (G.mode === 'playing') showBanner('🏴‍☠️ PIRATES! 🏴‍☠️', true, `${n} pirates just landed on the beach (red on your map). Fight them off!`);
-        Sound.siren(0.6);
-    },
-    update(dt) {
-        const S = G.xs, I = G.world.island, t = G.time;
-        updatePicks();
-        for (const q of S.picks || []) if (!q.spotted && G.fighters.some(f => f.team === 0 && !f.dead && Math.hypot(f.x - q.x, f.y - q.y) < 700)) { q.spotted = true; if (G.mode === 'playing' && !q.gone) addFloat(G.player.x, G.player.y - 50, 'A signal flare was spotted! (on your map)', '#ff8a3a', true); }
-        // Nobody walks into the sea
-        for (const f of G.fighters) {
-            if (f.dead || I.inside(f.x, f.y, 10)) continue;
-            const a = Math.atan2(f.y - I.C, f.x - I.C), e = I.edge(a) - 12;
-            f.x = I.C + Math.cos(a) * e; f.y = I.C + Math.sin(a) * e;
-        }
-        for (const a of G.animals) if (!a.dead && !I.inside(a.x, a.y, 30)) { const an = Math.atan2(a.y - I.C, a.x - I.C), e = I.edge(an) - 40; a.x = I.C + Math.cos(an) * e; a.y = I.C + Math.sin(an) * e; a.heading += Math.PI; }
-        // Night falls: pirates
-        const night = darkness() > DAY.dark * 0.6;
-        if (night && !S.wasNight) this.raid();
-        S.wasNight = night;
-        // The signal fire
-        if (!S.lit && S.flares >= ISLAND.signal) {
-            let on = false;
-            G.fgrid.query(I.beacon.x, I.beacon.y, 90, f => { if (f.team === 0 && !f.dead && Math.hypot(f.x - I.beacon.x, f.y - I.beacon.y) < 85) on = true; });
-            S.lightT = on ? (S.lightT || 0) + dt : Math.max(0, (S.lightT || 0) - dt);
-            if (S.lightT >= 3) {
-                S.lit = true; S.rescueAt = t + ISLAND.rescue;
-                if (G.mode === 'playing') showBanner('THE SIGNAL FIRE IS LIT!', true, `A ship has seen it! It reaches the dock in ${ISLAND.rescue / 1000} seconds. Hold out!`);
-                Sound.tone(220, 1, 'sawtooth', 0.1, 440);
-            }
-        }
-        if (S.lit && !S.arrived && t >= S.rescueAt) { S.arrived = true; if (G.mode === 'playing') showBanner('THE SHIP IS HERE!', true, 'Get to the end of the dock (green on your map)!'); Sound.tone(110, 1.5, 'sawtooth', 0.12, 90); }
-        if (S.arrived && !G.result) {
-            const p = G.player;
-            if (p && !p.dead && Math.hypot(p.x - I.dockEnd.x, p.y - I.dockEnd.y) < ISLAND.board + 60) {
-                const others = G.fighters.filter(f => !f.dead && !f.isPlayer && f.team === 0 && Math.hypot(f.x - I.dockEnd.x, f.y - I.dockEnd.y) < 900).length;
-                const sub = `You got off the island${others ? ` with ${others} other survivor${others === 1 ? '' : 's'}` : ''} after ${S.nights} night${S.nights === 1 ? '' : 's'}.`;
-                G.result = { won: true, place: 1, title: 'RESCUED!', sub }; G.overAt = G.time + 3000; startVictory(sub);
-            }
-        }
-    },
-    idle(b) {
-        const S = G.xs, I = G.world.island;
-        if (b.pirate) {
-            // they head for the nearest survivor
-            let best = null, bd = Infinity;
-            for (const f of G.fighters) if (!f.dead && f.team === 0) { const d = dist(b, f); if (d < bd) { bd = d; best = f; } }
-            return best ? xmGo(b, best.x + rand(-120, 120), best.y + rand(-120, 120), 3000) : false;
-        }
-        if (b.team !== 0) return false;
-        if (S.arrived) return xmGo(b, I.dockEnd.x, I.dockEnd.y, 4000);
-        if (!S.lit && S.flares >= ISLAND.signal) return xmGo(b, I.beacon.x + rand(-40, 40), I.beacon.y + rand(-40, 40), 4000);
-        if (b.scout && S.flares < ISLAND.signal) {
-            const q = nearestPick(b, ['flare'], 450);
-            if (q) return xmGo(b, q.x, q.y, 6000);
-            // explore: somewhere new on the island
-            if (b.mode === 'zone' && b.goal && dist(b, b.goal) > 80 && G.time < (b.strollUntil || 0)) return true;
-            for (let k = 0; k < 10; k++) { const a = rand(0, TAU), d = rand(200, I.R * 0.9), x = I.C + Math.cos(a) * d, y = I.C + Math.sin(a) * d; if (I.inside(x, y, 120)) return xmGo(b, x, y, rand(12000, 20000)); }
-        }
-        return false;
-    },
-    hud(p) {
-        const S = G.xs;
-        if (S.arrived) return `The ship is here! Get to the dock · ${Math.round(dist(p, G.world.island.dockEnd) / 10)}m`;
-        if (S.lit) return `Rescue ship in ${fmtTime(Math.max(0, (S.rescueAt - G.time) / 1000))} · hold out!`;
-        if (S.flares >= ISLAND.signal) return S.lightT > 0 ? `Lighting the signal fire... ${Math.round(S.lightT / 3 * 100)}%` : 'Light the signal fire on the hill (stand next to it)';
-        return `Signal flares ${S.flares}/${ISLAND.signal} · search the huts, the hill and the coast · night ${S.nights}`;
-    },
-    banner() { return `You and ${G.fighters.filter(f => f.team === 0).length - 1} others washed up here. Find 3 signal flares, light the signal fire on the hill and get rescued. Pirates raid at night!`; },
-    deathSub(t, killer) { return killer && killer.pirate ? 'The pirates got you.' : null; },
-    minimap(g, k) {
-        const S = G.xs, I = G.world.island;
-        for (const q of S.picks || []) if (!q.gone && q.spotted) xmMark(g, k, q.x, q.y, '#ff8a3a', 'FLARE');
-        xmMark(g, k, I.beacon.x, I.beacon.y, S.lit ? '#ffae42' : '#ffd23a', 'SIGNAL', true);
-        xmMark(g, k, I.dockEnd.x, I.dockEnd.y, '#7dff9a', 'DOCK', true);
-        g.fillStyle = '#ff4a4a'; for (const f of G.fighters) if (!f.dead && f.pirate) g.fillRect(f.x * k - 1.5, f.y * k - 1.5, 3, 3);
-        g.fillStyle = SURVIVOR_COLOR; for (const f of G.fighters) if (!f.dead && f.team === 0 && !f.isPlayer) g.fillRect(f.x * k - 1, f.y * k - 1, 2, 2);
-    },
-    lights(light) {
-        const S = G.xs, I = G.world.island;
-        if (S.lit) light(I.beacon.x, I.beacon.y, 700, 1);
-        if (S.arrived) light(I.dockEnd.x + 80, I.dockEnd.y, 320, 0.8);
-    },
-    drawWorld(L, T, R, B, now) {
-        const S = G.xs, I = G.world.island;
-        // surf along the shore
-        ctx.strokeStyle = `rgba(255,255,255,${0.35 + Math.sin(now * 1.6) * 0.15})`; ctx.lineWidth = 6;
-        ctx.beginPath();
-        for (let a = 0; a <= TAU + 0.01; a += 0.02) { const e = I.edge(a) + 8 + Math.sin(now * 1.6 + a * 20) * 6; const x = I.C + Math.cos(a) * e, y = I.C + Math.sin(a) * e; a ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-        ctx.stroke();
-        // the signal fire
-        const bc = I.beacon;
-        if (bc.x > L - 300 && bc.x < R + 300 && bc.y > T - 300 && bc.y < B + 300) {
-            ctx.fillStyle = '#5a5a60'; for (let i = 0; i < 10; i++) { const a = i / 10 * TAU; ctx.beginPath(); ctx.arc(bc.x + Math.cos(a) * 34, bc.y + Math.sin(a) * 34, 8, 0, TAU); ctx.fill(); }
-            ctx.fillStyle = '#5a3a20'; for (let i = 0; i < 4; i++) { ctx.save(); ctx.translate(bc.x, bc.y); ctx.rotate(i * 0.8); ctx.fillRect(-24, -4, 48, 8); ctx.restore(); }
-            if (S.lit) {
-                ctx.save(); ctx.globalCompositeOperation = 'lighter';
-                for (let i = 0; i < 10; i++) { const r = 34 - i * 3 + Math.random() * 6; ctx.fillStyle = `rgba(255,${100 + i * 15},30,${0.5 - i * 0.04})`; ctx.beginPath(); ctx.arc(bc.x + Math.sin(now * 8 + i) * 8, bc.y - i * 5, r, 0, TAU); ctx.fill(); }
-                ctx.restore();
-                if (Math.random() < 0.5) G.particles.push({ type: 'smoke', x: bc.x + rand(-10, 10), y: bc.y - 20, vx: rand(-20, 20), vy: rand(-90, -50), life: 4, max: 4, size: rand(20, 40), color: '70,70,76' });
-            } else if (S.flares >= ISLAND.signal) {
-                ctx.strokeStyle = 'rgba(255,210,58,0.7)'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(bc.x, bc.y, 85, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
-                if (S.lightT > 0) { ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(bc.x, bc.y, 60, -Math.PI / 2, -Math.PI / 2 + TAU * S.lightT / 3); ctx.stroke(); }
-            }
-        }
-        // the pirates' boats pulled up on the beach, and the rescue ship
-        for (const bo of S.boats) { ctx.save(); ctx.translate(bo.x, bo.y); ctx.rotate(bo.a); ctx.fillStyle = '#3a2a1a'; ctx.beginPath(); ctx.ellipse(0, 0, 60, 22, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#5a4028'; ctx.beginPath(); ctx.ellipse(0, 0, 50, 16, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#111'; ctx.fillRect(-8, -30, 4, 60); ctx.restore(); }
-        if (S.arrived) {
-            const a = Math.atan2(I.dockEnd.y - I.dockBase.y, I.dockEnd.x - I.dockBase.x);
-            ctx.save(); ctx.translate(I.dockEnd.x + Math.cos(a) * 160, I.dockEnd.y + Math.sin(a) * 160); ctx.rotate(a + Math.PI / 2);
-            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(10, 14, 90, 260, 0, 0, TAU); ctx.fill();
-            ctx.fillStyle = '#e8e8ec'; ctx.beginPath(); ctx.moveTo(0, -270); ctx.quadraticCurveTo(95, -150, 85, 230); ctx.lineTo(-85, 230); ctx.quadraticCurveTo(-95, -150, 0, -270); ctx.fill();
-            ctx.fillStyle = '#c8303a'; ctx.fillRect(-85, 190, 170, 40);
-            ctx.fillStyle = '#9aa0a8'; ctx.fillRect(-50, -40, 100, 140);
-            ctx.fillStyle = '#2a3a4a'; for (let i = 0; i < 4; i++) ctx.fillRect(-40 + i * 22, -30, 14, 10);
-            ctx.restore();
-            ctx.strokeStyle = `rgba(125,255,154,${0.5 + Math.sin(now * 4) * 0.3})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(I.dockEnd.x, I.dockEnd.y, ISLAND.board, 0, TAU); ctx.stroke();
-        }
-        drawPicks(L, T, R, B, now);
+const nearestCamp = (f, R = CAMP.reach) => (G.camps || []).find(c => Math.hypot(c.x - f.x, c.y - f.y) < R) || null;
+function campfireUse(p) {
+    const c = nearestCamp(p);
+    if (c) {
+        if (c.lvl >= CAMP.max) { c.fuel = CAMP.burn; if (p.isPlayer) addFloat(c.x, c.y - 40, 'It\'s as big as it gets', '#ffd08a'); return true; }
+        if ((p.wood || 0) < CAMP.feed) { if (p.isPlayer) { addFloat(p.x, p.y - 36, `Need ${CAMP.feed} wood to feed it`, '#ff8fa3'); Sound.empty(); } return !!p.isPlayer; }
+        p.wood -= CAMP.feed; c.lvl++; c.fuel = CAMP.burn;
+        if (inView(c.x, c.y, 100)) { burst(c.x, c.y, 14, '#ffae42', 200, 'glow'); Sound.tone(180, 0.3, 'sawtooth', 0.06, 90); }
+        if (p.isPlayer) addFloat(c.x, c.y - 44, `Fire size ${c.lvl}/${CAMP.max}`, '#ffae42', true);
+        return true;
     }
-};
+    if ((p.wood || 0) < CAMP.build || inPond(p) || G.world.floor || buildingAt(p.x, p.y)) return false;
+    const x = p.x + Math.cos(p.angle) * 50, y = p.y + Math.sin(p.angle) * 50;
+    if (blockedAt(G.world.grid, x, y, 26)) return false;
+    p.wood -= CAMP.build;
+    (G.camps || (G.camps = [])).push({ x, y, lvl: 1, fuel: CAMP.burn, by: p });
+    if (inView(x, y, 100)) { burst(x, y, 18, '#ffae42', 220, 'glow'); Sound.tone(160, 0.4, 'sawtooth', 0.07, 80); }
+    if (p.isPlayer) addFloat(x, y - 40, 'Campfire built! (F / USE with 3 wood to make it bigger)', '#ffae42', true);
+    return true;
+}
+const campfireLabel = p => { const c = nearestCamp(p); return c ? (c.lvl < CAMP.max && (p.wood || 0) >= CAMP.feed ? `FEED THE FIRE (${c.lvl}/${CAMP.max})` : '') : (p.wood || 0) >= CAMP.build ? 'BUILD A CAMPFIRE' : ''; };
+function updateCamps(dt) {
+    if (!G.camps || !G.camps.length) return;
+    for (const c of G.camps) {
+        c.fuel -= dt * 1000;
+        if (c.fuel <= 0) { c.lvl--; c.fuel = CAMP.burn; }
+        const R = campR(c);
+        G.fgrid.query(c.x, c.y, R, f => { if (f.dead || Math.hypot(f.x - c.x, f.y - c.y) > R) return; f.hp = Math.min(f.maxHp || CONFIG.MAX_HEALTH, f.hp + (0.6 + c.lvl * 0.5) * dt); if (f.energy !== undefined) f.energy = Math.min(100, f.energy + 0.5 * c.lvl * dt); });
+        // animals shy away from the flames
+        for (const a of G.animals) { if (a.dead) continue; const d = Math.hypot(a.x - c.x, a.y - c.y); if (d < R + 60 * c.lvl) { const an = Math.atan2(a.y - c.y, a.x - c.x); a.x += Math.cos(an) * 140 * dt; a.y += Math.sin(an) * 140 * dt; if (a.mode !== 'flee') a.timer = 0; } }
+    }
+    G.camps = G.camps.filter(c => c.lvl > 0);
+}
+// Bots: chop a little wood in the daytime when there's nothing else to do, and make a fire when night falls
+function campBot(b) {
+    const night = darkness() > DAY.dark * 0.5;
+    if (night && (b.wood || 0) >= CAMP.build && !nearestCamp(b, 600)) { b.angle = rand(0, TAU); if (campfireUse(b)) return false; }
+    if (night) { const c = nearestCamp(b, 900); if (c && dist(b, c) > campR(c) * 0.6) { b.mode = 'zone'; b.goal = { x: c.x + rand(-50, 50), y: c.y + rand(-50, 50) }; return true; } if (c && (b.wood || 0) >= CAMP.feed && c.lvl < 3 && dist(b, c) < CAMP.reach) campfireUse(b); }
+    if (night || (b.wood || 0) >= 12 || Math.random() > 0.35) return false;
+    let tr = b.chopTree;
+    if (!tr || tr.broken || dist(b, tr) > 600) { tr = null; let bd = 450; G.world.grid.query(b.x, b.y, 450, o => { if (o.type === 'tree' && !o.broken) { const d = Math.hypot(o.x - b.x, o.y - b.y); if (d < bd) { bd = d; tr = o; } } }); b.chopTree = tr; }
+    if (!tr) return false;
+    const d = Math.hypot(b.x - tr.x, b.y - tr.y);
+    if (d - tr.r < 66) {
+        const m = b.inv.findIndex(n => n && WEAPONS[n].melee), e = b.inv.findIndex(n => !n);
+        if (m >= 0) b.slot = m; else if (e >= 0) b.slot = e; else return false;
+        b.angle = Math.atan2(tr.y - b.y, tr.x - b.x); b.mode = 'zone'; b.goal = { x: b.x, y: b.y }; b.nextThink = G.time + 250;
+        tryAttack(b);
+    } else { b.mode = 'zone'; b.goal = { x: tr.x + (b.x - tr.x) / d * (tr.r + 30), y: tr.y + (b.y - tr.y) / d * (tr.r + 30) }; }
+    return true;
+}
+function drawCamps(L, T, R, B, now) {
+    for (const c of G.camps || []) {
+        if (c.x < L - 200 || c.x > R + 200 || c.y < T - 200 || c.y > B + 200) continue;
+        drawCampfire(c.x, c.y, 0.7 + c.lvl * 0.3, now);
+        if (c.fuel < 15000 && Math.sin(now * 6) > 0) { ctx.fillStyle = 'rgba(255,200,120,0.8)'; ctx.font = `700 ${Math.round(12 / G.zoom)}px Rajdhani, sans-serif`; ctx.textAlign = 'center'; ctx.fillText('burning low', c.x, c.y - 40); }
+    }
+}
 
 // ---------- Assassin ----------
 // One fighter is the assassin: a Barrett with 2000 rounds (a Railgun in High Tech) and a medkit.
@@ -7254,6 +7033,7 @@ function damagePlant(o, amount, attacker) {
     if (o.broken) return;
     o.hp -= amount;
     o.hitAt = G.time;
+    if (attacker && attacker.inv && o.type === 'tree' && WEAPONS[held(attacker)] && WEAPONS[held(attacker)].melee) { if (G.xm && G.xm.chopped) G.xm.chopped(attacker, o); else if (G.survival) survivalChop(attacker, o); }
     if (inView(o.x, o.y, 100)) {
         burst(o.x + rand(-o.r, o.r), o.y + rand(-o.r, o.r), 4, pick(['#3f7a34', '#5ea84a', '#2c5a28']), 140, 'leaf');
         if (o.type === 'tree') burst(o.x, o.y, 3, '#9a6b45', 120);
@@ -7283,6 +7063,7 @@ function destroyPlant(o) {
     }
     if (o.type === 'tree') {
         G.stumps.push({ x: o.x, y: o.y, r: o.r });
+        if (G.xm && G.xm.felled) G.xm.felled(o);
         Sound.timber(Sound.volAt(o.x, o.y));
     } else {
         Sound.noiseBurst(2500, 0.25, 0.3 * Sound.volAt(o.x, o.y));
@@ -7576,18 +7357,19 @@ function tryAttack(f) {
         // Fists open cardboard boxes, chop trees and bushes, and smash furniture
         let prop = null, bd = Infinity;
         G.world.grid.query(f.x, f.y, w.range + 40, o => {
-            if (o.broken || levelSkips(o, f.up || null) || (o.type !== 'box' && o.type !== 'tree' && o.type !== 'bush' && !mineable(o))) return;
+            if (o.broken || levelSkips(o, f.up || null) || (o.type !== 'box' && o.type !== 'tree' && o.type !== 'bush' && !mineable(o) && !(o.type === 'rock' && G.xm && G.xm.mineRock))) return;
             let d;
             if (o.type === 'box' || mineable(o)) {
                 const nx = clamp(f.x, o.x - o.hw, o.x + o.hw), ny = clamp(f.y, o.y - o.hh, o.y + o.hh);
                 d = Math.hypot(f.x - nx, f.y - ny);
             } else {
-                d = Math.hypot(f.x - o.x, f.y - o.y) - (o.type === 'tree' ? o.r : o.r * 0.6);
+                d = Math.hypot(f.x - o.x, f.y - o.y) - (o.type === 'tree' || o.type === 'rock' ? o.r : o.r * 0.6);
             }
             if (d > w.range + 4 || Math.abs(angleDiff(f.angle, Math.atan2(o.y - f.y, o.x - f.x))) > 1.1) return;
             if (d < bd) { bd = d; prop = o; }
         });
-        if (prop) prop.type === 'box' ? damageBox(prop, w.damage, f) : mineable(prop) ? mineHit(prop, w.damage * 1.5, f) : damagePlant(prop, w.damage * (w.chop || 1), f);
+        if (prop && prop.type === 'rock') G.xm.mineRock(prop, f, w);
+        else if (prop) prop.type === 'box' ? damageBox(prop, w.damage, f) : mineable(prop) ? mineHit(prop, w.damage * 1.5, f) : damagePlant(prop, w.damage * (w.chop || 1), f);
         return;
     }
 
@@ -7936,6 +7718,7 @@ function updateMines() {
 
 // --- Explosions (frag, mines and missiles share this; bigger radius = bigger show) ---
 function blast(x, y, owner, R, dmg, weapon) {
+    if (G.xm && G.xm.blast) G.xm.blast(x, y, R, owner);
     const big = R / GRENADE.radius;
     addDecal({ kind: 'scorch', x, y, r: R * 0.55, life: 180000 });
     const at = { x, y };
@@ -8045,6 +7828,7 @@ function damage(t, amount, attacker, weapon) {
     if (t.giant) dmg *= BOSS.takes;  // (his hide is thick)
     if (t.ghost) dmg *= 0.45;  // (bullets half pass through)
     if (attacker && attacker.ghost && attacker !== t) dmg *= 1.8;  // (and its blasts hit hard)
+    if (attacker && attacker.dmgMul && attacker !== t) dmg *= attacker.dmgMul;
     if (attacker !== t) dmg *= edgeOf(attacker).hits;
     dmg = shieldAbsorb(t, dmg, attacker, weapon);
     if (t.armor > 0) {
@@ -8663,6 +8447,7 @@ function botThink(b) {
         if (st) { b.mode = 'zone'; b.goal = { x: st.x + Math.cos(st.a) * 140, y: st.y + Math.sin(st.a) * 140 }; return; }
     }
     if (!enemy && xmOn() && G.xm.idle && !b.car && G.xm.idle(b)) return;
+    if (!enemy && G.survival && !G.xm && !b.car && b.mode !== 'loot' && b.mode !== 'box' && G.mode !== 'demo' && campBot(b)) return;
     // Nothing to fight and a vehicle nearby: some bots go for a drive
     if (!enemy && !urgent && b.mode !== 'loot' && b.mode !== 'box' && canDrive(b)) { const c = nearestCar(b, 380, true); if (c && !gaveUpOn(b, c)) { b.mode = 'tocar'; b.goal = c; return; } }
     // Stick with the current target unless someone is much closer; chase it briefly after losing sight
@@ -10002,11 +9787,11 @@ function buildGroundDetail() {
             else if (r < 0.85) add({ k: 'rubble', x, y, s: rand(3, 8), a: rand(0, TAU), c: pick(['#5a524a', '#6a6158', '#3e3832']) });
             else { const pts = [[0, 0]]; let a = rand(0, TAU); for (let j = 0; j < 6; j++) { a += rand(-0.8, 0.8); const l = pts[pts.length - 1]; pts.push([l[0] + Math.cos(a) * rand(15, 35), l[1] + Math.sin(a) * rand(15, 35)]); } add({ k: 'crack', x, y, pts }); }
         }
-    } else if (G.world.terrain === 'island' || G.world.terrain === 'prison') {
-        const I = G.world.island, P = G.world.prison;
+    } else if (G.world.terrain === 'prison') {
+        const P = G.world.prison;
         for (let i = 0; i < 5500 * MAP_AREA; i++) {
             const x = rand(0, W), y = rand(0, W), r = Math.random();
-            if (I ? !I.inside(x, y, ISLAND.beach + 20) : Math.abs(x - W / 2) < P.H + 20 && Math.abs(y - W / 2) < P.H + 20) continue;
+            if (Math.abs(x - W / 2) < P.HO + 20 && Math.abs(y - W / 2) < P.HO + 20) continue;
             if (r < 0.6) add({ k: 'tuft', x, y, s: rand(0.7, 1.4), c: pick(['#3f7a33', '#4b8a3a', '#356b2b', '#5a9442']) });
             else if (r < 0.8) add({ k: 'pebble', x, y, s: rand(2, 5), c: pick(['#8d8a82', '#a29e94', '#77736b']) });
             else if (r < 0.93) add({ k: 'dirt', x, y, r: rand(20, 60), a: rand(0, TAU) });
@@ -10243,6 +10028,7 @@ function drawLighting(camX, camY, zoom) {
     if (G.world.lampGrid) G.world.lampGrid.query(G.cam.x, G.cam.y, viewW / zoom, l => light(l.x, l.y, 240, 0.85));
     if (G.world.glows) for (const q of G.world.glows) light(q.x, q.y, q.lava ? q.r * 3.2 : q.r * 6, q.lava ? 0.9 : 0.75);
     if (xmOn() && G.xm.lights) G.xm.lights(light);
+    for (const c of G.camps || []) light(c.x, c.y, (150 + c.lvl * 80) * (0.94 + Math.random() * 0.06), 0.95);
     for (const q of G.particles) {
         if (q.type === 'flash') light(q.x, q.y, 170, 0.9);
         else if (q.type === 'boom') light(q.x, q.y, q.size * 2.2, 1);
@@ -10808,7 +10594,7 @@ const ANIMALS = {
 };
 const ANIMAL_TABLE = Object.entries(ANIMALS).filter(([, a]) => a.weight).map(([k, a]) => [k, a.weight]);
 
-function animalTarget() { if (G.world.terrain === 'island') return 30; return Math.round(clamp(40 + G.cpuCount * 0.4, 40, 160) * MAP_AREA); }
+function animalTarget() { return Math.round(clamp(40 + G.cpuCount * 0.4, 40, 160) * MAP_AREA); }
 
 function addAnimal(kind, x, y) {
     const A = ANIMALS[kind];
@@ -10852,7 +10638,7 @@ function updateAnimals(dt) {
         const alive = G.animals.filter(a => !a.dead);
         const night = darkness() > DAY.dark * 0.5, wolves = alive.filter(a => a.kind === 'wolf').length;
         if (alive.length - wolves < animalTarget()) { const s = animalSpot(); if (s) addAnimal(weightedPick(ANIMAL_TABLE), s.x, s.y); }
-        if (G.world.terrain !== 'island' && wolves < (night ? 4 + Math.round(G.cpuCount / 25) : 3)) { const s = animalSpot(); if (s) for (let i = randInt(3, 4); i > 0; i--) addAnimal('wolf', s.x + rand(-50, 50), s.y + rand(-50, 50)); }
+        if (wolves < (night ? 4 + Math.round(G.cpuCount / 25) : 3)) { const s = animalSpot(); if (s) for (let i = randInt(3, 4); i > 0; i--) addAnimal('wolf', s.x + rand(-50, 50), s.y + rand(-50, 50)); }
         G.animals = G.animals.filter(a => !a.dead);
     }
     for (const a of G.animals) {
@@ -11105,7 +10891,7 @@ function updateNeeds(f, dt) {
     }
     if (f.resting) {
         // Indoors (or upstairs) you rest twice as well
-        const under = G.world.floor || buildingAt(f.x, f.y);
+        const under = G.world.floor || buildingAt(f.x, f.y) || (G.xm && G.xm.indoors && G.xm.indoors(f));
         f.energy = Math.min(100, f.energy + ENERGY.rest * (under ? ENERGY.indoors : 1) * dt);
         f.hp = Math.min(f.maxHp || CONFIG.MAX_HEALTH, f.hp + dt);
         if (f.energy >= 100) { f.resting = false; if (f.isPlayer) addFloat(f.x, f.y - 34, 'Rested', '#c9a7ff'); }
@@ -11926,7 +11712,7 @@ function paintTerrainBase(g, x0, y0, S) {
     if (w.terrain === 'cavern') { paintCavern(g, x0, y0, S); return; }
     if (w.terrain === 'haunted') { paintHaunted(g, x0, y0, S); return; }
     if (w.terrain === 'prison') { paintPrison(g, x0, y0, S); return; }
-    if (w.terrain === 'island') { paintIsland(g, x0, y0, S); return; }
+
     if (w.terrain === 'maze') {
         g.fillStyle = '#5a5c62'; g.fillRect(x0, y0, S, S);
         g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 2;
@@ -12834,20 +12620,6 @@ function drawVehicleBody(c) {
             ctx.fillStyle = c.color; ctx.beginPath(); ctx.moveTo(L / 2, 0); ctx.lineTo(L / 6, -Wd / 2); ctx.lineTo(-L / 2, -Wd / 2 + 3); ctx.lineTo(-L / 2, Wd / 2 - 3); ctx.lineTo(L / 6, Wd / 2); ctx.closePath(); ctx.fill();
             techTrim(L, Wd, now);
             break;
-        case 'assaultmech': {
-            // A heavy walker: two big feet, armoured hull in the team's colour, a rocket pod each side
-            const step = Math.sin((c.walk = (c.walk || 0) + Math.abs(c.speed) * 0.00035)) * 14;
-            ctx.fillStyle = '#0d1016'; ctx.fillRect(-16 + step, -Wd / 2, 32, 20); ctx.fillRect(-16 - step, Wd / 2 - 20, 32, 20);
-            ctx.fillStyle = '#20242c'; ctx.fillRect(-10, -Wd / 2 + 14, 20, Wd - 28);
-            ctx.fillStyle = shade(c.color, -0.3); ctx.beginPath(); ctx.arc(0, 0, Wd * 0.4, 0, TAU); ctx.fill();
-            ctx.fillStyle = c.color; ctx.beginPath(); ctx.arc(0, 0, Wd * 0.34, 0, TAU); ctx.fill();
-            ctx.fillStyle = '#2a2e38'; ctx.fillRect(-14, -Wd * 0.46, 26, 12); ctx.fillRect(-14, Wd * 0.46 - 12, 26, 12);
-            ctx.fillStyle = '#ff6a3a'; for (let i = 0; i < 3; i++) { ctx.fillRect(-10 + i * 8, -Wd * 0.46 + 3, 4, 6); ctx.fillRect(-10 + i * 8, Wd * 0.46 - 9, 4, 6); }
-            ctx.fillStyle = 'rgba(0,229,255,0.75)'; ctx.beginPath(); ctx.arc(9, 0, 10, -1, 1); ctx.fill();
-            ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, Wd * 0.34, 0, TAU); ctx.stroke();
-            if (c.hp < vt(c).hp * 0.35 && Math.random() < 0.3) G.particles.push({ type: 'smoke', x: c.x + rand(-15, 15), y: c.y + rand(-15, 15), vx: rand(-20, 20), vy: rand(-50, -20), life: 1.5, max: 1.5, size: rand(10, 18), color: '40,40,44' });
-            break;
-        }
         case 'mech': {
             // Two stomping feet, a cockpit and gun arms
             const step = Math.sin((c.walk = (c.walk || 0) + Math.abs(c.speed) * 0.0004)) * 10;
@@ -12953,7 +12725,7 @@ function drawCars(only) {
         if (T.animal) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(5, 7, L * 0.48, Wd * 0.55, 0, 0, TAU); ctx.fill(); }  // a soft shadow, not a car's box
         else if (!T.round) ctx.fillRect(-L / 2 + 5, -Wd / 2 + 7, L, Wd);
         drawVehicleBody(c);
-        if (!['heli', 'boat', 'tank', 'dozer', 'mech', 'assaultmech', 'gunship', 'hovertank', 'horse', 'wagon'].includes(c.type)) {
+        if (!['heli', 'boat', 'tank', 'dozer', 'mech', 'gunship', 'hovertank', 'horse', 'wagon'].includes(c.type)) {
             ctx.fillStyle = c.driver ? '#fff6c2' : '#d8d2b0';
             ctx.fillRect(L / 2 - 4, -Wd / 2 + 4, 4, 6); ctx.fillRect(L / 2 - 4, Wd / 2 - 10, 4, 6);
             ctx.fillStyle = c.braking ? '#ff3030' : '#8a1a1a';
@@ -13017,8 +12789,6 @@ function drawCars(only) {
 
 // ----- High-tech vehicles: they only arrive in vehicle drops -----
 const TECH_VEHICLES = ['hovertank', 'jetbike', 'mech', 'stealth', 'gunship'];
-// Mech Assault's walker (only in that mode)
-VTYPES.assaultmech = { name: 'Assault Mech', len: 86, wid: 86, accel: 300, brake: 700, max: 290, reverse: 200, turn: 2.6, hp: 4200, ram: 0.3, share: 0, crush: true, walls: true, gun: { weapon: 'Minigun', rate: 55, dmg: 15, twin: true }, rockets: { rate: 1100 }, tech: true, mech: true };
 const TECH_DROP = { first: [60000, 90000], every: [180000, 300000], neon: '#ff3df2', glow: '#7a5cff' };
 
 function spawnVehicle(type, x, y, a = rand(0, TAU)) {
@@ -13962,7 +13732,7 @@ function update(dt) {
     if (G.ghostMode) updateGhost(dt);
     if (xmOn() && !G.frozen) G.xm.update(dt);
     if (G.world.maze && G.escape && G.mode === 'playing') updateMazeFog();
-    if (G.survival) { if (!G.frozen && !G.world.floor) updateAnimals(dt); updateCountdown(); }
+    if (G.survival) { if (!G.frozen && !G.world.floor) { updateAnimals(dt); updateCamps(dt); } updateCountdown(); }
     updateDayCycle();
     if (G.escape && !G.world.floor && G.time >= G.nextSquads) updateSquads();
     if (G.escape && G.world.city && !G.world.floor && G.mode !== 'over') updateChaos(dt);
@@ -14220,6 +13990,7 @@ function render() {
     for (const o of boxes) { drawBox(o); if (o.maxHp && mineable(o)) drawPlantHealth(o, o.y - o.hh - 14); }
     if (G.world.terrain === 'haunted') drawHauntGlows(L, T, R, B, now);
     if (xmOn() && G.xm.drawWorld) G.xm.drawWorld(L, T, R, B, now);
+    if (G.camps) drawCamps(L, T, R, B, now);
     drawDecals(L, T, R, B, 'wall');
     if (G.world.city && !G.world.floor) drawLamps(cx, cy, half);
     const chaos = G.escape && !G.world.floor;
@@ -14603,7 +14374,7 @@ function drawBox(o) {
     if (o.container) { drawContainer(o, x, y, w, h); return; }
     if (o.grave || o.crypt || o.iron || o.pillar || o.haunt || o.hprop) { drawHaunted(o, x, y, w, h); return; }
     if (o.pwall || o.pcell || o.pgate || o.ptower || o.pprop) { drawPrisonBox(o, x, y, w, h); return; }
-    if (o.cabin || o.hut || o.bunker || o.wreckPiece || o.beacon) { drawStoryBox(o, x, y, w, h); return; }
+    if (o.cabin || o.hut || o.bunker || o.wreckPiece || o.beacon || o.townProp) { drawStoryBox(o, x, y, w, h); return; }
     if (o.sandbags) { drawSandbagWall(o, x, y, w, h); return; }
     if (o.furn) {
         if (o.house) { if (o.house.roofAlpha < 0.99) paintFurniture(ctx, o, seededRand(o.seed)); return; }
@@ -15955,7 +15726,7 @@ function updateHUD() {
     else if (G.revolution) zt = p.dead ? (G.revolution.queue.some(q => q.f === p) ? `Respawning in ${Math.ceil((G.revolution.queue.find(q => q.f === p).at - G.time) / 1000)}s` : 'Dead: spectating') : `Wipe out the ${revoName(1 - p.team)} · ${fmtTime(Math.max(0, (REVO.timeLimit - G.time) / 1000))} left`;
     else if (z.state === 'wait') zt = `Zone shrinks in ${fmtTime(z.timer)}`;
     else if (z.state === 'shrink') zt = `Zone closing ${fmtTime(z.timer)}`;
-    else zt = G.survival ? 'Survive: last one alive wins' : 'Final zone';
+    else zt = G.survival ? `Survive: last one alive wins · 🪵 ${p.wood || 0} wood${nearestCamp(p) ? ' · F / USE: feed the fire' : (p.wood || 0) >= CAMP.build ? ' · F / USE: build a campfire' : ' · chop trees for wood'}` : 'Final zone';
     setText(hud.zone, 'zone', zt);
     hud.zone.classList.toggle('closing', z.state !== 'wait' && !G.revolution);
 
@@ -16283,13 +16054,12 @@ const MODES = [
     { id: 'war', name: 'TEAMS', desc: 'Teams battle it out. Arm your squad from big supply crates and wipe out the other teams.' },
     { id: 'ffa', name: 'FREE FOR ALL', desc: 'Every player for themselves. Last one standing wins.' },
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
-    { id: 'revolution', name: 'REVOLUTION', desc: 'Rebels against the Regime: fortified bases with healing rooms and an armory, chests everywhere, tanks and cannons. Everyone is tougher, and there are no respawns or revives: when you die, you stay dead.' },
     { id: 'assassin', name: 'ASSASSIN', desc: 'Pitch dark. One assassin with a Barrett hides among the survivors and picks them off. Survivors win if they catch him (touch him or take him down); he wins if nobody is left. Play as either side.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
     { id: 'murder', name: 'MURDER MYSTERY', desc: 'One murderer with a knife, one sheriff with a gun, and everyone else innocent. Nobody knows who\'s who. Find the murderer before everyone is gone.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
-    ...['fallout', 'prison', 'hunted', 'island', 'blizzard', 'mech'].map(id => ({ id, name: XM[id].name, desc: XM[id].desc }))
+    ...['prison', 'hunted', 'blizzard'].map(id => ({ id, name: XM[id].name, desc: XM[id].desc }))
 ];
 let murderRolePick = 'random', ghostRolePick = 'hunter';
 // After the mode and its settings, you pick how the fight is armed
@@ -16581,7 +16351,9 @@ function sliderToCount(v) {
 
 // (Murder Mystery and Ghost only take so many players)
 const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'murder' ? MURDER.maxPlayers - 1 : id === 'ghost' ? GHOST.maxPlayers - 1 : XM[id] && XM[id].slider ? XM[id].slider.cap : Infinity; };
-const showCpuValue = () => { $('cpu-value').textContent = Math.min(cpuCap(), sliderToCount(+slider.value)); };
+// (the story modes spread the slider evenly over their own range, so the middle is a fair fight)
+const xmCount = () => { const xm = XM[MODES[menuMode].id]; return Math.max(1, Math.round(xm.slider.cap * (+slider.value) / 1000)); };
+const showCpuValue = () => { $('cpu-value').textContent = XM[MODES[menuMode].id] ? xmCount() : Math.min(cpuCap(), sliderToCount(+slider.value)); };
 slider.addEventListener('input', showCpuValue);
 showCpuValue();
 
@@ -16644,7 +16416,7 @@ const BRIEF = {
     ffa: [['🎯', '<b>Goal:</b> be the last one alive.'], ['📦', 'Everyone starts with nothing: grab guns, armor and medkits from boxes and the ground.'], ['🔴', 'The red zone shrinks over time. Stay inside the circle or you take damage.'], ['🚗', 'Hop in cars, tanks and helicopters.']],
     war: [['🎯', '<b>Goal:</b> wipe out every other team.'], ['📦', 'Your team starts at its base. Grab guns from the supply crates nearby.'], ['🩹', 'When you go down, a teammate can revive you before you bleed out.'], ['🔴', 'The zone shrinks, so the fight keeps moving.']],
     zombies: [['🎯', '<b>Goal:</b> survive. Survivors win when every zombie is dead; the horde wins when everyone is turned.'], ['🌑', 'It is pitch dark. Only your flashlight lights the way, and zombies show glowing green eyes.'], ['🧟', 'If a zombie gets you, you turn into one, and then you hunt the survivors.'], ['💉', 'Cures can turn zombies back into survivors.']],
-    survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat, and drink at ponds.'], ['😴', 'Rest when you are tired.'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
+    survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat, and drink at ponds.'], ['😴', 'Rest when you are tired.'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.'], ['🔥', 'Chop trees for wood (axes are much faster). With 6 wood, F / USE builds a campfire; feed it 3 wood at a time to make it bigger. Fires heal you, light the night, keep animals away, and burn down unless fed.']],
     revolution: [['🎯', '<b>Goal:</b> wipe out the other side or bring down their castle.'], ['🏰', 'Each side has a castle with healing rooms, an armory, guard towers and cannons on the walls.'], ['💥', 'Load ammo into your boss strike pad and launch it at the enemy castle.'], ['☠️', 'No revives: when you die, you stay dead.']],
     assassin: [['🎯', '<b>Survivors:</b> find the assassin and touch him (or take him down) to win.'], ['🔫', '<b>Assassin:</b> a Barrett with 2000 rounds and a medkit (a Railgun in High Tech). Take everyone out without getting caught.'], ['🌑', 'Pitch dark. Everyone has a flashlight.'], ['🔭', 'Sniper rifles have an 8x night-vision scope.'], ['🚶', 'Survivors spread out: they can\'t stay together.']],
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
@@ -16654,7 +16426,7 @@ BRIEF.murder = [['🔪', '<b>Murderer:</b> a knife that kills in one stab. Take 
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 for (const id in XM) BRIEF[id] = XM[id].brief;
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House', prison: 'Prison', island: 'Island' };
+const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House', prison: 'Prison' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
@@ -16703,7 +16475,7 @@ function openMapSelect() {
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
         const xm = XM[id];
-        card.classList.toggle('hidden', xm ? !xm.maps.includes(m) : ((escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')) || m === 'prison' || m === 'island'));
+        card.classList.toggle('hidden', xm ? !xm.maps.includes(m) : ((escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')) || m === 'prison'));
         card.disabled = false;
         card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
     }
@@ -16716,8 +16488,7 @@ const MAP_DESC = {
     rusty: 'An abandoned facility in a warzone: rusted sheds, wrecked cars, ruins and smoke.',
     maze: 'A huge maze of concrete corridors. Every corner could hide someone.',
     mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.',
-    prison: 'A walled prison at night: a cell block, the yard, the mess hall, the armory and the control room, guard towers with searchlights, and the road out.',
-    island: 'A jungle island ringed by beaches: huts, freshwater ponds, a hill with a signal fire, the wreck you washed up from and a dock on the far side.',
+    prison: 'A huge maximum-security prison at night: two cell blocks, the yard, the mess hall, workshop, infirmary, barracks, the warden\'s office, a locked armory and the control room, then no-man\'s land and an outer fence.',
     haunted: 'A giant haunted mansion full of candlelit rooms and coffins, in a foggy cemetery of graves, crypts and dead trees behind an iron fence.',
     cavern: 'The boss\'s lair: a giant cave deep underground with rocks everywhere, glowing crystals and lava cracks.',
     wasteland: 'Made for Assassin: wide open ground, a few lone trees and broken junk everywhere, no cars. Snipe from far away.'
@@ -16755,17 +16526,6 @@ function drawMapPreview(cv, map) {
         g.fillStyle = '#ff8a2a'; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(W * (0.3 + rnd() * 0.4), H * (0.42 + rnd() * 0.2), 3, 0, TAU); g.fill(); }
         g.fillStyle = '#2c4470'; for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(W * (0.3 + rnd() * 0.4), H * (0.62 + rnd() * 0.18), 3, 0, TAU); g.fill(); }
         g.fillStyle = '#2e3a2e'; g.fillRect(W / 2 - 9, H * 0.92, 18, 10);
-        return;
-    }
-    if (map === 'island') {
-        g.fillStyle = '#1b5f8f'; g.fillRect(0, 0, W, H);
-        const blob = (k, col) => { g.fillStyle = col; g.beginPath(); for (let a = 0; a <= TAU + 0.01; a += 0.1) { const r = (1 + 0.1 * Math.sin(3 * a + 1) + 0.06 * Math.sin(5 * a)) * k; g.lineTo(W / 2 + Math.cos(a) * r * 1.4, H / 2 + Math.sin(a) * r); } g.fill(); };
-        blob(78, '#3fb6c8'); blob(66, '#e2cf9a'); blob(56, '#4f7a3a');
-        g.fillStyle = '#7c8a5a'; g.beginPath(); g.arc(W * 0.6, H * 0.36, 16, 0, TAU); g.fill();
-        g.fillStyle = '#ffae42'; g.shadowColor = '#ffae42'; g.shadowBlur = 12; g.beginPath(); g.arc(W * 0.6, H * 0.36, 4, 0, TAU); g.fill(); g.shadowBlur = 0;
-        for (let i = 0; i < 40; i++) { const a = rnd() * TAU, d = Math.sqrt(rnd()) * 48; g.fillStyle = '#2a5626'; g.beginPath(); g.arc(W / 2 + Math.cos(a) * d * 1.4, H / 2 + Math.sin(a) * d, 3 + rnd() * 3, 0, TAU); g.fill(); }
-        g.strokeStyle = '#a07a4a'; g.lineWidth = 4; g.beginPath(); g.moveTo(W * 0.22, H * 0.6); g.lineTo(W * 0.1, H * 0.68); g.stroke();
-        g.fillStyle = '#5a3e22'; g.fillRect(W * 0.72, H * 0.7, 18, 6);
         return;
     }
     if (map === 'haunted') {
@@ -16885,12 +16645,12 @@ function startGame(map = lastMap) {
     if (id === 'survival' && map === 'maze') map = 'ordinary';
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
-    if (XM[id] && !XM[id].maps.includes(map)) map = XM[id].maps[0]; else if (!XM[id] && (map === 'prison' || map === 'island')) map = 'ordinary';
+    if (XM[id] && !XM[id].maps.includes(map)) map = XM[id].maps[0]; else if (!XM[id] && map === 'prison') map = 'ordinary';
     lastMap = map;
     const setup = war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'murder' ? { type: id, count: Math.max(2, Math.min(MURDER.maxPlayers - 1, sliderToCount(+slider.value))), role: murderRolePick }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
-        : XM[id] ? { type: id, count: Math.min(cpuCap(), sliderToCount(+slider.value)) }
+        : XM[id] ? { type: id, count: xmCount() }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : id === 'assassin' ? { type: id, count: sliderToCount(+slider.value), role: assassinRole }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
@@ -17593,6 +17353,7 @@ function touchFrame() {
         if (p.car) return `GET OUT`;
         if (G.revolution && nearOwnPad(p)) return 'BOSS STRIKE';
         if (G.xm && G.xm.useLabel && G.xm.useLabel(p)) return G.xm.useLabel(p);
+        if (G.survival && !nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE) && !nearestCar(p, 90) && campfireLabel(p)) return campfireLabel(p);
         const l = nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE);
         if (l) return `PICK UP ${lootName(l.key).toUpperCase()}`;
         const c = nearestCar(p, 90);
