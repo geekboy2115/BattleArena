@@ -1216,6 +1216,7 @@ function styleBuilding(b, rusty) {
 function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'maze' || type === 'mountain') return generateTerrain(type);
     if (type === 'cavern') return generateCavern();
+    if (type === 'haunted') return generateHaunted();
     // Wasteland (Assassin's map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
@@ -4695,6 +4696,8 @@ function newState(mode, setup) {
     // Ghost and Fort Wars are played in one fixed circle in the middle of the map
     const arena = ghostMode ? GHOST.arena : fort ? FORT.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
+    // (the haunted house has its iron fence instead)
+    if (G.world.terrain === 'haunted') Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Early Warfare: no cars parked at the curbs or piled in scrapyards (the map is built before G.early exists)
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
@@ -4777,7 +4780,7 @@ function placeInArena(R, apart) {
     }
     if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
 }
-const arenaR = () => (G.murder ? MURDER.arena : G.zone.r) - 200;
+const arenaR = () => (G.murder ? MURDER.arena : G.world.terrain === 'haunted' ? HAUNT.half + 50 : G.zone.r) - 200;
 const arenaPoint = (R = arenaR()) => { const c = CONFIG.WORLD_SIZE / 2; for (let t = 0; t < 20; t++) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * R, x = c + Math.cos(a) * d, y = c + Math.sin(a) * d; if (!blockedAt(G.world.grid, x, y, 30)) return { x, y }; } return { x: c, y: c }; };
 // A bot strolling about the circle: a new spot every so often
 function strollArena(b) {
@@ -8893,6 +8896,17 @@ function buildGroundDetail() {
             else if (r < 0.85) add({ k: 'rubble', x, y, s: rand(3, 8), a: rand(0, TAU), c: pick(['#5a524a', '#6a6158', '#3e3832']) });
             else { const pts = [[0, 0]]; let a = rand(0, TAU); for (let j = 0; j < 6; j++) { a += rand(-0.8, 0.8); const l = pts[pts.length - 1]; pts.push([l[0] + Math.cos(a) * rand(15, 35), l[1] + Math.sin(a) * rand(15, 35)]); } add({ k: 'crack', x, y, pts }); }
         }
+    } else if (G.world.terrain === 'haunted') {
+        // Dead grass, dry leaves and stones over the grounds (nothing inside the house)
+        const h = G.world.haunt;
+        for (let i = 0; i < 9000; i++) {
+            const x = W / 2 + rand(-HAUNT.half - 600, HAUNT.half + 600), y = W / 2 + rand(-HAUNT.half - 600, HAUNT.half + 600), r = Math.random();
+            if (x > h.X0 - 10 && x < h.X1 + 10 && y > h.Y0 - 10 && y < h.Y1 + 10) continue;
+            if (r < 0.5) add({ k: 'tuft', x, y, s: rand(0.7, 1.3), c: pick(['#5a5a3a', '#4a4a32', '#6a6044', '#3e4430']) });
+            else if (r < 0.8) add({ k: 'litter', x, y, a: rand(0, TAU), c: pick(['#6a3a1a', '#7a4a1e', '#5a2e14', '#8a5a2a']), s: rand(4, 7) });
+            else if (r < 0.93) add({ k: 'pebble', x, y, s: rand(2, 4), c: pick(['#77736b', '#5f5c56']) });
+            else add({ k: 'dirt', x, y, r: rand(20, 50), a: rand(0, TAU) });
+        }
     } else if (G.world.terrain !== 'maze') {
         for (let i = 0; i < 5500 * MAP_AREA; i++) {
             const x = rand(0, W), y = rand(0, W), r = Math.random();
@@ -9097,6 +9111,12 @@ function drawLighting(camX, camY, zoom) {
         };
         for (const f of G.fighters) if (f !== p && !f.dead && !f.zombie && !f.downed && !f.car && !f.ghost) { cone(f, 650, 0.7); light(f.x, f.y, 55, 0.55); }
         if (p && p.scopeAt) light(p.scopeAt.x, p.scopeAt.y, Math.min(viewW, viewH) * 0.6 / zoom, 1);
+        // The haunted house: candles, lanterns, pumpkins and wisps glow (flickering) in the dark
+        if (G.world.terrain === 'haunted') for (const q of G.world.glows) {
+            const fl = 0.85 + 0.15 * Math.sin(G.time / 90 + q.seed * 13) * Math.sin(G.time / 37 + q.seed);
+            const x = q.wisp ? q.x + Math.sin(G.time / 1700 + q.seed) * 60 : q.x, y = q.wisp ? q.y + Math.cos(G.time / 2100 + q.seed * 2) * 40 : q.y;
+            light(x, y, q.r * 6 * fl, q.wisp ? 0.45 : 0.7);
+        }
         ctx.drawImage(lightCv, 0, 0, viewW, viewH);
         if (G.ghostMode) drawGhostSteps(camX, camY, zoom);
         if (G.zombies) drawZombieEyes(camX, camY, zoom);
@@ -10297,6 +10317,463 @@ function generateCavern() {
     const mid = { x: cx, y: cy };
     return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'cavern', cave, glows, maze: null, mazeExtra: null, height: null, escapeStart: mid, escapeEnd: mid };
 }
+// ---------- The haunted house (Ghost's map) ----------
+// A giant old mansion in the middle - a grand hall with pillars and a staircase, and two wings of rooms (library, dining room,
+// bedrooms, parlour, a coffin room...) lit by candles - with a cemetery all round it inside a tall iron fence:
+// rows of gravestones, crypts, dead trees, jack-o'-lanterns and drifting fog. Beyond the fence, dark woods.
+const HAUNT = { half: 2300, hw: 1000, hh: 720, wall: 16, door: 110 };
+const hauntInside = (x, y, m = 0) => { const c = CONFIG.WORLD_SIZE / 2; return Math.abs(x - c) < HAUNT.half - m && Math.abs(y - c) < HAUNT.half - m; };
+function generateHaunted() {
+    const W = CONFIG.WORLD_SIZE, C = W / 2, grid = new Grid(256, 90), obstacles = [], lootSpots = [], glows = [], paint = [], fogs = [];
+    const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
+    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
+    const T = HAUNT.wall, X0 = C - HAUNT.hw, X1 = C + HAUNT.hw, Y0 = C - HAUNT.hh, Y1 = C + HAUNT.hh;
+    const WALL = '#3b2b31', doors = [];
+    // A wall along x (horiz) or y from a to b, with doorways cut in it ([middle, width])
+    const wall = (horiz, at, a, b, gaps = [], extra = {}) => {
+        const cuts = gaps.map(([c, w]) => [c - w / 2, c + w / 2]).sort((p, q) => p[0] - q[0]);
+        for (const [c0, c1] of cuts) doors.push(horiz ? { x: (c0 + c1) / 2, y: at } : { x: at, y: (c0 + c1) / 2 });
+        let s = a;
+        for (const [g0, g1] of [...cuts, [b, b]]) {
+            const e = Math.min(g0, b);
+            if (e - s > 4) addBox(horiz ? { type: 'wall', x: (s + e) / 2, y: at, hw: (e - s) / 2, hh: T / 2, color: WALL, haunt: true, ...extra }
+                : { type: 'wall', x: at, y: (s + e) / 2, hw: T / 2, hh: (e - s) / 2, color: WALL, haunt: true, ...extra });
+            s = Math.max(s, g1);
+        }
+    };
+    const xs = [X0, C - 620, C - 260, C + 260, C + 620, X1], ys = [Y0, C - 240, C + 240, Y1];
+    // The outside walls: big front doors, a back door and a door each side
+    wall(true, Y0, X0 - T / 2, X1 + T / 2, [[C, 130]], { outer: true });
+    wall(true, Y1, X0 - T / 2, X1 + T / 2, [[C, 190]], { outer: true });
+    wall(false, X0, Y0, Y1, [[C, 120]], { outer: true });
+    wall(false, X1, Y0, Y1, [[C, 120]], { outer: true });
+    // Inside: the wings split into rooms, a door from every room into the next
+    const rowDoors = () => [0, 1, 2].map(r => [rand(ys[r] + 90, ys[r + 1] - 90), HAUNT.door]);
+    for (const i of [1, 2, 3, 4]) wall(false, xs[i], Y0, Y1, rowDoors());
+    for (const [a, b] of [[0, 2], [3, 5]]) for (const j of [1, 2]) wall(true, ys[j], xs[a], xs[b], [[rand(xs[a] + 90, xs[a + 1] - 90), HAUNT.door], [rand(xs[a + 1] + 90, xs[b] - 90), HAUNT.door]]);
+    const nearDoor = (x, y, hw, hh) => doors.some(d => Math.abs(d.x - x) < hw + 85 && Math.abs(d.y - y) < hh + 85);
+    const prop = (kind, x, y, hw, hh, extra = {}) => {
+        if (nearDoor(x, y, hw, hh) || blockedAt(grid, x, y, 2)) return null;
+        for (const [px, py] of [[x - hw, y - hh], [x + hw, y + hh], [x - hw, y + hh], [x + hw, y - hh]]) if (blockedAt(grid, px, py, 2)) return null;
+        return addBox({ type: 'crate', hprop: kind, x, y, hw, hh, seed: randInt(1, 1e9), ...extra });
+    };
+    const candle = (x, y) => { glows.push({ x, y, r: 22, c: '#ffb347', candle: true, seed: Math.random() * 100 }); paint.push({ k: 'candle', x, y, r: 12 }); };
+    // ---- The grand hall: pillars, a sweeping staircase, a chandelier, and coffins laid out for a wake ----
+    for (const sx of [-1, 1]) for (let k = 0; k < 5; k++) addBox({ type: 'wall', x: C + sx * 190, y: Y0 + 330 + k * 230, hw: 18, hh: 18, color: '#4a4048', pillar: true });
+    paint.push({ k: 'stairs', x: C, y: Y0 + 130, w: 360, h: 220, r: 260 });
+    paint.push({ k: 'runner', x: C, y: (Y0 + 240 + Y1) / 2, w: 150, h: Y1 - Y0 - 260, r: 800 });
+    glows.push({ x: C, y: C - 60, r: 55, c: '#ffd27a', chandelier: true, seed: 3 });
+    glows.push({ x: C, y: C + 420, r: 40, c: '#ffd27a', chandelier: true, seed: 7 });
+    for (const sx of [-1, 1]) { prop('coffin', C + sx * 75, C + 130, 20, 44); candle(C + sx * 75, C + 200); }
+    for (const sx of [-1, 1]) for (const yy of [Y0 + 300, C + 260]) candle(C + sx * 228, yy);
+    prop('organ', C, Y0 + 290, 70, 24);
+    // ---- The rooms ----
+    const THEMES = ['library', 'dining', 'bedroom', 'parlour', 'coffins', 'kitchen', 'nursery', 'study', 'bedroom', 'library', 'parlour', 'coffins'];
+    const themes = THEMES.slice().sort(() => Math.random() - 0.5);
+    let ti = 0;
+    for (const [a, b] of [[0, 1], [1, 2], [3, 4], [4, 5]]) for (let r = 0; r < 3; r++) {
+        const rx0 = xs[a] + T, rx1 = xs[b] - T, ry0 = ys[r] + T, ry1 = ys[r + 1] - T, cx = (rx0 + rx1) / 2, cy = (ry0 + ry1) / 2, rw = rx1 - rx0, rh = ry1 - ry0;
+        const theme = themes[ti++ % themes.length];
+        paint.push({ k: 'rug', x: cx, y: cy, w: rw * 0.55, h: rh * 0.5, c: pick(['#5a1a24', '#3a2450', '#1f3a34', '#4a2a14']), r: Math.max(rw, rh) });
+        for (const [qx, qy, sx, sy] of [[rx0, ry0, 1, 1], [rx1, ry0, -1, 1], [rx0, ry1, 1, -1], [rx1, ry1, -1, -1]]) if (Math.random() < 0.6) paint.push({ k: 'web', x: qx, y: qy, sx, sy, s: rand(40, 70), r: 80 });
+        if (Math.random() < 0.4) paint.push({ k: 'blood', x: cx + rand(-rw / 3, rw / 3), y: cy + rand(-rh / 3, rh / 3), s: rand(18, 34), seed: randInt(1, 1e9), r: 60 });
+        if (theme === 'library') {
+            for (let x = rx0 + 50; x < rx1 - 40; x += 80) { prop('shelf', x, ry0 + 16, 36, 13); prop('shelf', x, ry1 - 16, 36, 13); }
+            prop('table', cx, cy, 45, 28);
+        } else if (theme === 'dining') {
+            prop('table', cx, cy, Math.min(110, rw * 0.3), 30, { long: true });
+            for (let k = -2; k <= 2; k++) { prop('chair', cx + k * 42, cy - 48, 10, 10); prop('chair', cx + k * 42, cy + 48, 10, 10); }
+        } else if (theme === 'bedroom') {
+            prop('bed', rx0 + 60, cy, 36, 52);
+            prop('wardrobe', rx1 - 26, cy - rh / 4, 16, 34);
+        } else if (theme === 'parlour') {
+            prop('piano', cx - rw / 5, ry0 + 50, 48, 28);
+            prop('sofa', cx + rw / 6, ry1 - 40, 55, 18);
+            prop('chair', cx + rw / 4, cy, 16, 16);
+        } else if (theme === 'coffins') {
+            for (let k = -1; k <= 1; k++) prop('coffin', cx + k * 85, cy, 20, 44, { open: Math.random() < 0.4 });
+        } else if (theme === 'kitchen') {
+            for (let x = rx0 + 50; x < rx1 - 40; x += 75) prop('counter', x, ry0 + 18, 33, 16);
+            prop('table', cx, cy + 30, 40, 26);
+        } else if (theme === 'nursery') {
+            prop('crib', cx - 60, cy, 24, 34); prop('crib', cx + 60, cy, 24, 34);
+            paint.push({ k: 'toys', x: cx, y: cy + rh / 3, r: 60, seed: randInt(1, 1e9) });
+        } else {
+            prop('desk', cx, cy - rh / 5, 44, 22);
+            prop('shelf', rx0 + 16, cy, 13, 40);
+        }
+        candle(cx + rand(-rw / 3, rw / 3), cy + rand(-rh / 3, rh / 3));
+        if (Math.random() < 0.5) candle(cx + rand(-rw / 3, rw / 3), cy + rand(-rh / 3, rh / 3));
+        for (let k = 0; k < 2; k++) lootSpots.push({ x: cx + rand(-rw / 3, rw / 3), y: cy + rand(-rh / 3, rh / 3), box: Math.random() < 0.6, good: Math.random() < 0.3 });
+    }
+    // ---- The iron fence round the grounds (the gate's chained shut) ----
+    const H = HAUNT.half;
+    for (const [horiz, at] of [[true, C - H], [true, C + H], [false, C - H], [false, C + H]]) {
+        for (let s = -H; s < H; s += 200) {
+            const a = C + s, b = C + Math.min(H, s + 200);
+            addBox(horiz ? { type: 'wall', x: (a + b) / 2, y: at, hw: (b - a) / 2, hh: 6, color: '#25252b', iron: true, gateway: at > C && Math.abs((a + b) / 2 - C) < 150 }
+                : { type: 'wall', x: at, y: (a + b) / 2, hw: 6, hh: (b - a) / 2, color: '#25252b', iron: true });
+        }
+    }
+    for (const sx of [-1, 1]) { addBox({ type: 'wall', x: C + sx * 110, y: C + H, hw: 22, hh: 22, color: '#58545c', pillar: true }); glows.push({ x: C + sx * 110, y: C + H - 34, r: 26, c: '#ffb347', lantern: true, seed: sx }); }
+    // ---- The grounds: a gravel path to the front door and round the house ----
+    paint.push({ k: 'path', x: C, y: (Y1 + C + H) / 2, w: 140, h: C + H - Y1, r: H });
+    paint.push({ k: 'ring', x: C, y: C, w: HAUNT.hw * 2 + 260, h: HAUNT.hh * 2 + 260, r: 1500 });
+    const onPath = (x, y, m) => (Math.abs(x - C) < 70 + m && y > Y1) || (Math.abs(x - C) < HAUNT.hw + 130 + 45 + m && Math.abs(y - C) < HAUNT.hh + 130 + 45 + m);
+    // Crypts first (big stone tombs), then dead trees, then the rows of graves fill in round them
+    const crypts = [];
+    for (let i = 0, tries = 0; i < 8 && tries < 400; tries++) {
+        const x = C + rand(-H + 300, H - 300), y = C + rand(-H + 300, H - 300), hw = rand(70, 95), hh = rand(55, 75);
+        if (onPath(x, y, Math.max(hw, hh) + 60) || crypts.some(q => Math.hypot(q.x - x, q.y - y) < 600)) continue;
+        crypts.push(addBox({ type: 'wall', x, y, hw, hh, color: '#5d5a62', crypt: true, seed: randInt(1, 1e9) }));
+        lootSpots.push({ x, y: y + hh + 40, box: true, good: true });
+        glows.push({ x: x + rand(-30, 30), y: y + hh + 22, r: 16, c: '#ffb347', candle: true, seed: Math.random() * 100 });
+        paint.push({ k: 'candle', x: x - 30, y: y + hh + 22, r: 12 });
+        i++;
+    }
+    for (let i = 0; i < 44; i++) {
+        const x = C + rand(-H + 120, H - 120), y = C + rand(-H + 120, H - 120);
+        if (onPath(x, y, 60) || blockedAt(grid, x, y, 60)) continue;
+        const canopy = rand(90, 140);
+        addCircle({ type: 'tree', dead: true, x, y, r: canopy * 0.16, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999, seed: randInt(1, 1e9) });
+    }
+    const GRAVE = ['stone', 'stone', 'round', 'round', 'cross', 'cross', 'obelisk', 'angel'];
+    for (let y = C - H + 170; y < C + H - 90; y += 150) for (let x = C - H + 110; x < C + H - 90; x += 96) {
+        if (Math.random() < 0.38) continue;
+        const gx = x + rand(-10, 10), gy = y + rand(-8, 8), kind = pick(GRAVE);
+        if (onPath(gx, gy, 40) || blockedAt(grid, gx, gy, 40) || blockedAt(grid, gx, gy + 34, 22)) continue;
+        const big = kind === 'obelisk' || kind === 'angel';
+        addBox({ type: 'wall', x: gx, y: gy, hw: big ? 16 : 14, hh: big ? 12 : 7, color: pick(['#77747c', '#6a6870', '#86838a', '#5f6066']), grave: kind, seed: randInt(1, 1e9), tilt: rand(-0.12, 0.12) });
+        paint.push({ k: 'mound', x: gx, y: gy + 36, r: 40, fresh: Math.random() < 0.12 });
+        if (Math.random() < 0.06) glows.push({ x: gx + rand(-20, 20), y: gy + 30, r: 18, c: '#ff8a1e', pumpkin: true, seed: Math.random() * 100 });
+    }
+    // Will-o'-the-wisps drifting over the graves, and jack-o'-lanterns along the path
+    for (let i = 0; i < 14; i++) glows.push({ x: C + rand(-H + 200, H - 200), y: C + rand(-H + 200, H - 200), r: 14, c: '#7dffb0', wisp: true, seed: Math.random() * 100 });
+    for (let y = Y1 + 260; y < C + H - 150; y += 280) for (const sx of [-1, 1]) glows.push({ x: C + sx * 95, y, r: 20, c: '#ff8a1e', pumpkin: true, seed: Math.random() * 100 });
+    for (let i = 0; i < 26; i++) { const x = C + rand(-H + 150, H - 150), y = C + rand(-H + 150, H - 150); if (!onPath(x, y, 0) && !blockedAt(grid, x, y, 30)) lootSpots.push({ x, y, box: Math.random() < 0.5, good: Math.random() < 0.2 }); }
+    // Dark woods outside the fence
+    for (let i = 0; i < 260; i++) {
+        const a = rand(0, TAU), d = rand(H + 90, H + 900), x = C + Math.cos(a) * d * 1.05, y = C + Math.sin(a) * d * 1.05;
+        if (hauntInside(x, y, -80) || blockedAt(grid, x, y, 50)) continue;
+        const canopy = rand(90, 150), dead = true;
+        addCircle({ type: 'tree', dead, x, y, r: canopy * (dead ? 0.16 : 0.27), canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999, seed: randInt(1, 1e9) });
+    }
+    for (let i = 0; i < 70; i++) fogs.push({ x: C + rand(-H, H), y: C + rand(-H, H), r: rand(160, 320), sp: rand(6, 16), ph: rand(0, TAU), a: rand(0.05, 0.11) });
+    const pgrid = new Grid(400, 900);
+    for (const q of paint) pgrid.insert(q);
+    // The map: the house, the grounds and the graves
+    const [mm, g] = makeCanvas(200, 200), k = 200 / W;
+    g.fillStyle = '#101410'; g.fillRect(0, 0, 200, 200);
+    g.fillStyle = '#2e3828'; g.fillRect((C - H) * k, (C - H) * k, H * 2 * k, H * 2 * k);
+    g.fillStyle = '#6b665c'; g.fillRect((C - 70) * k, Y1 * k, 140 * k, (C + H - Y1) * k);
+    g.fillStyle = '#4a3528'; g.fillRect(X0 * k, Y0 * k, (X1 - X0) * k, (Y1 - Y0) * k);
+    for (const o of obstacles) {
+        if (o.type === 'tree') { g.fillStyle = '#3a3026'; g.fillRect(o.x * k - 0.8, o.y * k - 0.8, 1.6, 1.6); continue; }
+        g.fillStyle = o.grave ? '#8a8790' : o.crypt ? '#a09ca6' : o.iron ? '#55555e' : '#1c1418';
+        g.fillRect((o.x - o.hw) * k, (o.y - o.hh) * k, Math.max(0.6, o.hw * 2 * k), Math.max(0.6, o.hh * 2 * k));
+    }
+    const mid = { x: C, y: C + H - 200 };
+    const cave = { inside: (x, y, m = 0) => hauntInside(x, y, Math.max(60, m * 0.4)) };
+    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'haunted', cave, glows, haunt: { paint: pgrid, fogs, X0, X1, Y0, Y1 }, maze: null, mazeExtra: null, height: null, escapeStart: mid, escapeEnd: mid };
+}
+// The ground: floorboards and a stone hall in the house, dead grass, gravel and grave mounds outside, black woods past the fence
+function paintHaunted(g, x0, y0, S) {
+    const w = G.world, h = w.haunt, C = CONFIG.WORLD_SIZE / 2, H = HAUNT.half, B = 16;
+    for (let x = x0; x < x0 + S; x += B) for (let y = y0; y < y0 + S; y += B) {
+        const mx = x + B / 2, my = y + B / 2, v = ((Math.sin(mx * 0.011) * Math.cos(my * 0.013) + Math.sin(mx * 0.0037 - my * 0.0041)) * 6) | 0;
+        let col;
+        if (mx > h.X0 && mx < h.X1 && my > h.Y0 && my < h.Y1) {
+            if (Math.abs(mx - C) < 260) col = ((Math.floor(mx / 64) + Math.floor(my / 64)) & 1) ? `rgb(${52 + v},${48 + v},${56 + v})` : `rgb(${36 + v},${33 + v},${40 + v})`;
+            else { const row = Math.floor(my / 16), sh = ((row * 7919) % 5) * 3; col = `rgb(${66 + sh + v},${46 + sh + v},${34 + sh / 2 + v})`; }
+        } else if (Math.abs(mx - C) < H && Math.abs(my - C) < H) col = `rgb(${48 + v},${56 + v},${40 + v})`;
+        else col = `rgb(${20 + v / 2},${25 + v / 2},${19 + v / 2})`;
+        g.fillStyle = col; g.fillRect(x, y, B + 1, B + 1);
+    }
+    // plank seams across the wings
+    g.strokeStyle = 'rgba(20,10,6,0.45)'; g.lineWidth = 1.2; g.beginPath();
+    for (let y = Math.ceil(Math.max(y0, h.Y0) / 16) * 16; y < Math.min(y0 + S, h.Y1); y += 16) for (const [a, b] of [[h.X0, C - 260], [C + 260, h.X1]]) {
+        const l = Math.max(a, x0), r = Math.min(b, x0 + S);
+        if (l >= r) continue;
+        g.moveTo(l, y); g.lineTo(r, y);
+        for (let x = Math.ceil(l / 120) * 120 + ((y / 16) % 2) * 60; x < r; x += 120) { g.moveTo(x, y); g.lineTo(x, y + 16); }
+    }
+    g.stroke();
+    h.paint.query(x0 + S / 2, y0 + S / 2, S / 2 + 900, q => {
+        switch (q.k) {
+            case 'path': case 'ring': {
+                g.fillStyle = '#5f5a50';
+                if (q.k === 'path') g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h);
+                else { g.save(); g.strokeStyle = '#5f5a50'; g.lineWidth = 90; g.strokeRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h); g.restore(); }
+                const rnd = seededRand(Math.floor(x0 * 3 + y0));
+                for (let i = 0; i < 300; i++) {
+                    const px = x0 + rnd() * S, py = y0 + rnd() * S;
+                    const on = q.k === 'path' ? Math.abs(px - q.x) < q.w / 2 && Math.abs(py - q.y) < q.h / 2
+                        : Math.abs(Math.abs(px - q.x) - q.w / 2) < 45 && Math.abs(py - q.y) < q.h / 2 + 45 || Math.abs(Math.abs(py - q.y) - q.h / 2) < 45 && Math.abs(px - q.x) < q.w / 2 + 45;
+                    if (on) { g.fillStyle = rnd() < 0.5 ? '#7a7468' : '#4a463e'; g.fillRect(px, py, 2 + rnd() * 3, 2 + rnd() * 2); }
+                }
+                break;
+            }
+            case 'mound':
+                g.fillStyle = q.fresh ? '#3d2a1c' : 'rgba(55,42,30,0.75)'; g.beginPath(); g.ellipse(q.x, q.y, 17, 30, 0, 0, TAU); g.fill();
+                g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(q.x + 3, q.y + 4, 15, 26, 0, 0, TAU); g.fill();
+                g.fillStyle = q.fresh ? '#4e3826' : 'rgba(70,58,40,0.7)'; g.beginPath(); g.ellipse(q.x - 2, q.y - 3, 13, 24, 0, 0, TAU); g.fill();
+                break;
+            case 'rug':
+                g.fillStyle = shade(q.c, -0.3); g.fillRect(q.x - q.w / 2 - 6, q.y - q.h / 2 - 6, q.w + 12, q.h + 12);
+                g.fillStyle = q.c; g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h);
+                g.strokeStyle = 'rgba(210,170,90,0.35)'; g.lineWidth = 3; g.strokeRect(q.x - q.w / 2 + 10, q.y - q.h / 2 + 10, q.w - 20, q.h - 20);
+                break;
+            case 'runner':
+                g.fillStyle = '#4a0f18'; g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h);
+                g.fillStyle = '#6a1a24'; g.fillRect(q.x - q.w / 2 + 10, q.y - q.h / 2, q.w - 20, q.h);
+                g.fillStyle = 'rgba(210,170,90,0.4)'; g.fillRect(q.x - q.w / 2 + 14, q.y - q.h / 2, 3, q.h); g.fillRect(q.x + q.w / 2 - 17, q.y - q.h / 2, 3, q.h);
+                break;
+            case 'stairs':
+                for (let i = 0; i < 10; i++) {
+                    const t = i / 10, sw = q.w * (0.7 + t * 0.3), yy = q.y - q.h / 2 + t * q.h;
+                    g.fillStyle = i % 2 ? '#4e3a30' : '#5c463a'; g.fillRect(q.x - sw / 2, yy, sw, q.h / 10 + 1);
+                    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(q.x - sw / 2, yy + q.h / 10 - 3, sw, 3);
+                }
+                g.fillStyle = '#6a1a24'; g.fillRect(q.x - 60, q.y - q.h / 2, 120, q.h);
+                g.fillStyle = '#2a1c18'; g.fillRect(q.x - q.w / 2 - 12, q.y - q.h / 2, 12, q.h); g.fillRect(q.x + q.w / 2, q.y - q.h / 2, 12, q.h);
+                break;
+            case 'web': {
+                g.strokeStyle = 'rgba(220,220,230,0.35)'; g.lineWidth = 1;
+                g.beginPath();
+                for (let i = 0; i <= 4; i++) { const a = (i / 4) * Math.PI / 2; g.moveTo(q.x, q.y); g.lineTo(q.x + Math.cos(a) * q.s * q.sx, q.y + Math.sin(a) * q.s * q.sy); }
+                for (let r = 0.3; r <= 1; r += 0.23) { g.moveTo(q.x + q.s * r * q.sx, q.y); for (let i = 1; i <= 4; i++) { const a = (i / 4) * Math.PI / 2; g.lineTo(q.x + Math.cos(a) * q.s * r * q.sx * 0.92, q.y + Math.sin(a) * q.s * r * q.sy * 0.92); } }
+                g.stroke();
+                break;
+            }
+            case 'blood': {
+                const rnd = seededRand(q.seed);
+                g.fillStyle = 'rgba(90,6,12,0.7)';
+                g.beginPath(); g.ellipse(q.x, q.y, q.s, q.s * 0.7, rnd() * 3, 0, TAU); g.fill();
+                for (let i = 0; i < 7; i++) { const a = rnd() * TAU, d = q.s * (0.9 + rnd()); g.beginPath(); g.arc(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, 2 + rnd() * 4, 0, TAU); g.fill(); }
+                break;
+            }
+            case 'toys': {
+                const rnd = seededRand(q.seed);
+                for (let i = 0; i < 6; i++) { g.fillStyle = pick2(rnd, ['#7a5a8a', '#8a6a4a', '#5a7a8a', '#9a8a6a']); g.fillRect(q.x + (rnd() - 0.5) * 120, q.y + (rnd() - 0.5) * 50, 7, 7); }
+                g.fillStyle = '#c8b8a0'; g.beginPath(); g.arc(q.x + 20, q.y - 6, 7, 0, TAU); g.fill();
+                g.fillStyle = '#222'; g.fillRect(q.x + 16, q.y - 8, 2, 2); g.fillRect(q.x + 22, q.y - 8, 2, 2);
+                break;
+            }
+            case 'candle':
+                g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.arc(q.x + 2, q.y + 3, 6, 0, TAU); g.fill();
+                g.fillStyle = '#3a3036'; g.beginPath(); g.arc(q.x, q.y, 6, 0, TAU); g.fill();
+                g.fillStyle = '#e8e0cc'; g.beginPath(); g.arc(q.x, q.y, 3.5, 0, TAU); g.fill();
+                g.fillStyle = 'rgba(240,230,200,0.5)'; g.beginPath(); g.ellipse(q.x + 5, q.y + 4, 4, 2.5, 0.4, 0, TAU); g.fill();
+                break;
+        }
+    });
+}
+// Flickering flames, glowing pumpkins and drifting wisps (drawn every frame, on top of the floor)
+function drawHauntGlows(L, T, R, B, now) {
+    for (const q of G.world.glows) {
+        if (q.x < L - 60 || q.x > R + 60 || q.y < T - 60 || q.y > B + 60) continue;
+        const fl = 0.75 + 0.25 * Math.sin(now / 90 + q.seed * 13) * Math.sin(now / 37 + q.seed);
+        let x = q.x, y = q.y;
+        if (q.wisp) { x += Math.sin(now / 1700 + q.seed) * 60; y += Math.cos(now / 2100 + q.seed * 2) * 40; }
+        if (q.pumpkin) {
+            ctx.fillStyle = '#2a1a08'; ctx.beginPath(); ctx.ellipse(x + 2, y + 3, 13, 11, 0, 0, TAU); ctx.fill();
+            ctx.fillStyle = '#c85a0a'; ctx.beginPath(); ctx.ellipse(x, y, 13, 11, 0, 0, TAU); ctx.fill();
+            ctx.strokeStyle = '#8a3a06'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(x, y, 5, 11, 0, 0, TAU); ctx.stroke();
+            ctx.fillStyle = '#3a5a1a'; ctx.fillRect(x - 1.5, y - 14, 3, 5);
+            ctx.fillStyle = `rgba(255,220,90,${fl})`;
+            ctx.beginPath(); ctx.moveTo(x - 7, y - 3); ctx.lineTo(x - 3, y - 6); ctx.lineTo(x - 2, y - 2); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(x + 7, y - 3); ctx.lineTo(x + 3, y - 6); ctx.lineTo(x + 2, y - 2); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(x - 7, y + 3); ctx.lineTo(x - 3, y + 6); ctx.lineTo(x, y + 4); ctx.lineTo(x + 3, y + 6); ctx.lineTo(x + 7, y + 3); ctx.lineTo(x, y + 8); ctx.fill();
+        }
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const r = (q.chandelier ? 70 : q.wisp ? 26 : 20) * fl, gr = ctx.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, q.c + 'aa'); gr.addColorStop(1, q.c + '00');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+        if (q.candle || q.lantern || q.chandelier) {
+            const n = q.chandelier ? 6 : 1;
+            for (let i = 0; i < n; i++) {
+                const fx = x + (n > 1 ? Math.cos(i / n * TAU) * 26 : 0), fy = y + (n > 1 ? Math.sin(i / n * TAU) * 26 : 0) - 2;
+                ctx.fillStyle = `rgba(255,200,90,${0.9 * fl})`; ctx.beginPath(); ctx.ellipse(fx, fy, 2.6, 4.5 * fl, 0, 0, TAU); ctx.fill();
+                ctx.fillStyle = `rgba(255,250,220,${fl})`; ctx.beginPath(); ctx.ellipse(fx, fy + 1, 1.2, 2.2, 0, 0, TAU); ctx.fill();
+            }
+        }
+        if (q.wisp) { ctx.fillStyle = `rgba(200,255,220,${0.8 * fl})`; ctx.beginPath(); ctx.arc(x, y, 4, 0, TAU); ctx.fill(); }
+        ctx.restore();
+    }
+}
+// A dead tree: bare, twisted branches reaching out from the trunk
+function drawDeadTree(o) {
+    const wob = plantWobble(o) * 0.08;
+    ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot + wob);
+    ctx.lineCap = 'round';
+    const tree = (dx, dy, c1, c2) => {
+        const rnd = seededRand(o.seed || 5);
+        const branch = (x, y, a, len, wdt, depth) => {
+            const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
+            ctx.strokeStyle = depth > 1 ? c2 : c1; ctx.lineWidth = wdt;
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo((x + ex) / 2 + (rnd() - 0.5) * len * 0.4, (y + ey) / 2 + (rnd() - 0.5) * len * 0.4, ex, ey); ctx.stroke();
+            if (depth < 3) for (let i = 0; i < 2; i++) branch(ex, ey, a + (rnd() - 0.5) * 1.4, len * (0.5 + rnd() * 0.25), wdt * 0.6, depth + 1);
+        };
+        for (let i = 0, n = 5 + Math.floor(rnd() * 3); i < n; i++) branch(dx, dy, i / n * TAU + rnd() * 0.6, o.canopy * (0.28 + rnd() * 0.12), 7, 1);
+    };
+    tree(10, 14, 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.3)');
+    tree(0, 0, '#3a2e24', '#2a221c');
+    ctx.fillStyle = '#2e241c'; ctx.beginPath(); ctx.arc(0, 0, o.r + 2, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#463628'; ctx.beginPath(); ctx.arc(-1, -1, o.r - 1, 0, TAU); ctx.fill();
+    ctx.restore();
+}
+// Fog rolling slowly across the graves
+function drawHauntFog(L, T, R, B, now) {
+    for (const f of G.world.haunt.fogs) {
+        const x = f.x + Math.sin(now / 9000 * f.sp / 10 + f.ph) * 260, y = f.y + Math.cos(now / 12000 * f.sp / 10 + f.ph) * 120;
+        if (x < L - f.r || x > R + f.r || y < T - f.r || y > B + f.r) continue;
+        const gr = ctx.createRadialGradient(x, y, 0, x, y, f.r);
+        gr.addColorStop(0, `rgba(190,200,210,${f.a})`); gr.addColorStop(1, 'rgba(190,200,210,0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, f.r, 0, TAU); ctx.fill();
+    }
+}
+// Gravestones, crypts, the iron fence, the old house's walls and its furniture
+function drawHaunted(o, x, y, w, h) {
+    const rnd = seededRand(o.seed || 7);
+    if (o.grave) {
+        ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.tilt || 0);
+        const c = o.color, dk = shade(c, -0.4), lt = shade(c, 0.25);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-o.hw + 3, -o.hh + 5, o.hw * 2, o.hh * 2);
+        if (o.grave === 'cross') {
+            ctx.fillStyle = dk; ctx.fillRect(-4.5, -o.hh - 1, 9, o.hh * 2 + 2); ctx.fillRect(-o.hw - 1, -3.5, o.hw * 2 + 2, 7);
+            ctx.fillStyle = c; ctx.fillRect(-3, -o.hh, 6, o.hh * 2); ctx.fillRect(-o.hw, -2, o.hw * 2, 4);
+        } else if (o.grave === 'round') {
+            ctx.fillStyle = dk; ctx.beginPath(); ctx.ellipse(0, 0, o.hw + 1, o.hh + 1, 0, 0, TAU); ctx.fill();
+            ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, o.hw, o.hh, 0, 0, TAU); ctx.fill();
+            ctx.fillStyle = lt; ctx.fillRect(-o.hw * 0.6, -o.hh * 0.5, o.hw * 1.2, 2);
+        } else if (o.grave === 'obelisk') {
+            ctx.fillStyle = dk; ctx.fillRect(-o.hw - 1, -o.hh - 1, o.hw * 2 + 2, o.hh * 2 + 2);
+            ctx.fillStyle = c; ctx.fillRect(-o.hw, -o.hh, o.hw * 2, o.hh * 2);
+            ctx.fillStyle = lt; ctx.beginPath(); ctx.moveTo(-o.hw * 0.55, -o.hh * 0.55); ctx.lineTo(o.hw * 0.55, -o.hh * 0.55); ctx.lineTo(o.hw * 0.55, o.hh * 0.55); ctx.lineTo(-o.hw * 0.55, o.hh * 0.55); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = dk; ctx.beginPath(); ctx.moveTo(-o.hw * 0.55, -o.hh * 0.55); ctx.lineTo(0, 0); ctx.lineTo(o.hw * 0.55, -o.hh * 0.55); ctx.fill();
+        } else if (o.grave === 'angel') {
+            ctx.fillStyle = dk; ctx.fillRect(-o.hw - 1, -o.hh - 1, o.hw * 2 + 2, o.hh * 2 + 2);
+            ctx.fillStyle = c; ctx.fillRect(-o.hw, -o.hh, o.hw * 2, o.hh * 2);
+            ctx.fillStyle = lt; ctx.beginPath(); ctx.ellipse(-7, -2, 8, 4, -0.4, 0, TAU); ctx.ellipse(7, -2, 8, 4, 0.4, 0, TAU); ctx.fill();
+            ctx.fillStyle = shade(c, 0.4); ctx.beginPath(); ctx.arc(0, -3, 4, 0, TAU); ctx.fill();
+        } else {
+            ctx.fillStyle = dk; ctx.beginPath(); ctx.roundRect(-o.hw - 1, -o.hh - 1, o.hw * 2 + 2, o.hh * 2 + 2, [o.hw, o.hw, 1, 1]); ctx.fill();
+            ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(-o.hw, -o.hh, o.hw * 2, o.hh * 2, [o.hw, o.hw, 1, 1]); ctx.fill();
+            ctx.fillStyle = 'rgba(30,30,34,0.5)'; ctx.fillRect(-o.hw * 0.55, -1, o.hw * 1.1, 1.5); ctx.fillRect(-o.hw * 0.4, 2, o.hw * 0.8, 1.2);
+        }
+        // moss
+        ctx.fillStyle = 'rgba(70,100,50,0.45)'; ctx.beginPath(); ctx.arc((rnd() - 0.5) * o.hw, (rnd() - 0.3) * o.hh, 2 + rnd() * 3, 0, TAU); ctx.fill();
+        ctx.restore();
+        return;
+    }
+    if (o.crypt) {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(x + 8, y + 10, w, h);
+        ctx.fillStyle = '#3a383e'; ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+        // a pitched stone roof seen from above
+        ctx.fillStyle = '#5d5a62'; ctx.fillRect(x, y, w, h / 2);
+        ctx.fillStyle = '#4c4a52'; ctx.fillRect(x, y + h / 2, w, h / 2);
+        ctx.fillStyle = '#6e6a74'; ctx.fillRect(x, y + h / 2 - 3, w, 6);
+        ctx.strokeStyle = 'rgba(20,18,24,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath();
+        for (let xx = x + 18; xx < x + w; xx += 18) { ctx.moveTo(xx, y); ctx.lineTo(xx, y + h); }
+        ctx.stroke();
+        // the door and steps on the front
+        ctx.fillStyle = '#2a2830'; ctx.fillRect(o.x - 18, y + h - 2, 36, 12);
+        ctx.fillStyle = '#6a6672'; ctx.fillRect(o.x - 24, y + h + 10, 48, 6);
+        ctx.fillStyle = 'rgba(70,100,50,0.4)'; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(x + rnd() * w, y + rnd() * h, 4 + rnd() * 8, 0, TAU); ctx.fill(); }
+        return;
+    }
+    if (o.iron) {
+        const horiz = w > h;
+        ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x + 3, y + 5, w, h);
+        ctx.fillStyle = '#1c1c22'; ctx.fillRect(x, y + (horiz ? h / 2 - 1.5 : 0), horiz ? w : 3, horiz ? 3 : h);
+        if (!horiz) ctx.fillRect(x + w / 2 - 1.5, y, 3, h);
+        ctx.fillStyle = '#34343c';
+        const len = horiz ? w : h;
+        for (let s = 6; s < len; s += 11) {
+            const px = horiz ? x + s : o.x, py = horiz ? o.y : y + s;
+            ctx.beginPath(); ctx.arc(px, py, 2.6, 0, TAU); ctx.fill();
+        }
+        ctx.fillStyle = '#4a4a54';
+        for (const e of [0, len]) { const px = horiz ? x + e : o.x, py = horiz ? o.y : y + e; ctx.fillRect(px - 5, py - 5, 10, 10); }
+        if (o.gateway) { ctx.strokeStyle = '#8a7a4a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(o.x - 30, o.y - 4); ctx.lineTo(o.x + 30, o.y + 4); ctx.moveTo(o.x - 30, o.y + 4); ctx.lineTo(o.x + 30, o.y - 4); ctx.stroke(); }
+        return;
+    }
+    if (o.pillar) {
+        ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.arc(o.x + 5, o.y + 7, o.hw + 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = shade(o.color, -0.35); ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+        ctx.fillStyle = o.color; ctx.beginPath(); ctx.arc(o.x, o.y, o.hw, 0, TAU); ctx.fill();
+        ctx.fillStyle = shade(o.color, 0.2); ctx.beginPath(); ctx.arc(o.x - 4, o.y - 4, o.hw * 0.5, 0, TAU); ctx.fill();
+        return;
+    }
+    if (o.haunt) {
+        // Old dark wallpapered walls with a wooden dado, peeling and cracked
+        ctx.fillStyle = '#1a1014'; ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+        ctx.fillStyle = o.outer ? '#2e2228' : o.color; ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = 'rgba(120,80,60,0.35)';
+        if (w > h) ctx.fillRect(x, y + h / 2 - 2, w, 4); else ctx.fillRect(x + w / 2 - 2, y, 4, h);
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.beginPath();
+        for (let i = 0; i < Math.max(w, h) / 60; i++) { const cx = x + rnd() * w, cy = y + rnd() * h; ctx.moveTo(cx, cy); ctx.lineTo(cx + (rnd() - 0.5) * 12, cy + (rnd() - 0.5) * 12); }
+        ctx.stroke();
+        if (o.outer) {
+            // boarded-up windows along the outside walls
+            ctx.fillStyle = '#6a4a2a';
+            const long = Math.max(w, h);
+            for (let s = 120; s < long - 60; s += 260) {
+                if (w > h) { ctx.save(); ctx.translate(x + s, o.y); ctx.rotate(0.15); ctx.fillRect(-26, -3, 52, 6); ctx.rotate(-0.35); ctx.fillRect(-24, -3, 48, 6); ctx.restore(); }
+                else { ctx.save(); ctx.translate(o.x, y + s); ctx.rotate(0.15); ctx.fillRect(-3, -26, 6, 52); ctx.rotate(-0.35); ctx.fillRect(-3, -24, 6, 48); ctx.restore(); }
+            }
+        }
+        return;
+    }
+    // Furniture: old, dusty and dark
+    const P = o.hprop;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x + 4, y + 6, w, h);
+    if (P === 'coffin') {
+        ctx.save(); ctx.translate(o.x, o.y);
+        const sh = (s) => { ctx.beginPath(); ctx.moveTo(-o.hw * 0.6 * s, -o.hh * s); ctx.lineTo(o.hw * 0.6 * s, -o.hh * s); ctx.lineTo(o.hw * s, -o.hh * 0.45 * s); ctx.lineTo(o.hw * 0.7 * s, o.hh * s); ctx.lineTo(-o.hw * 0.7 * s, o.hh * s); ctx.lineTo(-o.hw * s, -o.hh * 0.45 * s); ctx.closePath(); };
+        ctx.fillStyle = '#1e120c'; sh(1.08); ctx.fill();
+        ctx.fillStyle = '#4a2a18'; sh(1); ctx.fill();
+        if (o.open) { ctx.fillStyle = '#5a1a24'; sh(0.8); ctx.fill(); ctx.fillStyle = '#d8d0c0'; ctx.beginPath(); ctx.arc(0, -o.hh * 0.55, 6, 0, TAU); ctx.fill(); ctx.fillStyle = '#222'; ctx.fillRect(-3, -o.hh * 0.6, 2, 2); ctx.fillRect(1, -o.hh * 0.6, 2, 2); }
+        else { ctx.fillStyle = '#5e3a22'; sh(0.82); ctx.fill(); ctx.fillStyle = '#b8a060'; ctx.fillRect(-1.5, -o.hh * 0.55, 3, o.hh * 0.8); ctx.fillRect(-o.hw * 0.4, -o.hh * 0.3, o.hw * 0.8, 3); }
+        ctx.restore();
+        return;
+    }
+    const base = { shelf: '#3a2416', table: '#4a2e1c', chair: '#3e2618', bed: '#3a2416', wardrobe: '#2e1c12', piano: '#121014', sofa: '#4a1a22', counter: '#3e3a36', crib: '#5a4a3a', desk: '#4a2e1c', organ: '#1e1612' }[P] || '#3a2a20';
+    ctx.fillStyle = shade(base, -0.4); ctx.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
+    ctx.fillStyle = base; ctx.fillRect(x, y, w, h);
+    if (P === 'shelf') {
+        for (let i = 0, n = Math.floor(Math.max(w, h) / 6); i < n; i++) { ctx.fillStyle = pick2(rnd, ['#5a2a2a', '#2a3a5a', '#3a4a2a', '#6a5a3a', '#4a2a4a']); if (w > h) ctx.fillRect(x + 2 + i * 6, y + 3, 4, h - 6); else ctx.fillRect(x + 3, y + 2 + i * 6, w - 6, 4); }
+    } else if (P === 'table' || P === 'desk') {
+        ctx.fillStyle = shade(base, 0.15); ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
+        ctx.fillStyle = 'rgba(220,220,230,0.18)'; ctx.fillRect(x + w * 0.2, y + h * 0.3, w * 0.25, h * 0.4);
+        if (o.long) for (let k = -2; k <= 2; k++) { ctx.fillStyle = '#c8c0b0'; ctx.beginPath(); ctx.arc(o.x + k * 42, o.y - h * 0.2, 4, 0, TAU); ctx.arc(o.x + k * 42, o.y + h * 0.2, 4, 0, TAU); ctx.fill(); }
+        if (P === 'desk') { ctx.fillStyle = '#d8d0b8'; ctx.fillRect(o.x - 10, o.y - 6, 14, 10); }
+    } else if (P === 'bed') {
+        ctx.fillStyle = '#5a4a4e'; ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
+        ctx.fillStyle = '#d0c8c0'; ctx.fillRect(x + 6, y + 5, w - 12, 14);
+        ctx.fillStyle = '#4a1a22'; ctx.fillRect(x + 3, y + h * 0.4, w - 6, h * 0.55);
+        ctx.fillStyle = '#2a1810'; for (const [px, py] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) { ctx.beginPath(); ctx.arc(px, py, 4, 0, TAU); ctx.fill(); }
+    } else if (P === 'piano' || P === 'organ') {
+        ctx.fillStyle = '#e8e0d0'; ctx.fillRect(x + 4, y + h - 10, w - 8, 7);
+        ctx.fillStyle = '#111'; for (let xx = x + 7; xx < x + w - 6; xx += 5) ctx.fillRect(xx, y + h - 10, 2.5, 4);
+        if (P === 'organ') { ctx.fillStyle = '#8a7a5a'; for (let i = 0; i < 12; i++) ctx.fillRect(x + 6 + i * (w - 12) / 12, y + 2, 4, h * 0.5 + Math.abs(6 - i) * 0.8); }
+    } else if (P === 'sofa') {
+        ctx.fillStyle = '#6a2a32'; ctx.fillRect(x + 4, y + 5, w - 8, h - 7);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(o.x - 1, y + 5, 2, h - 7);
+    } else if (P === 'wardrobe') {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(o.x - 1, y + 2, 2, h - 4);
+        ctx.fillStyle = '#b8a060'; ctx.fillRect(o.x - 4, o.y - 2, 2, 4); ctx.fillRect(o.x + 2, o.y - 2, 2, 4);
+    } else if (P === 'counter') {
+        ctx.fillStyle = '#5a5650'; ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+        ctx.fillStyle = '#26221e'; ctx.beginPath(); ctx.arc(o.x, o.y, 7, 0, TAU); ctx.fill();
+    } else if (P === 'crib') {
+        ctx.fillStyle = '#3a2e24'; for (let yy = y + 4; yy < y + h - 2; yy += 6) { ctx.fillRect(x + 2, yy, 3, 3); ctx.fillRect(x + w - 5, yy, 3, 3); }
+        ctx.fillStyle = '#c8c0d0'; ctx.fillRect(x + 6, y + 6, w - 12, h - 12);
+    } else if (P === 'chair') {
+        ctx.fillStyle = shade(base, 0.2); ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+    }
+}
+
 // The cave floor: dark stone inside, black rock beyond the walls, with the crystals and lava painted in
 function paintCavern(g, x0, y0, S) {
     const w = G.world, cave = w.cave, B = 16;
@@ -10354,6 +10831,7 @@ function altitudeColor(h) {
 function paintTerrainBase(g, x0, y0, S) {
     const w = G.world;
     if (w.terrain === 'cavern') { paintCavern(g, x0, y0, S); return; }
+    if (w.terrain === 'haunted') { paintHaunted(g, x0, y0, S); return; }
     if (w.terrain === 'maze') {
         g.fillStyle = '#5a5c62'; g.fillRect(x0, y0, S, S);
         g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 2;
@@ -12235,7 +12713,7 @@ function updateHidden(f) {
     if (G.time - (f.lastLoud || -1e9) < 800) { f.hidden = false; return; }
     // Look wide enough to catch big canopies whose trunk is a fair way off
     G.world.grid.query(f.x, f.y, 170, o => {
-        if (f.hidden || (o.type !== 'tree' && o.type !== 'bush')) return;
+        if (f.hidden || (o.type !== 'tree' && o.type !== 'bush') || o.dead) return;
         const reach = o.type === 'tree' ? o.canopy * 0.8 : o.r * 0.85;
         if (Math.hypot(f.x - o.x, f.y - o.y) < reach) f.hidden = true;
     });
@@ -12591,7 +13069,7 @@ function render() {
 
     // Tree shadows and trunks
     ctx.fillStyle = 'rgba(10,30,10,0.22)';
-    if (!lowDetail) for (const o of trees) { ctx.beginPath(); ctx.ellipse(o.x + 14, o.y + 18, o.canopy * 0.95, o.canopy * 0.85, 0, 0, TAU); ctx.fill(); }
+    if (!lowDetail) for (const o of trees) { if (o.dead) continue; ctx.beginPath(); ctx.ellipse(o.x + 14, o.y + 18, o.canopy * 0.95, o.canopy * 0.85, 0, 0, TAU); ctx.fill(); }
     for (const o of trees) {
         ctx.fillStyle = '#4a2f1d';
         ctx.beginPath(); ctx.arc(o.x, o.y, o.r + 2, 0, TAU); ctx.fill();
@@ -12628,6 +13106,7 @@ function render() {
         }
     }
     for (const o of boxes) { drawBox(o); if (o.maxHp && mineable(o)) drawPlantHealth(o, o.y - o.hh - 14); }
+    if (G.world.terrain === 'haunted') drawHauntGlows(L, T, R, B, now);
     drawDecals(L, T, R, B, 'wall');
     if (G.world.city && !G.world.floor) drawLamps(cx, cy, half);
     const chaos = G.escape && !G.world.floor;
@@ -12666,6 +13145,7 @@ function render() {
         drawSprite(SPR.bushes[o.spr], o.x, o.y, (o.r / 40) * (1 - wob * 0.1), o.rot + wob * 0.15);
     }
     for (const o of trees) {
+        if (o.dead) { drawDeadTree(o); continue; }
         const under = p && Math.hypot(p.x - o.x, p.y - o.y) < o.canopy * 0.85;
         ctx.globalAlpha = under ? 0.38 : 0.97;
         const wob = plantWobble(o);
@@ -12675,6 +13155,7 @@ function render() {
     }
     ctx.globalAlpha = 1;
     for (const o of trees) drawPlantHealth(o, o.y - o.canopy * 0.55);
+    if (G.world.terrain === 'haunted') drawHauntFog(L, T, R, B, now);
     for (const o of bushes) drawPlantHealth(o, o.y - o.r - 8);
 
     // Roofs fade out while the player is inside so you can see the room
@@ -13006,6 +13487,7 @@ function drawBox(o) {
     if (o.car) { o.rust ? drawRustCar(o, x, y, w, h) : drawCar(o, x, y, w, h); return; }
     if (o.barrel) { drawBarrel(o); return; }
     if (o.container) { drawContainer(o, x, y, w, h); return; }
+    if (o.grave || o.crypt || o.iron || o.pillar || o.haunt || o.hprop) { drawHaunted(o, x, y, w, h); return; }
     if (o.planks) { drawPlankWall(o, x, y, w, h); return; }
     if (o.sandbags) { drawSandbagWall(o, x, y, w, h); return; }
     if (o.furn) {
@@ -15047,7 +15529,7 @@ BRIEF.murder = [['🔪', '<b>Murderer:</b> a knife that kills in one stab. Take 
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.fort = [['🧱', '<b>2 minutes to build:</b> aim and shoot to put down sandbag walls (60 of them). Your team\'s bots build too.'], ['🚧', 'A glowing wall splits the map while you build. Nobody can fight yet.'], ['💥', 'Then the wall drops: it\'s war. Bullets and explosions knock the forts apart.'], ['🎯', 'Wipe out the other team to win.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern' };
+const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
@@ -15095,7 +15577,7 @@ function openMapSelect() {
     const id = MODES[menuMode].id, escape = id === 'escape';
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
-        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution' || id === 'fort') && m === 'maze') || (m === 'wasteland' && id !== 'assassin') || ((m === 'cavern') !== (id === 'boss')));
+        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution' || id === 'fort') && m === 'maze') || (m === 'wasteland' && id !== 'assassin') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
         card.disabled = false;
         card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
     }
@@ -15108,6 +15590,7 @@ const MAP_DESC = {
     rusty: 'An abandoned facility in a warzone: rusted sheds, wrecked cars, ruins and smoke.',
     maze: 'A huge maze of concrete corridors. Every corner could hide someone.',
     mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.',
+    haunted: 'A giant haunted mansion full of candlelit rooms and coffins, in a foggy cemetery of graves, crypts and dead trees behind an iron fence.',
     cavern: 'The boss\'s lair: a giant cave deep underground with rocks everywhere, glowing crystals and lava cracks.',
     wasteland: 'Made for Assassin: wide open ground, a few lone trees and broken junk everywhere, no cars. Snipe from far away.'
 };
@@ -15128,6 +15611,22 @@ function drawMapPreview(cv, map) {
         for (let i = 0; i < 4; i++) { const x = rnd() * W, y = rnd() * H; g.fillStyle = '#2f5a2a'; g.beginPath(); g.arc(x, y, 12, 0, TAU); g.fill(); g.fillStyle = '#3f7a35'; g.beginPath(); g.arc(x - 3, y - 3, 7, 0, TAU); g.fill(); }
         g.strokeStyle = 'rgba(255,60,60,0.9)'; g.lineWidth = 2; const cx = W * 0.62, cy = H * 0.45;
         g.beginPath(); g.arc(cx, cy, 14, 0, TAU); g.moveTo(cx - 22, cy); g.lineTo(cx + 22, cy); g.moveTo(cx, cy - 22); g.lineTo(cx, cy + 22); g.stroke();
+        return;
+    }
+    if (map === 'haunted') {
+        g.fillStyle = '#141a14'; g.fillRect(0, 0, W, H);
+        g.fillStyle = '#2e3828'; g.fillRect(8, 8, W - 16, H - 16);
+        g.strokeStyle = '#4a4a54'; g.lineWidth = 2; g.strokeRect(8, 8, W - 16, H - 16);
+        g.fillStyle = '#5f5a50'; g.fillRect(W / 2 - 7, H * 0.68, 14, H * 0.32 - 8);
+        for (let y = 20; y < H - 14; y += 14) for (let x = 18; x < W - 14; x += 11) { if (x > W * 0.27 && x < W * 0.73 && y > H * 0.24 && y < H * 0.76 || Math.abs(x - W / 2) < 12 || rnd() < 0.4) continue; g.fillStyle = '#7a7780'; g.fillRect(x, y, 5, 3); }
+        g.fillStyle = '#1c1418'; g.fillRect(W * 0.28, H * 0.26, W * 0.44, H * 0.48);
+        g.fillStyle = '#4a3528'; g.fillRect(W * 0.29, H * 0.28, W * 0.42, H * 0.44);
+        g.fillStyle = '#2e2228'; for (const fx of [0.4, 0.6]) g.fillRect(W * fx, H * 0.28, 2, H * 0.44); g.fillRect(W * 0.29, H * 0.43, W * 0.11, 2); g.fillRect(W * 0.6, H * 0.57, W * 0.11, 2);
+        for (let i = 0; i < 9; i++) { const x = rnd() * W, y = rnd() * H, c = rnd() < 0.3 ? '#7dffb0' : '#ffb347'; g.shadowColor = c; g.shadowBlur = 10; g.fillStyle = c; g.beginPath(); g.arc(x, y, 2.5, 0, TAU); g.fill(); }
+        g.shadowBlur = 0;
+        g.fillStyle = 'rgba(200,210,220,0.12)'; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(rnd() * W, rnd() * H, 30 + rnd() * 30, 0, TAU); g.fill(); }
+        g.fillStyle = 'rgba(220,240,255,0.55)'; g.beginPath(); g.arc(W / 2, H / 2 - 4, 10, Math.PI, 0); g.lineTo(W / 2 + 10, H / 2 + 12); for (let k = 0; k < 4; k++) g.lineTo(W / 2 + 10 - (k + 0.5) * 5, H / 2 + (k % 2 ? 12 : 7)); g.lineTo(W / 2 - 10, H / 2 + 12); g.fill();
+        g.fillStyle = '#141a14'; g.fillRect(W / 2 - 5, H / 2 - 6, 3, 4); g.fillRect(W / 2 + 2, H / 2 - 6, 3, 4);
         return;
     }
     if (map === 'cavern') {
@@ -15230,6 +15729,7 @@ function startGame(map = lastMap) {
     if (id !== 'assassin' && map === 'wasteland') map = 'ordinary';
     if ((id === 'survival' || id === 'fort') && map === 'maze') map = 'ordinary';
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
+    if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     lastMap = map;
     const setup = war ? { type: id, teams: id === 'revolution' || id === 'fort' ? 2 : warTeams, size: teamSize() }
         : id === 'murder' ? { type: id, count: Math.max(2, Math.min(MURDER.maxPlayers - 1, sliderToCount(+slider.value))), role: murderRolePick }
