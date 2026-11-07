@@ -5099,7 +5099,7 @@ function drawDuelOverlay(now) {
 // ---------- Battleships ----------
 // Two fleets on the open sea. Every ship is a real moving deck you walk around on: the people aboard ride along with it.
 // Battleships (up to 100 aboard) with big turning cannons, deck cannons, deck guns and a helicopter on the back; destroyers
-// with torpedoes; fast gunboats. Somebody has to stand at the wheel: shoot the pilot and the ship drifts until someone else
+// with deck cannons; fast gunboats. Torpedoes only come from a battleship's bottom deck and from submarines. Somebody has to stand at the wheel: shoot the pilot and the ship drifts until someone else
 // takes over, and if an enemy takes the wheel the ship is theirs. When hulls touch you can walk across and board.
 // A fleet is finished when it has no ship afloat with anyone left on it.
 const NAVY = {
@@ -5131,7 +5131,9 @@ const NAVY = {
                 ['missile', 840, -55, null, 'hall'], ['missile', 840, 55, null, 'hall'],
                 ['med', 640, -150, null, 'hall'], ['med', 640, 150, null, 'hall'], ['med', 380, -165, null, 'hall'], ['med', 380, 165, null, 'hall'],
                 ['med', 120, -165, null, 'hall'], ['med', 120, 165, null, 'hall'], ['med', -140, -165, null, 'hall'], ['med', -140, 165, null, 'hall'],
-                ['med', -400, -165, null, 'hall'], ['med', -400, 165, null, 'hall'], ['med', -640, -160, null, 'hall'], ['med', -640, 160, null, 'hall']],
+                ['med', -400, -165, null, 'hall'], ['med', -400, 165, null, 'hall'], ['med', -640, -160, null, 'hall'], ['med', -640, 160, null, 'hall'],
+                // the torpedo launchers: down on the bottom deck, the only place a ship fires torpedoes from
+                ['torp', 820, -60, null, 'subdeck'], ['torp', 820, 60, null, 'subdeck'], ['torp', -860, -60, null, 'subdeck'], ['torp', -860, 60, null, 'subdeck']],
             // The weapons hangar, below on the gun deck: grab a heavy gun, then take it up top to fight from the rail
             racks: [[385, -95, 'hall'], [385, 95, 'hall'], [120, -95, 'hall'], [120, 95, 'hall']],
             pad: [-860, 0], subbays: [{ kind: 'sub', lx: 560, ly: -105 }, { kind: 'sub', lx: 300, ly: 105 }, { kind: 'sub', lx: 40, ly: -105 }, { kind: 'subsmall', lx: -200, ly: 105 }, { kind: 'subsmall', lx: -650, ly: -105 }, { kind: 'subsmall', lx: -650, ly: 105 }], supply: [[-715, 120], [880, 0]]
@@ -5139,7 +5141,7 @@ const NAVY = {
         destroyer: {
             name: 'Destroyer', len: 1120, beam: 260, hp: 14000, speed: 205, accel: 30, turn: 0.2, crew: 20, bow: 224, aft: 336, helm: [132, 0],
             boxes: [{ x: 20, y: 0, hw: 90, hh: 62, k: 'bridge' }, { x: -155, y: 0, hw: 45, hh: 34, k: 'funnel' }],
-            guns: [['med', 330, 0, 44], ['torp', -265, -72], ['torp', -265, 72], ['mg', -470, 0]],
+            guns: [['med', 330, 0, 44], ['med', -340, 0, 44], ['mg', -470, 0]],
             supply: [[450, 0]]
         },
         gunboat: {
@@ -5615,8 +5617,89 @@ function navyOverboard(f, s) {
 }
 
 // Everything that rides on a deck, once per frame, after the ships have moved
+// ----- Wakes -----
+// Everything moving through the water leaves a V of waves spreading out behind it (the two arms open at about
+// 20 degrees each side, like a real Kelvin wake), a churned white foam trail down the middle, and ripples.
+const WAKE = { every: 90, spread: 0.36 };
+function wakeDrop(o, x, y, a, speed, w, life, faint) {
+    const t = o.trail || (o.trail = []);
+    if (Math.abs(speed) > 15 && (!t.length || G.time - t[t.length - 1].t >= WAKE.every)) t.push({ x, y, a, t: G.time, v: Math.abs(speed), w, life, faint });
+    while (t.length && G.time - t[0].t > t[0].life) t.shift();
+}
+function updateWakes() {
+    const N = G.navy;
+    for (const s of N.ships) {
+        if (s.sunk) { s.trail = null; continue; }
+        const L = s.C.len / 2;
+        wakeDrop(s, navyWx(s, -L + 30, 0), navyWy(s, -L + 30, 0), s.a, s.sinkAt ? 0 : s.speed, s.C.beam * 0.6, 7000, 0);
+        // ripples rolling off the arms of the V now and then
+        if (s.speed > 40 && s.trail && s.trail.length > 6 && Math.random() < 0.25 && inView(s.x, s.y, s.C.len)) {
+            const q = s.trail[randInt(0, s.trail.length - 4)], age = (G.time - q.t) / 1000, side = Math.random() < 0.5 ? -1 : 1, off = q.w / 2 + age * Math.min(q.v, 300) * WAKE.spread;
+            G.particles.push({ type: 'ring', x: q.x - Math.sin(q.a) * off * side, y: q.y + Math.cos(q.a) * off * side, vx: 0, vy: 0, life: 1.4, max: 1.4, size: rand(30, 60), color: '#d8f1ff' });
+        }
+    }
+    for (const c of G.world.cars) {
+        if (c.dead || c.onShip || !vt(c).water) { if (c.trail) c.trail = null; continue; }
+        const T = vt(c);
+        wakeDrop(c, c.x - Math.cos(c.a) * T.len / 2, c.y - Math.sin(c.a) * T.len / 2, c.a, c.speed, T.wid, 3500, c.submerged ? 1 : 0);
+    }
+    for (const b of G.bullets) if (b.torpedo) {
+        const sp = Math.hypot(b.vx, b.vy);
+        wakeDrop(b, b.x - b.vx / sp * 26, b.y - b.vy / sp * 26, Math.atan2(b.vy, b.vx), sp, 10, 2600, 1);
+        if (Math.random() < 0.3 && inView(b.x, b.y, 60)) G.particles.push({ type: 'ring', x: b.x - b.vx / sp * 40, y: b.y - b.vy / sp * 40, vx: 0, vy: 0, life: 0.8, max: 0.8, size: rand(12, 22), color: '#e8f6ff' });
+    }
+}
+function drawWake(o, now) {
+    const t = o.trail;
+    if (!t || t.length < 2) return;
+    // (plus the boat itself, so the V starts right at the stern)
+    const pts = t;
+    ctx.lineCap = 'round';
+    for (let i = 1; i < pts.length; i++) {
+        const q = pts[i], q0 = pts[i - 1], age = (G.time - q.t) / 1000, age0 = (G.time - q0.t) / 1000, k = 1 - (G.time - q.t) / q.life;
+        if (k <= 0) continue;
+        const fa = q.faint ? 0.45 : 1, sp = Math.min(q.v, 300) * WAKE.spread;
+        const nx = -Math.sin(q.a), ny = Math.cos(q.a), nx0 = -Math.sin(q0.a), ny0 = Math.cos(q0.a);
+        const o1 = q.w / 2 + age * sp, o0 = q0.w / 2 + age0 * sp;
+        // the two arms of the V
+        ctx.strokeStyle = `rgba(226,244,255,${0.55 * k * fa})`; ctx.lineWidth = (q.faint ? 2 : 5) * (0.5 + k * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(q0.x + nx0 * o0, q0.y + ny0 * o0); ctx.lineTo(q.x + nx * o1, q.y + ny * o1);
+        ctx.moveTo(q0.x - nx0 * o0, q0.y - ny0 * o0); ctx.lineTo(q.x - nx * o1, q.y - ny * o1);
+        ctx.stroke();
+        // a second, fainter wave just inside each arm
+        ctx.strokeStyle = `rgba(226,244,255,${0.22 * k * fa})`; ctx.lineWidth = q.faint ? 1.5 : 3;
+        const i1 = o1 * 0.72, i0 = o0 * 0.72;
+        ctx.beginPath();
+        ctx.moveTo(q0.x + nx0 * i0, q0.y + ny0 * i0); ctx.lineTo(q.x + nx * i1, q.y + ny * i1);
+        ctx.moveTo(q0.x - nx0 * i0, q0.y - ny0 * i0); ctx.lineTo(q.x - nx * i1, q.y - ny * i1);
+        ctx.stroke();
+        // the churned foam down the middle, widening and fading
+        ctx.strokeStyle = `rgba(240,250,255,${0.42 * k * k * fa})`; ctx.lineWidth = q.w * (0.5 + age * 0.18) * (q.faint ? 0.5 : 1);
+        ctx.beginPath(); ctx.moveTo(q0.x, q0.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+    }
+}
+function drawNavyWakes(L, T, R, B, now) {
+    const inBox = o => { const t = o.trail; if (!t || !t.length) return false; const q = t[t.length - 1], m = 900; return q.x > L - m && q.x < R + m && q.y > T - m && q.y < B + m; };
+    for (const s of G.navy.ships) if (inBox(s)) drawWake(s, now);
+    for (const c of G.world.cars) if (c.trail && inBox(c)) drawWake(c, now);
+    for (const b of G.bullets) if (b.trail && inBox(b)) drawWake(b, now);
+    // Bow waves: white water curling off the front of anything under way
+    for (const s of G.navy.ships) {
+        if (s.sunk || s.sinkAt || s.speed < 30 || !inView(s.x, s.y, s.C.len / 2 + 100)) continue;
+        const L2 = s.C.len / 2, k = clamp(s.speed / 250, 0.2, 1), hb = s.C.beam / 2;
+        ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.a);
+        ctx.strokeStyle = `rgba(240,250,255,${0.65 * k})`; ctx.lineWidth = 6; ctx.lineCap = 'round';
+        for (const side of [-1, 1]) {
+            ctx.beginPath(); ctx.moveTo(L2 + 6, 0); ctx.quadraticCurveTo(L2 - 40, side * (hb * 0.7 + 30 * k), L2 - 160 - 120 * k, side * (hb + 40 * k)); ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
 function updateNavy(dt) {
     const N = G.navy;
+    updateWakes();
     for (const s of N.ships) {
         s.oca = s.ca; s.osa = s.sa; s.ox = s.x; s.oy = s.y;
         if (s.helm.crew && (s.helm.crew.dead || s.helm.crew.ship !== s || s.helm.crew.station !== s.helm)) s.helm.crew = null;
@@ -5896,6 +5979,12 @@ function navyPlayer(p, I, mx, my, dt) {
 
 // ----- What bullets and blasts do to ships -----
 function navyBullet(b) {
+    // A torpedo runs under the water: it finds submarines (dived or not) and boats as well as hulls
+    if (b.torpedo) for (const c of G.world.cars) {
+        if (c.dead || c.onShip || !vt(c).water || !c.driver || c === (b.owner && b.owner.car) || !foe(b.owner, c.driver) || !inCar(c, b.x, b.y, 10)) continue;
+        damageCar(c, 900, b.owner);
+        return true;
+    }
     for (const s of G.navy.ships) {
         if (s.sunk) continue;
         const dx = b.x - s.x, dy = b.y - s.y;
@@ -6291,6 +6380,7 @@ function navyIslandShape(g, q, baseR) {
     g.closePath();
 }
 function drawNavy(L, T, R, B, now) {
+    drawNavyWakes(L, T, R, B, now);
     for (const s of G.navy.ships) {
         if (s.x + s.C.len / 2 + 80 < L || s.x - s.C.len / 2 - 80 > R || s.y + s.C.len / 2 + 80 < T || s.y - s.C.len / 2 - 80 > B) continue;
         const C = s.C, art = navyArt(s.kind, s.team);
@@ -16709,7 +16799,7 @@ const BRIEF = {
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the submarine deck, is further down: three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see (and can only shoot) the people on the deck you\'re on.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see (and can only shoot) the people on the deck you\'re on.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
