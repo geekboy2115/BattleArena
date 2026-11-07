@@ -5996,6 +5996,30 @@ const navyWindowAt = (s, room, lx, ly) => {
     const R = s.C.rooms && s.C.rooms[room];
     return !!(R && R.windows && Math.abs(ly) > navyHw(s.C, lx) - 46 && R.windows.some(w => Math.abs(lx - w) < NAVY_WIN));
 };
+// Someone below deck standing by one of the windows: they can be seen (and shot) from outside
+function navyByWindow(f) {
+    const s = f.ship, R = s && f.room && s.C.rooms && s.C.rooms[f.room];
+    if (!R || !R.windows) return false;
+    const lx = navyLx(s, f.x, f.y), ly = navyLy(s, f.x, f.y);
+    return Math.abs(ly) > navyHw(s.C, lx) - 120 && R.windows.some(w => Math.abs(lx - w) < 60);
+}
+// Does the line from someone below deck (a) out to someone outside (b) leave the hull through a window?
+function navyWindowLine(a, b) {
+    const s = a.ship, d = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / d, uy = (b.y - a.y) / d;
+    for (let t = 0; t < Math.min(d, s.C.beam + 60); t += 12) {
+        const x = a.x + ux * t, y = a.y + uy * t, lx = navyLx(s, x, y), ly = navyLy(s, x, y);
+        if (!navyInHull(s, lx, ly, -14)) return navyWindowAt(s, a.room, lx, ly);
+    }
+    return false;
+}
+// Can a see b? Same deck of the same ship, or through a window either way
+function navySees(a, b) {
+    const ar = a.room || null, br = b.room || null;
+    if (ar === br) return !ar || a.ship === b.ship;
+    if (ar && !br) return navyByWindow(a) && navyWindowLine(a, b);
+    if (!ar && br) return b.ship !== a.ship && navyByWindow(b) && navyWindowLine(b, a);
+    return false;
+}
 function navyDeckStep(b) {
     if (b.navyDeck === undefined) {
         const o = b.owner;
@@ -6003,6 +6027,14 @@ function navyDeckStep(b) {
         b.overHull = o && !o.room && o.ship || null;
         // (a shot from up on a ship's open deck flies over the hulls; from below deck, the water or an island it's low enough for a window)
         b.low = !b.overHull;
+        if (!b.low && o) {
+            const sp = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / sp, uy = b.vy / sp;
+            for (const f of G.fighters) {
+                if (f.dead || !f.room || f.ship === o.ship || !foe(o, f)) continue;
+                const dx = f.x - b.x, dy = f.y - b.y, along = dx * ux + dy * uy;
+                if (along > 0 && along < 2500 && Math.abs(dx * uy - dy * ux) < 60 && navyByWindow(f)) { b.low = true; break; }
+            }
+        }
     }
     if (b.navyDeck) {
         const s = b.navyDeck;
@@ -6124,12 +6156,14 @@ function navyThink(b) {
     b.nextThink = G.time + rand(420, 780) * AIK().think;
     let enemy = null, bd = 1050 * AIK().sight;
     G.fgrid.query(b.x, b.y, bd, f => {
-        if (f.dead || f === b || f.riding || !foe(b, f) || (f.room || null) !== (b.room || null)) return;
+        if (f.dead || f === b || f.riding || !foe(b, f) || !navySees(b, f)) return;
         // (a look at the person who's a real threat: anyone aboard this ship first)
         const d = Math.hypot(f.x - b.x, f.y - b.y) * (f.ship && f.ship === s ? 0.45 : 1);
         if (d < bd) { bd = d; enemy = f; }
     });
-    if (enemy && !navyLOS(b, enemy)) { if (enemy.ship !== s || !s) enemy = null; else b.hasLOS = false; }
+    // (through a window the line is clear by definition; on the open deck the guns and the funnel get in the way)
+    if (enemy && (enemy.room || null) !== (b.room || null)) b.hasLOS = true;
+    else if (enemy && !navyLOS(b, enemy)) { if (enemy.ship !== s || !s) enemy = null; else b.hasLOS = false; }
     else if (enemy) b.hasLOS = true;
     if (enemy && b.target !== enemy) b.engageAt = G.time + rand(150, 500) * AIK().react;
     b.target = enemy;
@@ -14473,8 +14507,8 @@ function render() {
     const visible = [];
     const deckOf = f => (f && f.room && f.ship ? f.ship : null), myDeck = G.player ? G.player.room || null : null, myShip = deckOf(G.player);
     for (const f of G.fighters) if (!f.car && !f.up && f.x > L - 80 && f.x < R + 80 && f.y > T - 80 && f.y < B + 80) {
-        // (Battleships: on the open deck you don't see anyone below; below deck you see your own deck, and out of the windows)
-        if (G.navy && (myDeck ? !((f.room === myDeck && f.ship === myShip) || (!f.room && f.ship !== myShip)) : f.room)) continue;
+        // (Battleships: from outside you only see people below deck through a window; below deck you see your own deck, and out of the windows)
+        if (G.navy && (myDeck ? !((f.room === myDeck && f.ship === myShip) || (!f.room && f.ship !== myShip)) : f.room && (f.ship === (G.player && G.player.ship) || !navyByWindow(f)))) continue;
         visible.push(f);
     }
     if (G.world.cars) { drawCars(); drawDriveRoute(); }
@@ -16919,7 +16953,7 @@ const BRIEF = {
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
