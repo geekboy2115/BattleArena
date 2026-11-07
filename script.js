@@ -5105,8 +5105,8 @@ function drawDuelOverlay(now) {
 const NAVY = {
     maxPeople: 800, playerHp: 300, hullMul: 0.6, escortCrew: 25, swimPace: 0.5, drown: 1.2, board: 110, heliBack: 60000,
     guns: {
-        main: { name: 'Main Cannon', rate: 5000, speed: 1500, range: 4200, dmg: 16, blastR: 125, hull: 100, hp: 2200, r: 78, turn: 0.9, zoom: 0.3 },
-        med: { name: 'Deck Cannon', rate: 2400, speed: 1500, range: 3000, dmg: 22, blastR: 85, hull: 45, hp: 800, r: 30, turn: 1.8, zoom: 0.42 },
+        main: { name: 'Main Cannon', rate: 1500, speed: 1500, range: 4200, dmg: 16, blastR: 125, hull: 100, hp: 2200, r: 78, turn: 0.9, zoom: 0.3 },
+        med: { name: 'Deck Cannon', rate: 800, speed: 1500, range: 3000, dmg: 22, blastR: 85, hull: 45, hp: 800, r: 30, turn: 1.8, zoom: 0.42 },
         mg: { name: 'Deck Gun', rate: 45, speed: 2100, range: 1500, dmg: 20, hp: 400, r: 20, turn: 4, zoom: 0.65 },
         torp: { name: 'Torpedo Tube', rate: 12000, speed: 520, range: 5200, dmg: 70, blastR: 140, hull: 1500, hp: 500, r: 26, turn: 1.2, zoom: 0.3 },
         missile: { name: 'Missile Battery', rate: 9000, speed: 820, range: 6000, dmg: 55, blastR: 170, hull: 260, hp: 700, r: 32, turn: 2.2, zoom: 0.35 }
