@@ -138,7 +138,7 @@ const viewScale = () => (G && G.early ? 1 : 1.3);
 const wideZoom = (w = viewW, h = viewH) => Math.min(w, h) / (REVO.base.width + 700);
 const inCannon = f => !!(f && !f.dead && f.car && f.car.type === 'bigtower');
 // The usual view (scaled to the screen so every window size sees the same amount), wide while you man a castle cannon
-const normalZoom = (w = viewW, h = viewH, f = G && G.player) => (inCannon(f) ? wideZoom(w, h) : BASE_ZOOM * Math.hypot(w, h) / Math.hypot(1400, 850) / viewScale());
+const normalZoom = (w = viewW, h = viewH, f = G && G.player) => (inCannon(f) ? wideZoom(w, h) : BASE_ZOOM * Math.hypot(w, h) / Math.hypot(1400, 850) / viewScale() * (G && G.navy ? navyZoomK(f) : 1));
 const AIRDROP_GUNS = ['Vector', 'Heavy MG'];
 // Early Warfare: every gun anywhere is swapped for one of these
 const EARLY_TABLE = [['Sword', 10], ['Spear', 8], ['Bow', 8], ['Crossbow', 4], ['Dagger', 9], ['Axe', 7], ['Mace', 5], ['Halberd', 4], ['War Hammer', 2.5], ['Longbow', 2.5]];
@@ -163,7 +163,7 @@ const ENEMY_EDGE = { aim: 0.82, hits: 1.08, takes: 0.9 };
 const NO_EDGE = { aim: 1, hits: 1, takes: 1 };
 // A person playing (you, or a friend on your game) rather than a bot
 const isHuman = f => !!(f && (f.isPlayer || f.remote));
-const edgeOf = f => !G.war || !f || isHuman(f) || f.team === null || f.team === 0 ? NO_EDGE : f.team === RED_EDGE.team ? RED_EDGE : ENEMY_EDGE;
+const edgeOf = f => !G.war || G.navy || !f || isHuman(f) || f.team === null || f.team === 0 ? NO_EDGE : f.team === RED_EDGE.team ? RED_EDGE : ENEMY_EDGE;
 const WAR_GUN_TABLE = [...GUN_TABLE, ['Assault Rifle', 8], ['Minigun', 0.6], ['Rocket Launcher', 0.6], ['Barrett', 0.4]];
 const SUPPLY_TABLE = [
     ['Mac10', 6], ['Shotgun', 6], ['Double Barrel', 4], ['Breacher', 4], ['Machine Gun', 5], ['Sniper', 4], ['AWP', 2],
@@ -571,6 +571,7 @@ function playerAction(p, code) {
     if (code === 'KeyF') {
         // F: launch the boss strike, get out of the car, pick up what's at your feet, or get into a car nearby
         // (up on the castle walkway, the only thing to get into is a corner gun)
+        if (G.navy && navyUse(p)) return;
         if (tryLaunchStrike(p)) return;
         if (nearOwnPad(p)) { if (p.remote) loadAllAmmo(p); else openStrikeLoad(p); return; }
         if (p.car) exitCar(p);
@@ -1217,6 +1218,7 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'maze' || type === 'mountain') return generateTerrain(type);
     if (type === 'cavern') return generateCavern();
     if (type === 'haunted') return generateHaunted();
+    if (type === 'sea') return generateSea();
     // Wasteland (Assassin's map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
@@ -4632,8 +4634,8 @@ function newState(mode, setup) {
     const zombies = setup.type === 'zombies', escape = setup.type === 'escape', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', assassin = setup.type === 'assassin', bossFight = setup.type === 'boss';
-    const murder = setup.type === 'murder', ghostMode = setup.type === 'ghost', duel = setup.type === 'duel' && mode === 'playing';
-    const war = setup.type === 'war' || setup.type === 'hightech' || revolution ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
+    const murder = setup.type === 'murder', ghostMode = setup.type === 'ghost', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
+    const war = setup.type === 'war' || setup.type === 'hightech' || revolution || navy ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
         mode, cpuCount, war,
@@ -4642,7 +4644,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin || bossFight, assassin, bossFight, bossF: null, murder, ghostMode, duel: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin || bossFight, assassin, bossFight, bossF: null, murder, ghostMode, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4692,7 +4694,7 @@ function newState(mode, setup) {
     };
     setNextZoneTarget(G.zone);
     // (no red zone at all in Survival or Murder Mystery)
-    if (G.noZone || revolution || survival || murder) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    if (G.noZone || revolution || survival || murder || navy) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Ghost is played in one fixed circle in the middle of the map
     const arena = ghostMode ? GHOST.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
@@ -4703,7 +4705,7 @@ function newState(mode, setup) {
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
     // (Murder Mystery has none: the knife and the sheriff's gun are the only weapons)
-    const noLoot = murder || duel;
+    const noLoot = murder || duel || navy;
     if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
@@ -4729,8 +4731,9 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the Assassin's wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !murder && !ghostMode && !duel) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !murder && !ghostMode && !duel && !navy) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
+    else if (navy) setupNavy(setup);
     else if (war) {
         spawnTeams(W / 2, setup.baseDist || W * 0.33);
     } else if (escape) {
@@ -5223,6 +5226,1088 @@ function drawDuelOverlay(now) {
         ctx.beginPath(); ctx.arc(X, Y, 5 * f, 0, TAU); ctx.fill(); ctx.restore();
         arrow(e.x, e.y, '#fff6c8', 'GLINT');
     }
+}
+
+// ---------- Battleships ----------
+// Two fleets on the open sea. Every ship is a real moving deck you walk around on: the people aboard ride along with it.
+// Battleships (up to 100 aboard) with big turning cannons, deck cannons, deck guns and a helicopter on the back; destroyers
+// with torpedoes; fast gunboats. Somebody has to stand at the wheel: shoot the pilot and the ship drifts until someone else
+// takes over, and if an enemy takes the wheel the ship is theirs. When hulls touch you can walk across and board.
+// A fleet is finished when it has no ship afloat with anyone left on it.
+const NAVY = {
+    maxPeople: 800, escortCrew: 25, swimPace: 0.5, drown: 1.2, board: 110, heliBack: 60000,
+    guns: {
+        main: { name: 'Main Cannon', rate: 5000, speed: 1500, range: 4200, dmg: 16, blastR: 125, hull: 100, hp: 2200, r: 78, turn: 0.9, zoom: 0.3 },
+        med: { name: 'Deck Cannon', rate: 2400, speed: 1500, range: 3000, dmg: 22, blastR: 85, hull: 45, hp: 800, r: 30, turn: 1.8, zoom: 0.42 },
+        mg: { name: 'Deck Gun', rate: 110, speed: 1900, range: 1300, dmg: 9, hp: 400, r: 20, turn: 4, zoom: 0.65 },
+        torp: { name: 'Torpedo Tube', rate: 12000, speed: 520, range: 5200, dmg: 70, blastR: 140, hull: 1500, hp: 500, r: 26, turn: 1.2, zoom: 0.3 }
+    },
+    ships: {
+        battleship: {
+            name: 'Battleship', len: 2000, beam: 440, hp: 42000, speed: 135, accel: 16, turn: 0.11, crew: 100, bow: 400, aft: 600, helm: [232, 0],
+            boxes: [{ x: 40, y: 0, hw: 160, hh: 100, k: 'bridge' }, { x: -235, y: 0, hw: 65, hh: 58, k: 'funnel' }],
+            guns: [['main', 680, 0], ['main', 430, 0], ['main', -400, 0], ['main', -600, 0], ['med', 540, -165], ['med', 540, 165], ['med', -60, -165], ['med', -60, 165], ['med', -500, -165], ['med', -500, 165],
+                ['mg', 840, -90], ['mg', 840, 90], ['mg', 300, -180], ['mg', 300, 180], ['mg', -200, -175], ['mg', -200, 175], ['mg', -780, -120], ['mg', -780, 120]],
+            pad: [-860, 0], supply: [[-715, 0], [880, 0]]
+        },
+        destroyer: {
+            name: 'Destroyer', len: 1120, beam: 260, hp: 14000, speed: 205, accel: 30, turn: 0.2, crew: 20, bow: 224, aft: 336, helm: [132, 0],
+            boxes: [{ x: 20, y: 0, hw: 90, hh: 62, k: 'bridge' }, { x: -155, y: 0, hw: 45, hh: 34, k: 'funnel' }],
+            guns: [['med', 330, 0, 44], ['med', -360, 0, 44], ['torp', -265, -72], ['torp', -265, 72], ['mg', 215, -84], ['mg', 215, 84], ['mg', -470, -55], ['mg', -470, 55]],
+            supply: [[450, 0]]
+        },
+        gunboat: {
+            name: 'Gunboat', len: 460, beam: 140, hp: 4000, speed: 320, accel: 70, turn: 0.5, crew: 5, bow: 92, aft: 138, helm: [40, 0],
+            boxes: [{ x: -25, y: 0, hw: 45, hh: 22, k: 'cabin' }],
+            guns: [['med', 140, 0, 24], ['mg', -135, 0]],
+            supply: []
+        }
+    },
+    names: ['Vanguard', 'Titan', 'Resolute', 'Colossus', 'Iron Duke', 'Warspite', 'Valiant', 'Thunderer', 'Dauntless', 'Goliath', 'Sentinel', 'Tempest', 'Leviathan', 'Trident', 'Defiant', 'Avenger', 'Sovereign', 'Hercules', 'Monarch', 'Courageous', 'Ajax', 'Falcon', 'Corsair', 'Orion'],
+    hullBy: { 'Rocket Pod': 90, 'Rocket Launcher': 170, 'Gunship explosion': 200 }
+};
+
+// The sea itself: open water with a few small islands to steer round
+function generateSea() {
+    const W = CONFIG.WORLD_SIZE, grid = new Grid(256, 90), obstacles = [], islands = [];
+    for (let i = 0, tries = 0; i < 6 && tries < 200; tries++) {
+        const r = rand(260, 480), x = rand(1800, W - 1800), y = rand(4700, W - 4700);
+        if (islands.some(q => Math.hypot(q.x - x, q.y - y) < q.r + r + 1400)) continue;
+        islands.push({ x, y, r, seed: randInt(1, 1e6) });
+        i++;
+    }
+    for (const q of islands) {
+        for (let k = 0; k < q.r / 26; k++) {
+            const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (q.r - 70), x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d;
+            if (blockedAt(grid, x, y, 60)) continue;
+            const o = { type: 'tree', x, y, r: 0, canopy: rand(70, 110), spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999, seed: randInt(1, 1e9) };
+            o.r = o.canopy * 0.27;
+            obstacles.push(o); grid.insert(o);
+        }
+    }
+    const [mm, g] = makeCanvas(200, 200), k = 200 / W;
+    g.fillStyle = '#1c6e93'; g.fillRect(0, 0, 200, 200);
+    for (const q of islands) { g.fillStyle = '#e0c98e'; g.beginPath(); g.arc(q.x * k, q.y * k, Math.max(3, q.r * k), 0, TAU); g.fill(); g.fillStyle = '#4f8f3e'; g.beginPath(); g.arc(q.x * k, q.y * k, Math.max(2, (q.r - 50) * k), 0, TAU); g.fill(); }
+    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots: [], minimap: mm, city: null, stairs: [], floor: null, terrain: 'sea', islands };
+}
+
+const navyHw = (C, lx) => {
+    const hb = C.beam / 2, L2 = C.len / 2;
+    if (lx > C.bow) { const t = Math.min(1, (lx - C.bow) / (L2 - C.bow)); return hb * Math.sqrt(1 - t * t); }
+    if (lx < -C.aft) { const t = Math.min(1, (-lx - C.aft) / (L2 - C.aft)); return hb * (1 - 0.35 * t * t); }
+    return hb;
+};
+const navyInHull = (s, lx, ly, m = 0) => Math.abs(lx) < s.C.len / 2 + m && Math.abs(ly) < navyHw(s.C, lx) + m;
+const navyLx = (s, x, y) => (x - s.x) * s.ca + (y - s.y) * s.sa;
+const navyLy = (s, x, y) => -(x - s.x) * s.sa + (y - s.y) * s.ca;
+const navyWx = (s, lx, ly) => s.x + lx * s.ca - ly * s.sa;
+const navyWy = (s, lx, ly) => s.y + lx * s.sa + ly * s.ca;
+const navyIsland = (x, y, m = 0) => G.navy.islands.some(q => (q.x - x) ** 2 + (q.y - y) ** 2 < (q.r + m) ** 2);
+// Afloat, somebody on it, and on the other side
+const navyHostile = (s, team) => !s.sinkAt && s.team !== team && s.crewN > 0;
+
+function addShip(kind, team, x, y, a) {
+    const N = G.navy, C = NAVY.ships[kind];
+    const s = { kind, C, team, x, y, a, ca: Math.cos(a), sa: Math.sin(a), ox: x, oy: y, oca: Math.cos(a), osa: Math.sin(a), speed: C.speed * 0.6, throttle: 0.8, rudder: 0, hp: C.hp, maxHp: C.hp, R2: (C.len / 2 + 30) ** 2, name: NAVY.names[N.nameAt++ % NAVY.names.length], crewN: 1, spots: [], planks: [], guns: [], fireT: 0, nextOrder: 0, want: a, wantThrottle: 0.8, assaultAt: G.time + rand(150000, 300000), heli: null, heliAt: 0 };
+    s.helm = { helm: true, ship: s, lx: C.helm[0], ly: C.helm[1], r: 26, crew: null, claim: null };
+    s.blocks = C.boxes.map(o => ({ ...o, box: true }));
+    for (const [k, lx, ly, r] of C.guns) {
+        const D = NAVY.guns[k], gun = { gun: true, kind: k, D, ship: s, lx, ly, r: r || D.r, rel: lx < 0 && k === 'main' ? Math.PI : 0, hp: D.hp, crew: null, claim: null, fireAt: G.time + rand(0, 2500), think: 0 };
+        s.guns.push(gun);
+        if (gun.r >= 44) s.blocks.push({ x: lx, y: ly, r: gun.r });
+    }
+    N.ships.push(s);
+    if (C.pad) navyAddHeli(s);
+    return s;
+}
+function navyAddHeli(s) {
+    const [lx, ly] = s.C.pad, T = VTYPES.gunship;
+    const c = { type: 'gunship', x: navyWx(s, lx, ly), y: navyWy(s, lx, ly), a: s.a, speed: 0, hp: T.hp, color: s.team === 0 ? '#2c4f78' : '#6e2c2c', driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: s.a, onShip: s, lx, ly, la: 0 };
+    G.world.cars.push(c);
+    s.heli = c; s.heliClaim = null;
+    return c;
+}
+
+function navyDeckSpot(s) {
+    const C = s.C;
+    for (let t = 0; t < 30; t++) {
+        const lx = rand(-C.len / 2 + 40, C.len / 2 - 60), hw = navyHw(C, lx) - 26;
+        if (hw < 10) continue;
+        const ly = rand(-hw, hw);
+        if (!s.blocks.some(o => (o.box ? Math.abs(lx - o.x) < o.hw + 26 && Math.abs(ly - o.y) < o.hh + 26 : Math.hypot(lx - o.x, ly - o.y) < o.r + 26))) return { lx, ly };
+    }
+    return { lx: s.helm.lx, ly: s.helm.ly };
+}
+const NAVY_GUNS = [['Assault Rifle', 10], ['Machine Gun', 3], ['Shotgun', 2], ['Vector', 2], ['Rocket Launcher', 1]];
+function navyCrewman(s, name, isPlayerToo) {
+    const { lx, ly } = navyDeckSpot(s);
+    let f;
+    if (isPlayerToo) { addPlayer({ x: navyWx(s, lx, ly), y: navyWy(s, lx, ly) }, s.team); f = G.player; }
+    else { f = createFighter(navyWx(s, lx, ly), navyWy(s, lx, ly), { name, color: TEAMS[s.team].color, team: s.team }); G.fighters.push(f); }
+    const human = !!isPlayerToo, gun = human ? 'Assault Rifle' : weightedPick(NAVY_GUNS);
+    f.ship = s; f.swim = false; f.station = null;
+    f.inv = [gun, 'Pistol']; f.slot = 0;
+    f.ammo = human ? { [gun]: 300, Pistol: 60 } : { [gun]: Infinity, Pistol: Infinity };
+    f.armor = 100; f.likesCars = false;
+    f.items.bandage = 3; f.items.medkit = 1; f.items.grenade = 2;
+    f.boarder = Math.random() < (s.kind === 'gunboat' ? 0.9 : 0.5);
+    f.postX = rand(-0.42, 0.42) * s.C.len; f.postY = rand(0.35, 1); f.nextThink = rand(0, 500);
+    G.teamAlive[s.team]++;
+    return f;
+}
+function setupNavy(setup) {
+    const W = CONFIG.WORLD_SIZE, C = W / 2, demo = G.mode === 'demo';
+    const n = setup.ships || 1, crew = setup.crew || 20;
+    G.navy = { ships: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n, crew, wake: 0 };
+    G.world.cars = [];
+    let name = 0;
+    const firstPlayer = G.mode === 'playing';
+    let flagship = null;
+    for (let t = 0; t < 2; t++) {
+        const dir = t === 0 ? 1 : -1, head = t === 0 ? -Math.PI / 2 : Math.PI / 2, D = demo ? 1000 : 3900;
+        const row = (kind, count, d, gap) => {
+            const out = [];
+            for (let i = 0; i < count; i++) out.push(addShip(kind, t, C + (i - (count - 1) / 2) * gap, C + dir * d, head));
+            return out;
+        };
+        const big = row('battleship', n, D, Math.min(1400, 10000 / n));
+        if (t === 0) flagship = big[0];
+        const dd = demo ? [] : row('destroyer', n, D + 1400, Math.min(1400, 10000 / n));
+        const gb = row('gunboat', n, Math.max(500, D - 1400), Math.min(1400, 10000 / n));
+        // Everyone goes to their stations: the wheel first, then the big guns, then a pilot, the rest on deck
+        const fill = (s, count) => {
+            for (let i = 0; i < count; i++) {
+                const mine = firstPlayer && s === flagship && i === 0;
+                const f = navyCrewman(s, botName(name++), mine);
+                if (mine) continue;
+                const st = navyVacant(s, f);
+                if (st && st.heli) { navyBoardHeli(f, st.heli); continue; }
+                if (st) navyMan(f, st);
+            }
+        };
+        for (const s of big) fill(s, crew);
+        for (const s of dd) fill(s, 20);
+        for (const s of gb) fill(s, 5);
+    }
+    for (const s of G.navy.ships) s.crewN = 1;
+    if (firstPlayer) navyPlaceRole(flagship, setup.role);
+    else G.cam.x = G.cam.y = C;
+    Sound.tone(70, 1.6, 'sawtooth', 0.08);
+}
+// The role you asked for: whoever had that job on your ship hands it over
+function navyPlaceRole(s, role) {
+    const p = G.player;
+    if (role === 'marine') { G.cam.x = p.x; G.cam.y = p.y; return; }
+    if (role === 'pilot' && s.heli) {
+        const c = s.heli;
+        if (c.driver) { const q = c.driver; exitCar(q); navyRelocate(q, s); }
+        p.ship = null;
+        navyBoardHeli(p, c);
+    } else {
+        const st = role === 'gunner' ? s.guns[0] : s.helm;
+        if (st.crew) { const q = st.crew; st.crew = null; q.station = null; navyRelocate(q, s); }
+        navyMan(p, st);
+    }
+    G.cam.x = p.x; G.cam.y = p.y;
+}
+function navyRelocate(f, s) { const { lx, ly } = navyDeckSpot(s); f.ship = s; f.swim = false; f.car = null; f.x = navyWx(s, lx, ly); f.y = navyWy(s, lx, ly); }
+
+// A station on this ship nobody has: the wheel, the guns in order of size, then the helicopter
+function navyVacant(s, b) {
+    const free = st => !st.crew && (!st.claim || st.claim === b || st.claim.dead || st.claim.ship !== s || st.claim.station);
+    if (free(s.helm)) return s.helm;
+    for (const g of s.guns) if (g.hp > 0 && free(g)) return g;
+    const c = s.heli;
+    if (c && !c.dead && c.onShip === s && !c.driver && (!s.heliClaim || s.heliClaim === b || s.heliClaim.dead)) return { heli: c, lx: c.lx, ly: c.ly, r: 60 };
+    return null;
+}
+function navyMan(f, st) {
+    if (st.crew && st.crew !== f) return false;
+    st.crew = f; st.claim = null; f.station = st; f.vx = f.vy = 0; f.ship = st.ship; f.swim = false;
+    if (st.helm && st.ship.team !== f.team) navyCapture(st.ship, f);
+    return true;
+}
+function navyBoardHeli(f, c) {
+    if (c.onShip) { c.onShip.heliClaim = null; c.onShip.heli = null; c.onShip.heliAt = G.time + NAVY.heliBack; c.onShip = null; }
+    f.ship = null; f.station = null;
+    enterCar(f, c);
+}
+function navyLeave(f) {
+    const st = f.station;
+    if (!st) return;
+    st.crew = null; f.station = null;
+    // Step off the gun onto the deck beside it
+    const s = st.ship, ly = st.ly + (st.ly >= 0 ? -1 : 1) * (st.r + 30);
+    if (st.helm) f.y = f.y; else { f.x = navyWx(s, st.lx, ly); f.y = navyWy(s, st.lx, ly); }
+}
+function navyCapture(s, by) {
+    const old = s.team;
+    s.team = by.team;
+    if (G.mode === 'playing') {
+        const mine = G.player && by.team === G.player.team;
+        showBanner(mine ? `${s.name.toUpperCase()} CAPTURED!` : `THE ENEMY TOOK THE ${s.name.toUpperCase()}`, !mine, `Its wheel is in ${mine ? 'your side\'s' : 'enemy'} hands. Anyone still aboard from the other side will fight to take it back.`);
+        Sound.tone(mine ? 660 : 180, 0.5, 'square', 0.1, mine ? 990 : 90);
+    }
+    return old;
+}
+// F: take the wheel or a gun, or jump over the side (getting into the helicopter is the usual vehicle key)
+function navyAction(p) {
+    if (p.station) return { leave: true, text: p.station.helm ? 'Leave the wheel' : `Leave the ${p.station.D.name.toLowerCase()}` };
+    const s = p.ship;
+    if (!s || p.car) return null;
+    const lx = navyLx(s, p.x, p.y), ly = navyLy(s, p.x, p.y);
+    const near = st => Math.hypot(lx - st.lx, ly - st.ly) < st.r + 60;
+    if (near(s.helm) && !s.helm.crew) return { st: s.helm, text: s.team === p.team ? 'Take the wheel' : `Take the wheel: capture the ${s.name}` };
+    if (s.team === p.team) for (const g of s.guns) if (g.hp > 0 && !g.crew && near(g)) return { st: g, text: `Man the ${g.D.name.toLowerCase()}` };
+    if (nearestCar(p, 90)) return null;
+    if (navyHw(s.C, lx) - Math.abs(ly) < 62 || s.C.len / 2 - Math.abs(lx) < 62) return { jump: true, text: 'Jump overboard' };
+    return null;
+}
+function navyUse(p) {
+    if (p.car) return false;
+    const act = navyAction(p);
+    if (!act) return false;
+    if (act.leave) navyLeave(p);
+    else if (act.st) navyMan(p, act.st);
+    else if (act.jump) {
+        const s = p.ship, lx = navyLx(s, p.x, p.y), ly = navyLy(s, p.x, p.y), side = ly >= 0 ? 1 : -1, hw = navyHw(s.C, lx);
+        const end = s.C.len / 2 - Math.abs(lx) < 62 && hw - Math.abs(ly) >= 62;
+        p.x = end ? navyWx(s, Math.sign(lx) * (s.C.len / 2 + 60), ly) : navyWx(s, lx, side * (hw + 60));
+        p.y = end ? navyWy(s, Math.sign(lx) * (s.C.len / 2 + 60), ly) : navyWy(s, lx, side * (hw + 60));
+        p.ship = null; p.swim = true; p.noClimb = G.time + 2500;
+        burst(p.x, p.y, 16, '#d8f1ff', 220, 'glow');
+    }
+    return true;
+}
+const navyLabel = p => { const a = G.navy && !p.car ? navyAction(p) : null; return a ? a.text : ''; };
+// How far out the camera sits: the big guns and the wheel need to see the whole fight
+function navyZoomK(f) {
+    if (!f) return 0.75;
+    if (f.car) return 0.6;
+    if (f.station) return f.station.helm ? 0.42 : f.station.D.zoom;
+    return 0.75;
+}
+// On a big gun the view slides toward where you're aiming, so you can see where the shells will land
+function navyLook(p) {
+    const st = p.station;
+    if (!st || !st.gun || st.kind === 'mg') return null;
+    const k = 0.6;
+    return { x: p.x + (mouse.x - viewW / 2) / G.zoom * k, y: p.y + (mouse.y - viewH / 2) / G.zoom * k };
+}
+function navyStatus(p) {
+    const N = G.navy, hull = s => `${Math.max(1, Math.ceil(s.hp / s.maxHp * 100))}%`;
+    if (p.dead) return 'You\'re gone: your fleet fights on';
+    if (p.car) return 'Flying · sink the enemy fleet';
+    if (p.station && p.station.helm) { const s = p.station.ship; return `At the wheel of the ${s.name} · throttle ${Math.round(s.throttle * 100)}% · hull ${hull(s)}`; }
+    if (p.station) return `${p.station.D.name} on the ${p.station.ship.name} · hull ${hull(p.station.ship)}`;
+    if (p.swim) return `In the water! You\'re drowning: swim to a ship · ${Math.ceil(p.hp)} health`;
+    if (p.ship) return p.ship.team === p.team ? `On the ${p.ship.name} · hull ${hull(p.ship)}${p.ship.helm.crew ? '' : ' · NOBODY AT THE WHEEL!'}` : `Aboard the enemy ${p.ship.name}: take the wheel to capture it`;
+    return 'Ashore on an island';
+}
+
+// ----- Moving the ships -----
+function navyOrders(s) {
+    // The captain's plan, thought over every half second
+    const E = s.C, W = CONFIG.WORLD_SIZE;
+    let foeS = null, bd = Infinity;
+    for (const q of G.navy.ships) if (navyHostile(q, s.team)) { const d = (q.x - s.x) ** 2 + (q.y - s.y) ** 2; if (d < bd) { bd = d; foeS = q; } }
+    if (!foeS) { s.wantThrottle = 0.2; s.want = s.a; return; }
+    const d = Math.sqrt(bd), bearing = Math.atan2(foeS.y - s.y, foeS.x - s.x);
+    const silenced = foeS.guns.every(g => g.hp <= 0 || !g.crew);
+    const myGuns = s.guns.some(g => g.hp > 0 && g.D.hull);
+    const assault = s.kind === 'gunboat' || G.time > s.assaultAt || silenced || !myGuns;
+    let want = bearing, th = 1;
+    if (assault) {
+        // Come alongside: aim for a spot right next to their hull, then match their course
+        const side = navyLy(foeS, s.x, s.y) >= 0 ? 1 : -1, off = (foeS.C.beam + E.beam) / 2 + 10;
+        const lx = clamp(navyLx(foeS, s.x, s.y), -foeS.C.len * 0.3, foeS.C.len * 0.3);
+        const tx = navyWx(foeS, lx, side * off), ty = navyWy(foeS, lx, side * off), dt = Math.hypot(tx - s.x, ty - s.y);
+        want = dt < E.len * 0.6 ? foeS.a : Math.atan2(ty - s.y, tx - s.x);
+        th = dt < E.len * 0.6 ? clamp(foeS.speed / E.speed + 0.1, 0.25, 1) : 1;
+    } else {
+        const band = s.kind === 'destroyer' ? 1900 : 2500;
+        if (d > band + 300) want = bearing;
+        else {
+            // Turn side-on so every gun bears, and ease off or close in to hold the range
+            const l = bearing + Math.PI / 2, r = bearing - Math.PI / 2;
+            want = Math.abs(angleDiff(s.a, l)) < Math.abs(angleDiff(s.a, r)) ? l : r;
+            if (d < band - 600) want += angleDiff(want, bearing + Math.PI) * 0.4;
+            th = 0.65;
+        }
+    }
+    // Keep clear of islands, other ships and the edge of the map
+    const look = E.len / 2 + 350 + Math.abs(s.speed) * 2;
+    const tip = { x: s.x + Math.cos(s.a) * look, y: s.y + Math.sin(s.a) * look };
+    let avoid = null;
+    for (const q of G.navy.islands) if (Math.hypot(q.x - tip.x, q.y - tip.y) < q.r + 280) avoid = q;
+    for (const q of G.navy.ships) if (q !== s && !q.sunk && (!assault || q !== foeS)) {
+        const lx = clamp(navyLx(q, tip.x, tip.y), -q.C.len / 2, q.C.len / 2), ly = navyLy(q, tip.x, tip.y);
+        if (Math.hypot(navyLx(q, tip.x, tip.y) - lx, ly) < q.C.beam / 2 + E.beam / 2 + 140) { avoid = { x: navyWx(q, lx, 0), y: navyWy(q, lx, 0) }; break; }
+    }
+    if (avoid) { const side = angleDiff(s.a, Math.atan2(avoid.y - s.y, avoid.x - s.x)) >= 0 ? -1 : 1; want = s.a + side * 1.2; }
+    const edge = 1100;
+    if (tip.x < edge || tip.y < edge || tip.x > W - edge || tip.y > W - edge) want = Math.atan2(W / 2 - s.y, W / 2 - s.x);
+    s.want = want; s.wantThrottle = th;
+}
+function navyStep(s, dt) {
+    const C = s.C, h = s.helm.crew;
+    if (s.sinkAt) { s.throttle = 0; s.rudder = 0; }
+    else if (h && !isHuman(h)) {
+        if (G.time >= s.nextOrder) { s.nextOrder = G.time + 500; navyOrders(s); }
+        s.throttle += clamp(s.wantThrottle - s.throttle, -dt * 0.4, dt * 0.4);
+        s.rudder = clamp(angleDiff(s.a, s.want) * 3, -1, 1);
+    } else if (!h) {
+        // Nobody at the wheel: she holds her helm dead ahead and slowly loses way
+        s.rudder *= Math.exp(-dt);
+        s.throttle = Math.max(0.12, s.throttle - dt * 0.1);
+        if (s.crewN === 0) s.throttle = 0;
+    }
+    const top = C.speed * s.throttle * (0.55 + 0.45 * Math.max(0, s.hp / s.maxHp));
+    s.speed += clamp(top - s.speed, -C.accel * dt, C.accel * dt);
+    s.a += s.rudder * C.turn * dt * clamp(Math.abs(s.speed) / (C.speed * 0.35), 0.15, 1) * (s.speed < 0 ? -1 : 1);
+    s.x += Math.cos(s.a) * s.speed * dt;
+    s.y += Math.sin(s.a) * s.speed * dt;
+}
+// Hulls are capsules: they shove each other apart, and a hard ram hurts. Two hulls touching can be walked across.
+function navyCollide(dt) {
+    const ships = G.navy.ships, W = CONFIG.WORLD_SIZE;
+    for (const s of ships) s.planks.length = 0;
+    for (let i = 0; i < ships.length; i++) {
+        const a = ships[i];
+        if (a.sunk) continue;
+        const aH = a.C.len / 2 - a.C.beam / 2, ac = Math.cos(a.a), as = Math.sin(a.a);
+        for (let j = i + 1; j < ships.length; j++) {
+            const b = ships[j];
+            if (b.sunk) continue;
+            const reach = a.C.len / 2 + b.C.len / 2 + 120;
+            if ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 > reach * reach) continue;
+            const bH = b.C.len / 2 - b.C.beam / 2, bc = Math.cos(b.a), bs = Math.sin(b.a), minD = (a.C.beam + b.C.beam) / 2 * 0.92;
+            let best = null;
+            // Sample along each hull's spine and find the closest pair of spine points
+            for (let k = 0; k <= 8; k++) {
+                const ta = -aH + (2 * aH * k) / 8, px = a.x + ac * ta, py = a.y + as * ta;
+                const tb = clamp((px - b.x) * bc + (py - b.y) * bs, -bH, bH), qx = b.x + bc * tb, qy = b.y + bs * tb, d = Math.hypot(px - qx, py - qy);
+                if (!best || d < best.d) best = { d, px, py, qx, qy };
+            }
+            for (let k = 0; k <= 8; k++) {
+                const tb = -bH + (2 * bH * k) / 8, qx = b.x + bc * tb, qy = b.y + bs * tb;
+                const ta = clamp((qx - a.x) * ac + (qy - a.y) * as, -aH, aH), px = a.x + ac * ta, py = a.y + as * ta, d = Math.hypot(px - qx, py - qy);
+                if (d < best.d) best = { d, px, py, qx, qy };
+            }
+            if (best.d < minD + 75) {
+                const mx = (best.px + best.qx) / 2, my = (best.py + best.qy) / 2;
+                a.planks.push({ x: mx, y: my, a: Math.atan2(best.qy - best.py, best.qx - best.px), len: Math.max(30, best.d - minD + 80), other: b });
+                b.planks.push({ other: a });
+            }
+            if (best.d >= minD) continue;
+            const nx = (best.px - best.qx) / (best.d || 1), ny = (best.py - best.qy) / (best.d || 1), over = minD - best.d;
+            const ma = a.C.hp, mb = b.C.hp, fa = mb / (ma + mb), fb = ma / (ma + mb);
+            a.x += nx * over * fa; a.y += ny * over * fa; b.x -= nx * over * fb; b.y -= ny * over * fb;
+            const rel = Math.abs((Math.cos(a.a) * a.speed - Math.cos(b.a) * b.speed) * nx + (Math.sin(a.a) * a.speed - Math.sin(b.a) * b.speed) * ny);
+            if (rel > 30 && G.time - (a.ramAt || -1e9) > 900) {
+                a.ramAt = G.time;
+                const hit = rel * 1.4;
+                navyHurt(a, hit * 0.8, null); navyHurt(b, hit * 0.8, null);
+                const mx = (best.px + best.qx) / 2, my = (best.py + best.qy) / 2;
+                if (inView(mx, my, 300)) { burst(mx, my, 24, '#ffcf70', 320, 'glow'); G.shake = Math.max(G.shake, 10); Sound.thud(Sound.volAt(mx, my)); }
+                a.speed *= 0.75; b.speed *= 0.75;
+            }
+        }
+        for (const q of G.navy.islands) {
+            const lx = clamp(navyLx(a, q.x, q.y), -aH, aH), px = a.x + ac * lx, py = a.y + as * lx, d = Math.hypot(px - q.x, py - q.y), min = q.r + a.C.beam / 2;
+            if (d < min) { const nx = (px - q.x) / (d || 1), ny = (py - q.y) / (d || 1); a.x += nx * (min - d); a.y += ny * (min - d); if (Math.abs(a.speed) > 40) { navyHurt(a, Math.abs(a.speed) * dt * 12, null); a.speed *= Math.exp(-dt * 2); } }
+        }
+        const m = a.C.len / 2 + 60;
+        a.x = clamp(a.x, m, W - m); a.y = clamp(a.y, m, W - m);
+    }
+}
+function navyHurt(s, d, by) {
+    if (s.sinkAt || d <= 0) return;
+    s.hp -= d; s.hitAt = G.time;
+    while (s.spots.length < Math.floor((1 - Math.max(0, s.hp) / s.maxHp) * 9)) {
+        const o = navyDeckSpot(s);
+        s.spots.push({ lx: o.lx, ly: o.ly, r: rand(26, 54) * (s.C.beam / 300 + 0.4), ph: rand(0, TAU) });
+    }
+    if (by && by.isPlayer && d >= 8) { G.hitMarker = 1; if (d >= 60) addFloat(navyWx(s, 0, 0), navyWy(s, 0, 0) - 40, `-${Math.round(d)} HULL`, '#ffd166', true); }
+    if (s.hp <= 0) navySink(s, by);
+}
+function navySink(s, by) {
+    s.sinkAt = G.time; s.hp = 0; s.sinkBy = by;
+    if (G.mode !== 'playing') return;
+    const p = G.player, mine = p && s.team === p.team;
+    showBanner(mine ? `THE ${s.name.toUpperCase()} IS GOING DOWN` : `ENEMY ${s.C.name.toUpperCase()} SUNK`, mine, by && by.isPlayer ? 'Your shot finished her!' : mine ? 'Abandon ship! Swim for the nearest hull.' : `The ${s.name} is on her way to the bottom.`);
+    Sound.tone(90, 1.8, 'sawtooth', 0.14 * Sound.volAt(s.x, s.y) + 0.03, 40);
+}
+function navyOverboard(f, s) {
+    if (f.station) { f.station.crew = null; f.station = null; }
+    f.ship = null; f.swim = true; f.noClimb = G.time + 1500;
+}
+
+// Everything that rides on a deck, once per frame, after the ships have moved
+function updateNavy(dt) {
+    const N = G.navy;
+    for (const s of N.ships) {
+        s.oca = s.ca; s.osa = s.sa; s.ox = s.x; s.oy = s.y;
+        if (s.helm.crew && (s.helm.crew.dead || s.helm.crew.ship !== s || s.helm.crew.station !== s.helm)) s.helm.crew = null;
+        for (const g of s.guns) if (g.crew && (g.crew.dead || g.crew.station !== g)) g.crew = null;
+        navyStep(s, dt);
+    }
+    navyCollide(dt);
+    for (const s of N.ships) { s.ca = Math.cos(s.a); s.sa = Math.sin(s.a); }
+    // Parked helicopters ride along; one with nobody in it, out over the water, comes down
+    for (const c of G.world.cars) {
+        if (c.dead) continue;
+        // (someone got in and took off: she's off the deck, and a new one is on its way to the pad)
+        if (c.onShip && c.driver) { const s = c.onShip; c.onShip = null; if (s.heli === c) { s.heli = null; s.heliClaim = null; s.heliAt = G.time + NAVY.heliBack; } }
+        if (c.onShip) { const s = c.onShip; if (s.sunk) { damageCar(c, 1e6, null); continue; } c.x = navyWx(s, c.lx, c.ly); c.y = navyWy(s, c.lx, c.ly); c.a = s.a + c.la; c.speed = 0; c.turret = c.a; }
+        else if (!c.driver) {
+            const s = N.ships.find(q => !q.sinkAt && navyInHull(q, navyLx(q, c.x, c.y), navyLy(q, c.x, c.y), -20));
+            if (s) { c.onShip = s; c.lx = navyLx(s, c.x, c.y); c.ly = navyLy(s, c.x, c.y); c.la = c.a - s.a; if (!s.heli) s.heli = c; }
+            else if (navyIsland(c.x, c.y)) c.speed = 0;
+            else damageCar(c, 1e6, null);
+        }
+    }
+    for (const f of G.fighters) {
+        if (f.dead) continue;
+        if (f.car) { f.ship = null; f.swim = false; continue; }
+        const s = f.ship;
+        if (s) {
+            if (s.sunk) { navyOverboard(f, s); continue; }
+            // Where you are on the deck, taken before the deck moved; then carried along with it
+            const dx = f.x - s.ox, dy = f.y - s.oy;
+            let lx = dx * s.oca + dy * s.osa, ly = -dx * s.osa + dy * s.oca, on = s;
+            if (f.station) { lx = f.station.lx; ly = f.station.ly; }
+            else if (!navyInHull(s, lx, ly, -f.r)) {
+                // Pushing at the rail with another hull right there: across you go
+                const wx = navyWx(s, lx, ly), wy = navyWy(s, lx, ly);
+                for (const q of s.planks) {
+                    const t = q.other;
+                    if (t.sunk) continue;
+                    const ax = navyLx(t, wx, wy), ay = navyLy(t, wx, wy);
+                    if (navyInHull(t, ax, ay, NAVY.board)) { on = t; lx = ax; ly = ay; f.ship = t; break; }
+                }
+            }
+            const C = on.C;
+            // Round the guns and the bridge
+            if (!f.station) {
+                for (const o of on.blocks) {
+                    if (o.box) {
+                        const nx = clamp(lx, o.x - o.hw, o.x + o.hw), ny = clamp(ly, o.y - o.hh, o.y + o.hh), ddx = lx - nx, ddy = ly - ny, d2 = ddx * ddx + ddy * ddy;
+                        if (d2 >= f.r * f.r) continue;
+                        if (d2 > 0) { const d = Math.sqrt(d2); lx = nx + ddx / d * f.r; ly = ny + ddy / d * f.r; }
+                        else if (o.hw - Math.abs(lx - o.x) < o.hh - Math.abs(ly - o.y)) lx = o.x + (lx < o.x ? -1 : 1) * (o.hw + f.r);
+                        else ly = o.y + (ly < o.y ? -1 : 1) * (o.hh + f.r);
+                    } else {
+                        const ddx = lx - o.x, ddy = ly - o.y, d = Math.hypot(ddx, ddy) || 0.01, min = o.r + f.r;
+                        if (d < min) { lx = o.x + ddx / d * min; ly = o.y + ddy / d * min; }
+                    }
+                }
+                lx = clamp(lx, -C.len / 2 + f.r, C.len / 2 - f.r);
+                const hw = Math.max(2, navyHw(C, lx) - f.r);
+                ly = clamp(ly, -hw, hw);
+            }
+            f.x = navyWx(on, lx, ly); f.y = navyWy(on, lx, ly); f.swim = false;
+            // The supply stations: patch you up and fill your pockets
+            if (on.team === f.team && C.supply.length && (f.hp < f.maxHp || isHuman(f))) for (const [qx, qy] of C.supply) if ((lx - qx) ** 2 + (ly - qy) ** 2 < 5000) {
+                f.hp = Math.min(f.maxHp, f.hp + 12 * dt);
+                if (isHuman(f)) for (const k of f.inv) if (k && WEAPONS[k] && !WEAPONS[k].melee && f.ammo[k] !== Infinity && f.ammo[k] < 300 && G.time - (f.resupplied || -1e9) > 400) { f.ammo[k] = Math.min(300, f.ammo[k] + 30); f.resupplied = G.time; }
+            }
+        } else {
+            // In the water, or ashore on an island
+            const land = navyIsland(f.x, f.y, 10);
+            f.swim = !land;
+            if (G.time >= (f.noClimb || 0)) for (const q of N.ships) {
+                if (q.sinkAt) continue;
+                const dx = f.x - q.x, dy = f.y - q.y;
+                if (dx * dx + dy * dy > q.R2) continue;
+                if (navyInHull(q, dx * q.ca + dy * q.sa, -dx * q.sa + dy * q.ca, 14)) { f.ship = q; f.swim = false; if (f.isPlayer) { addFloat(f.x, f.y - 34, `Aboard the ${q.name}`, '#fff7ec'); Sound.tone(300, 0.2, 'triangle', 0.08); } break; }
+            }
+            if (f.swim && !f.ship) {
+                f.hp -= NAVY.drown * dt;
+                if (f.isPlayer) G.hurt = Math.max(G.hurt, 0.12);
+                if (f.hp <= 0) killFighter(f, null, 'Drowned');
+                if (Math.random() < dt * 2 && inView(f.x, f.y, 40)) G.particles.push({ type: 'ring', x: f.x, y: f.y, vx: 0, vy: 0, life: 0.7, max: 0.7, size: 28, color: '#d8f1ff' });
+            }
+        }
+    }
+    for (const s of N.ships) navyShipTick(s, dt);
+    N.ships = N.ships.filter(s => !s.gone);
+    if (G.time >= N.nextCheck) navyCheck();
+}
+function navyShipTick(s, dt) {
+    const N = G.navy, ca = s.ca, sa = s.sa, C = s.C;
+    // Wake, funnel smoke and fires
+    if (!lowDetail || Math.random() < 0.3) {
+        if (Math.abs(s.speed) > 25 && inView(navyWx(s, -C.len / 2, 0), navyWy(s, -C.len / 2, 0), 200) && Math.random() < dt * 22) for (const side of [-1, 1]) G.particles.push({ type: 'smoke', x: navyWx(s, -C.len / 2 + rand(0, 90), side * rand(0, C.beam * 0.3)), y: navyWy(s, -C.len / 2 + rand(0, 90), side * rand(0, C.beam * 0.3)), vx: -ca * s.speed * 0.3 + rand(-20, 20), vy: -sa * s.speed * 0.3 + rand(-20, 20), life: rand(0.9, 1.6), max: 1.6, size: rand(14, 28), color: '235,245,250' });
+        const fun = C.boxes.find(o => o.k === 'funnel');
+        if (fun && !s.sinkAt && inView(navyWx(s, fun.x, 0), navyWy(s, fun.x, 0), 200) && Math.random() < dt * 10) G.particles.push({ type: 'smoke', x: navyWx(s, fun.x, 0), y: navyWy(s, fun.x, 0), vx: -ca * s.speed * 0.5 + rand(-16, 16), vy: -sa * s.speed * 0.5 + rand(-16, 16), life: rand(1.2, 2.2), max: 2.2, size: rand(14, 26), color: s.hp < s.maxHp * 0.4 ? '40,36,40' : '110,110,115' });
+    }
+    for (const q of s.spots) if (inView(navyWx(s, q.lx, q.ly), navyWy(s, q.lx, q.ly), 120) && Math.random() < dt * 4) G.particles.push({ type: 'smoke', x: navyWx(s, q.lx, q.ly), y: navyWy(s, q.lx, q.ly), vx: rand(-20, 20), vy: rand(-30, 0), life: rand(0.8, 1.6), max: 1.6, size: rand(10, 20), color: '50,44,44' });
+    // A new helicopter is flown out to a ship that lost hers
+    if (C.pad && !s.heli && !s.sinkAt && G.time >= s.heliAt && s.heliAt) { s.heliAt = 0; navyAddHeli(s); }
+    if (s.heli && (s.heli.dead || (s.heli.onShip !== s))) { if (s.heli.dead && !s.heliAt) s.heliAt = G.time + NAVY.heliBack; s.heli = null; }
+    if (s.sinkAt) {
+        const age = G.time - s.sinkAt;
+        if (age < 7000 && Math.random() < dt * 5) {
+            const o = navyDeckSpot(s), x = navyWx(s, o.lx, o.ly), y = navyWy(s, o.lx, o.ly);
+            if (inView(x, y, 200)) { G.particles.push({ type: 'boom', x, y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: rand(50, 110) }); Sound.thud(Sound.volAt(x, y)); }
+        }
+        if (age >= 7000 && !s.sunk) {
+            s.sunk = true;
+            for (const f of G.fighters) if (f.ship === s && !f.dead) navyOverboard(f, s);
+        }
+        if (age >= 15000) s.gone = true;
+    }
+}
+function navyCheck() {
+    const N = G.navy;
+    N.nextCheck = G.time + 800;
+    for (const s of N.ships) s.crewN = 0;
+    for (const f of G.fighters) if (!f.dead && f.ship) f.ship.crewN++;
+    if (N.over) return;
+    const left = [0, 0];
+    for (const s of N.ships) if (!s.sinkAt && s.crewN > 0) left[s.team]++;
+    N.left = left;
+    if (G.mode === 'demo') { if (!left[0] || !left[1]) N.over = true; return; }
+    if (G.result || (left[0] && left[1])) return;
+    N.over = true;
+    const p = G.player, won = left[p.team] > 0;
+    G.result = won ? { won: true, place: 1, title: 'ENEMY FLEET DESTROYED', sub: `Every enemy ship is sunk or captured.${p.dead ? ' You went down, but your fleet finished it.' : ''}` } : { won: false, place: 2, title: 'FLEET LOST', sub: 'Your side has no ships left afloat.' };
+    G.overAt = G.time + 2200;
+    if (won) startVictory('The enemy fleet is destroyed');
+    else canvas.classList.add('dead');
+}
+
+// ----- Guns -----
+function navyAimGun(g, want, dt) {
+    const s = g.ship, cur = s.a + g.rel, err = angleDiff(cur, want);
+    g.rel += clamp(err, -g.D.turn * dt, g.D.turn * dt);
+    return Math.abs(angleDiff(s.a + g.rel, want));
+}
+function navyFire(g, f, tx, ty) {
+    const s = g.ship, D = g.D, a = s.a + g.rel, ca = Math.cos(a), sa = Math.sin(a), wx = navyWx(s, g.lx, g.ly), wy = navyWy(s, g.lx, g.ly);
+    const reach = g.r + 26, mx = wx + ca * reach, my = wy + sa * reach;
+    g.fireAt = G.time + D.rate;
+    f.lastLoud = G.time;
+    const vol = Sound.volAt(wx, wy);
+    if (g.kind === 'mg') {
+        const sp = a + rand(-0.03, 0.03);
+        G.bullets.push({ x: mx, y: my, vx: Math.cos(sp) * D.speed, vy: Math.sin(sp) * D.speed, dmg: D.dmg, owner: f, left: D.range, weapon: 'Heavy MG', mounted: true, overShip: s });
+        if (inView(mx, my, 60)) G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.06, max: 0.06, size: 24, angle: a });
+        Sound.shot('mid', vol);
+        return;
+    }
+    // (touch aiming only gives a direction, so shells carry to full range; with a mouse they land where you point)
+    const d = Math.hypot(tx - mx, ty - my), left = isHuman(f) && f === G.player && TOUCH.enabled ? D.range : clamp(d, 200, D.range);
+    if (g.kind === 'torp') {
+        // One from each tube; it runs straight under the water and only stops at a hull
+        G.bullets.push({ x: mx, y: my, vx: ca * D.speed, vy: sa * D.speed, dmg: D.dmg, owner: f, left: D.range, weapon: 'Torpedo', heavy: true, rocket: true, torpedo: true, overShip: s, blastR: D.blastR, blastDmg: D.dmg });
+        Sound.tone(160, 0.4, 'triangle', 0.1 * vol, 70);
+        return;
+    }
+    const barrels = g.kind === 'main' ? 3 : 1;
+    for (let i = 0; i < barrels; i++) {
+        const off = (i - (barrels - 1) / 2) * 24, sp = rand(-0.006, 0.006), v = D.speed;
+        G.bullets.push({ x: mx - sa * off, y: my + ca * off, vx: Math.cos(a + sp) * v, vy: Math.sin(a + sp) * v, dmg: D.dmg, owner: f, left: left * rand(0.97, 1.03), weapon: D.name, heavy: true, rocket: true, overShip: s, blastR: D.blastR, blastDmg: D.dmg });
+    }
+    if (inView(mx, my, 200)) {
+        G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.12, max: 0.12, size: g.kind === 'main' ? 110 : 56, angle: a });
+        for (let i = 0; i < (g.kind === 'main' ? 10 : 4); i++) G.particles.push({ type: 'smoke', x: mx, y: my, vx: ca * rand(60, 240) + rand(-40, 40), vy: sa * rand(60, 240) + rand(-40, 40), life: rand(0.8, 1.5), max: 1.5, size: rand(12, 26), color: '200,196,190' });
+        G.shake = Math.max(G.shake, g.kind === 'main' ? 7 : 3);
+    }
+    Sound.shot('heavy', vol);
+}
+function navyGunBot(b, g, dt) {
+    const s = g.ship, D = g.D, wx = navyWx(s, g.lx, g.ly), wy = navyWy(s, g.lx, g.ly);
+    if (s.sinkAt || s.team !== b.team) return;
+    if (G.time >= g.think) {
+        g.think = G.time + rand(500, 900) * AIK().think;
+        g.tgt = null;
+        if (g.kind === 'mg') {
+            let bd = D.range * AIK().sight;
+            G.fgrid.query(wx, wy, bd, f => { if (f.dead || f.riding || !foe(b, f) || (f.ship === s && !f.car)) return; const d = Math.hypot(f.x - wx, f.y - wy); if (d < bd) { bd = d; g.tgt = f; } });
+        } else {
+            let bd = D.range;
+            for (const q of G.navy.ships) if (navyHostile(q, b.team)) { const d = Math.hypot(q.x - wx, q.y - wy); if (d < bd) { bd = d; g.tgt = q; } }
+            g.sc = rand(-1, 1); g.sd = rand(-1, 1);
+        }
+    }
+    const t = g.tgt;
+    if (!t || t.dead || t.sinkAt) { g.rel += clamp(angleDiff(g.rel, g.lx < 0 && g.kind === 'main' ? Math.PI : 0), -D.turn * dt, D.turn * dt); return; }
+    let tx = t.x, ty = t.y;
+    const d0 = Math.hypot(tx - wx, ty - wy);
+    if (t.ship !== undefined && !t.C) {
+        // A person: lead them a little
+        const fl = d0 / D.speed;
+        tx += (t.vx || 0) * fl * 0.5; ty += (t.vy || 0) * fl * 0.5;
+    } else {
+        // A ship: lead by how far she'll sail while the shell's in the air, with some scatter
+        const fl = d0 / D.speed;
+        tx += Math.cos(t.a) * t.speed * fl; ty += Math.sin(t.a) * t.speed * fl;
+        const err = (0.03 + d0 / 60000) * AIK().aim * d0;
+        tx += g.sc * err * 1.6 * Math.cos(t.a) - g.sd * err * Math.sin(t.a);
+        ty += g.sc * err * 1.6 * Math.sin(t.a) + g.sd * err * Math.cos(t.a);
+    }
+    const off = navyAimGun(g, Math.atan2(ty - wy, tx - wx), dt);
+    b.angle = s.a + g.rel;
+    if (G.time >= g.fireAt && off < (g.kind === 'mg' ? 0.2 : 0.06)) { navyFire(g, b, tx, ty); if (g.kind !== 'mg') { g.sc = rand(-1, 1); g.sd = rand(-1, 1); } }
+}
+// You at a station: the wheel (W/S throttle, A/D rudder) or a gun (aim and click)
+function navyPlayer(p, I, mx, my, dt) {
+    const st = p.station;
+    if (!st) return false;
+    p.vx = p.vy = 0;
+    const s = st.ship, m = I.world();
+    if (st.helm) {
+        s.throttle = clamp(s.throttle - my * dt * 0.3, -0.3, 1);
+        s.rudder = clamp(mx, -1, 1);
+        p.angle = s.a;
+        return true;
+    }
+    if (st.hp <= 0) { navyLeave(p); return true; }
+    const wx = navyWx(s, st.lx, st.ly), wy = navyWy(s, st.lx, st.ly), want = Math.atan2(m.y - wy, m.x - wx);
+    const off = navyAimGun(st, want, dt);
+    p.angle = s.a + st.rel;
+    if (I.mouse.down && G.time >= st.fireAt && off < (st.kind === 'mg' ? 0.35 : 0.1) && !G.result) navyFire(st, p, m.x, m.y);
+    return true;
+}
+
+// ----- What bullets and blasts do to ships -----
+function navyBullet(b) {
+    for (const s of G.navy.ships) {
+        if (s.sunk) continue;
+        const dx = b.x - s.x, dy = b.y - s.y;
+        if (dx * dx + dy * dy > s.R2) continue;
+        const lx = dx * s.ca + dy * s.sa, ly = -dx * s.sa + dy * s.ca;
+        if (!navyInHull(s, lx, ly)) continue;
+        const friendly = b.owner && b.owner.team === s.team;
+        if (b.rocket) {
+            if (b.overShip === s || friendly || (b.owner && b.owner.ship === s)) continue;
+            return true;
+        }
+        if (b.overShip === s) continue;
+        for (const o of s.blocks) {
+            const inside = o.box ? Math.abs(lx - o.x) < o.hw && Math.abs(ly - o.y) < o.hh : (lx - o.x) ** 2 + (ly - o.y) ** 2 < o.r * o.r;
+            if (!inside) continue;
+            if (inView(b.x, b.y, 40)) burst(b.x, b.y, 4, '#ffe08a', 220, 'glow');
+            if (b.mounted && !friendly) navyHurt(s, b.dmg * 0.25, b.owner);
+            return true;
+        }
+        if (b.mounted && !friendly && !b.chip) { b.chip = true; navyHurt(s, b.dmg * 0.25, b.owner); }
+    }
+    return false;
+}
+function navyBlast(x, y, R, dmg, owner, weapon) {
+    G.scorches.length = 0;
+    let onHull = false;
+    for (const s of G.navy.ships) {
+        if (s.sunk) continue;
+        const reach = s.C.len / 2 + R, dx = x - s.x, dy = y - s.y;
+        if (dx * dx + dy * dy > reach * reach) continue;
+        const lx = dx * s.ca + dy * s.sa, ly = -dx * s.sa + dy * s.ca;
+        if (navyInHull(s, lx, ly, 4)) onHull = true;
+        if (owner && owner.team === s.team) continue;
+        if (navyInHull(s, lx, ly, R * 0.4)) {
+            const gun = NAVY.guns[weapon === 'Main Cannon' ? 'main' : weapon === 'Deck Cannon' ? 'med' : weapon === 'Torpedo' ? 'torp' : ''];
+            navyHurt(s, gun ? gun.hull : NAVY.hullBy[weapon] || dmg * 1.2, owner);
+        }
+        for (const g of s.guns) {
+            if (g.hp <= 0) continue;
+            const d = Math.hypot(lx - g.lx, ly - g.ly);
+            if (d > R + g.r) continue;
+            g.hp -= dmg * 3.4 * (1 - d / (R + g.r) * 0.6);
+            if (g.hp <= 0) {
+                g.rel += rand(-0.4, 0.4);
+                if (g.crew) { const c = g.crew; g.crew = null; c.station = null; }
+                if (inView(x, y, 200)) burst(navyWx(s, g.lx, g.ly), navyWy(s, g.lx, g.ly), 22, '#ffb347', 300, 'glow');
+                if (owner && owner.isPlayer) addFloat(navyWx(s, g.lx, g.ly), navyWy(s, g.lx, g.ly) - 30, `${g.D.name.toUpperCase()} DESTROYED`, '#ffd166', true);
+            }
+        }
+    }
+    // A miss throws up a column of water
+    if (!onHull && inView(x, y, R + 100)) {
+        for (let i = 0; i < 18; i++) { const a = rand(0, TAU), sp = rand(40, 260); G.particles.push({ type: 'smoke', x: x + Math.cos(a) * rand(0, R * 0.3), y: y + Math.sin(a) * rand(0, R * 0.3), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.5, 1.2), max: 1.2, size: rand(14, 34), color: '225,240,248' }); }
+        G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.7, max: 0.7, size: R * 1.2, color: '#e8f6ff' });
+    }
+}
+function navyLOS(a, b) {
+    const ships = a.ship === b.ship ? [a.ship] : [a.ship, b.ship];
+    for (const s of ships) {
+        if (!s) continue;
+        const x0 = navyLx(s, a.x, a.y), y0 = navyLy(s, a.x, a.y), x1 = navyLx(s, b.x, b.y), y1 = navyLy(s, b.x, b.y);
+        for (const o of s.blocks) if (o.box ? segHitsBox(x0, y0, x1, y1, o) : segHitsCircle(x0, y0, x1, y1, o.x, o.y, o.r)) return false;
+    }
+    return lineOfSight(a, b);
+}
+
+// ----- The people on deck -----
+// Round whatever's in the way on this deck: the next spot to walk to, in deck coordinates
+function navyRoute(s, lx, ly, gx, gy, r) {
+    const pad = r + 12;
+    for (const o of s.blocks) {
+        const bw = (o.box ? o.hw : o.r) + pad - 4, bh = (o.box ? o.hh : o.r) + pad - 4;
+        if (!segHitsBox(lx, ly, gx, gy, { x: o.x, y: o.y, hw: bw, hh: bh })) continue;
+        const up = o.y - bh - 8, dn = o.y + bh + 8;
+        let wy = Math.abs(ly - up) + Math.abs(gy - up) < Math.abs(ly - dn) + Math.abs(gy - dn) ? up : dn;
+        if (Math.abs(wy) > navyHw(s.C, o.x) - r) wy = wy === up ? dn : up;
+        if (Math.abs(ly - wy) > 12 && Math.abs(lx - o.x) < bw + 12) return { x: lx, y: wy };
+        return { x: gx > o.x ? o.x + bw + 12 : o.x - bw - 12, y: wy };
+    }
+    return { x: gx, y: gy };
+}
+function navyThink(b) {
+    const s = b.ship;
+    b.nextThink = G.time + rand(420, 780) * AIK().think;
+    let enemy = null, bd = 1050 * AIK().sight;
+    G.fgrid.query(b.x, b.y, bd, f => {
+        if (f.dead || f === b || f.riding || !foe(b, f)) return;
+        // (a look at the person who's a real threat: anyone aboard this ship first)
+        const d = Math.hypot(f.x - b.x, f.y - b.y) * (f.ship && f.ship === s ? 0.45 : 1);
+        if (d < bd) { bd = d; enemy = f; }
+    });
+    if (enemy && !navyLOS(b, enemy)) { if (enemy.ship !== s || !s) enemy = null; else b.hasLOS = false; }
+    else if (enemy) b.hasLOS = true;
+    if (enemy && b.target !== enemy) b.engageAt = G.time + rand(150, 500) * AIK().react;
+    b.target = enemy;
+    b.nGoal = null; b.nStation = null;
+    if (!s) {
+        // In the water: the nearest hull, your own side's if it isn't much further
+        let best = null, bq = Infinity;
+        for (const q of G.navy.ships) {
+            if (q.sinkAt) continue;
+            const d = Math.hypot(q.x - b.x, q.y - b.y) * (q.team === b.team ? 0.7 : 1);
+            if (d < bq) { bq = d; best = q; }
+        }
+        b.nSwimTo = best;
+        return;
+    }
+    b.nSwimTo = null;
+    if (s.team !== b.team) {
+        // On an enemy ship: the wheel is the prize
+        if (!s.helm.crew) { b.nStation = s.helm; if (!s.helm.claim || s.helm.claim.dead) s.helm.claim = b; }
+        b.nGoal = { lx: s.helm.lx + rand(-20, 20), ly: s.helm.ly + rand(-70, 70) };
+        if (s.helm.crew) { b.nGoal = { lx: s.helm.lx - 12, ly: s.helm.ly + (b.postX > 0 ? 80 : -80) }; if (!enemy) b.target = null; }
+        return;
+    }
+    // An enemy on our deck comes first
+    if (enemy && enemy.ship === s) { b.nGoal = { lx: navyLx(s, enemy.x, enemy.y), ly: navyLy(s, enemy.x, enemy.y) }; return; }
+    const st = navyVacant(s, b);
+    if (st) {
+        if (st.heli) s.heliClaim = b; else st.claim = b;
+        b.nStation = st;
+        b.nGoal = { lx: st.lx, ly: st.ly };
+        return;
+    }
+    // Alongside an enemy: the boarding party goes over
+    if (b.boarder && !s.sinkAt) {
+        const pl = s.planks.find(q => q.other && navyHostile(q.other, b.team));
+        if (pl) {
+            const t = pl.other, ly = navyLy(s, t.x, t.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, t.x, t.y), -s.C.len * 0.4, s.C.len * 0.4), hw = navyHw(s.C, lx);
+            b.nGoal = { lx, ly: ly * (hw + 30), over: true };
+            return;
+        }
+    }
+    // Otherwise, line the rail on the side facing the enemy
+    let foeS = null, fd = Infinity;
+    for (const q of G.navy.ships) if (navyHostile(q, b.team)) { const d = (q.x - s.x) ** 2 + (q.y - s.y) ** 2; if (d < fd) { fd = d; foeS = q; } }
+    const side = foeS ? (navyLy(s, foeS.x, foeS.y) >= 0 ? 1 : -1) : (b.postX > 0 ? 1 : -1);
+    const lx = clamp(b.postX, -s.C.len / 2 + 60, s.C.len / 2 - 60);
+    b.nGoal = { lx, ly: side * Math.max(0, navyHw(s.C, lx) - 40) * b.postY };
+}
+function navyBot(b, dt) {
+    if (b.station) {
+        b.vx = b.vy = 0; b._wantSpeed = 0;
+        if (b.station.gun) {
+            if (b.station.hp <= 0) { navyLeave(b); return; }
+            if (b.ship && b.ship.team !== b.team) { navyLeave(b); return; }
+            navyGunBot(b, b.station, dt);
+        } else if (b.ship) b.angle = b.ship.a;
+        return;
+    }
+    if (G.time >= b.nextThink) navyThink(b);
+    const s = b.ship;
+    let dx = 0, dy = 0, face = true;
+    if (s && b.nGoal) {
+        const lx = navyLx(s, b.x, b.y), ly = navyLy(s, b.x, b.y), g = b.nGoal, d = Math.hypot(g.lx - lx, g.ly - ly);
+        if (b.nStation && d < (b.nStation.r || 30) + 34) {
+            const st = b.nStation;
+            b.nStation = null;
+            if (st.heli) { if (!st.heli.driver && !st.heli.dead) navyBoardHeli(b, st.heli); b.vx = b.vy = 0; return; }
+            if (!st.crew) { navyMan(b, st); b.vx = b.vy = 0; return; }
+        }
+        if (d > 16) {
+            const w = navyRoute(s, lx, ly, g.lx, g.ly, b.r), ax = w.x - lx, ay = w.y - ly, l = Math.hypot(ax, ay) || 1;
+            dx = (ax / l) * s.ca - (ay / l) * s.sa; dy = (ax / l) * s.sa + (ay / l) * s.ca;
+        }
+    } else if (!s && b.nSwimTo && !b.nSwimTo.sinkAt) {
+        const q = b.nSwimTo, l = Math.hypot(q.x - b.x, q.y - b.y) || 1;
+        dx = (q.x - b.x) / l; dy = (q.y - b.y) / l;
+    }
+    const t = b.target;
+    if (t && !t.dead && foe(b, t) && !b.swim) {
+        const d = Math.max(1, dist(b, t)), w = WEAPONS[held(b)];
+        if (Math.random() < dt * 2.5) b.aimErr = rand(-1, 1) * (0.06 + d / 3500) * AIK().aim;
+        const want = Math.atan2(t.y - b.y, t.x - b.x) + b.aimErr;
+        b.angle += angleDiff(b.angle, want) * Math.min(1, dt * 9 * AIK().turn);
+        face = false;
+        if (b.hasLOS && G.time > b.engageAt && d < w.range && Math.abs(angleDiff(b.angle, want)) < 0.3) tryAttack(b);
+    } else if (b.target) b.target = null;
+    const sp = CONFIG.BOT_SPEED;
+    b.vx = dx * sp; b.vy = dy * sp; b._wantSpeed = 0;
+    if (face && (dx || dy)) b.angle += angleDiff(b.angle, Math.atan2(dy, dx)) * Math.min(1, dt * 8);
+}
+// A helicopter pilot circles the nearest enemy ship, spraying the deck and rocketing the hull
+function navyPilot(c, b, dt) {
+    const T = vt(c);
+    if (G.time >= (b.driveThink || 0)) {
+        b.driveThink = G.time + 400;
+        let foeS = null, fd = Infinity;
+        for (const q of G.navy.ships) if (navyHostile(q, b.team)) { const d = Math.hypot(q.x - c.x, q.y - c.y); if (d < fd) { fd = d; foeS = q; } }
+        b.heliShip = foeS;
+        let enemy = null, bd = 800;
+        G.fgrid.query(c.x, c.y, bd, f => { if (f.dead || f === b || f.riding || !foe(b, f)) return; const d = Math.hypot(f.x - c.x, f.y - c.y); if (d < bd) { bd = d; enemy = f; } });
+        b.driveEnemy = enemy;
+        if (b.orbitA === undefined) b.orbitA = rand(0, TAU);
+    }
+    const q = b.heliShip, ctl = { up: true, down: false, left: false, right: false };
+    if (!q) { ctl.up = false; return ctl; }
+    b.orbitA += dt * 0.28;
+    const R = q.C.len / 2 + 450, tx = q.x + Math.cos(b.orbitA) * R, ty = q.y + Math.sin(b.orbitA) * R, diff = angleDiff(c.a, Math.atan2(ty - c.y, tx - c.x));
+    if (diff > 0.08) ctl.right = true; else if (diff < -0.08) ctl.left = true;
+    const e = b.driveEnemy;
+    if (G.time >= c.fireAt) {
+        if (e && !e.dead) { c.turret = Math.atan2(e.y - c.y, e.x - c.x) + rand(-0.08, 0.08) * AIK().aim; vehicleFire(c, b); }
+        else if (Math.hypot(q.x - c.x, q.y - c.y) < 1500) { c.turret = Math.atan2(q.y - c.y, q.x - c.x) + rand(-0.1, 0.1); vehicleFire(c, b); }
+    }
+    return ctl;
+}
+
+// ----- Drawing -----
+const NAVY_ART = {};
+function navyHullPath(g, C, pad = 0) {
+    g.beginPath();
+    const L2 = C.len / 2, n = 44;
+    for (let i = 0; i <= n; i++) { const x = -L2 + (C.len * i) / n, y = -(navyHw(C, x) + pad); if (i === 0) g.moveTo(x - pad, y); else g.lineTo(x + (i === n ? pad : 0), y); }
+    for (let i = n; i >= 0; i--) { const x = -L2 + (C.len * i) / n, y = navyHw(C, x) + pad; g.lineTo(x + (i === n ? pad : i === 0 ? -pad : 0), y); }
+    g.closePath();
+}
+function navyArt(kind, team) {
+    const key = kind + team;
+    if (NAVY_ART[key]) return NAVY_ART[key];
+    const C = NAVY.ships[kind], w = C.len + 60, h = C.beam + 60, [cv, g] = makeCanvas(w, h), col = TEAMS[team].color;
+    g.translate(w / 2, h / 2);
+    // Hull, painted waterline in the fleet's colour, then the deck
+    navyHullPath(g, C, 14); g.fillStyle = '#20262c'; g.fill();
+    navyHullPath(g, C, 8); g.fillStyle = shade(col, -0.35); g.fill();
+    navyHullPath(g, C, 0); g.fillStyle = kind === 'gunboat' ? '#7f8a92' : '#a68e66'; g.fill();
+    g.save(); navyHullPath(g, C, -1); g.clip();
+    // Planking
+    g.strokeStyle = kind === 'gunboat' ? 'rgba(40,50,60,0.3)' : 'rgba(70,50,28,0.28)'; g.lineWidth = 2;
+    for (let y = -C.beam / 2; y < C.beam / 2; y += 18) { g.beginPath(); g.moveTo(-C.len / 2, y); g.lineTo(C.len / 2, y); g.stroke(); }
+    g.lineWidth = 1;
+    for (let x = -C.len / 2; x < C.len / 2; x += 120) for (let y = -C.beam / 2, j = 0; y < C.beam / 2; y += 18, j++) { g.beginPath(); g.moveTo(x + (j % 3) * 40, y); g.lineTo(x + (j % 3) * 40, y + 18); g.stroke(); }
+    // A wide painted stripe in the fleet's colour across the bow, easy to read from far out
+    g.fillStyle = col; g.globalAlpha = 0.85;
+    g.fillRect(C.bow * 1.45, -C.beam / 2, Math.max(36, C.len * 0.035), C.beam);
+    g.fillRect(-C.aft * 1.05, -C.beam / 2, Math.max(24, C.len * 0.018), C.beam);
+    g.globalAlpha = 1;
+    // Steel plates round the turrets
+    for (const [k, lx, ly, r] of C.guns) { const rr = (r || NAVY.guns[k].r) + 12; g.fillStyle = 'rgba(70,74,80,0.65)'; g.beginPath(); g.arc(lx, ly, rr, 0, TAU); g.fill(); }
+    g.restore();
+    // Rail posts
+    g.fillStyle = '#d7dde2';
+    for (let x = -C.len / 2 + 20; x < C.len / 2 - 10; x += 34) { const y = navyHw(C, x) - 3; if (y < 6) continue; g.fillRect(x - 2, -y - 2, 4, 4); g.fillRect(x - 2, y - 2, 4, 4); }
+    g.strokeStyle = 'rgba(215,221,226,0.65)'; g.lineWidth = 2; navyHullPath(g, C, -3); g.stroke();
+    // The helicopter pad
+    if (C.pad) {
+        const [px, py] = C.pad;
+        g.fillStyle = '#3f4650'; g.beginPath(); g.arc(px, py, 105, 0, TAU); g.fill();
+        g.strokeStyle = '#ffd166'; g.lineWidth = 6; g.beginPath(); g.arc(px, py, 92, 0, TAU); g.stroke();
+        g.save(); g.translate(px, py); g.rotate(Math.PI / 2); g.fillStyle = '#fff7ec'; g.font = '900 96px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('H', 0, 4); g.restore();
+    }
+    // Supply stations: a white cross on green
+    for (const [x, y] of C.supply) {
+        g.fillStyle = '#2f9e5b'; roundRect(g, x - 34, y - 34, 68, 68, 8); g.fill();
+        g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 3; roundRect(g, x - 34, y - 34, 68, 68, 8); g.stroke();
+        g.fillStyle = '#fff'; g.fillRect(x - 22, y - 7, 44, 14); g.fillRect(x - 7, y - 22, 14, 44);
+    }
+    // Bridge, funnel and cabin
+    for (const o of C.boxes) {
+        const x = o.x - o.hw, y = o.y - o.hh, W2 = o.hw * 2, H2 = o.hh * 2;
+        g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x + 10, y + 12, W2, H2);
+        if (o.k === 'funnel') {
+            g.fillStyle = '#3c4148'; roundRect(g, x, y, W2, H2, Math.min(o.hh, 24)); g.fill();
+            g.fillStyle = '#16181b'; roundRect(g, x + 12, y + 12, W2 - 24, H2 - 24, Math.min(o.hh - 10, 18)); g.fill();
+            g.fillStyle = col; g.fillRect(x, y + H2 / 2 - 6, 12, 12); g.fillRect(x + W2 - 12, y + H2 / 2 - 6, 12, 12);
+            continue;
+        }
+        g.fillStyle = '#737d87'; g.fillRect(x, y, W2, H2);
+        g.fillStyle = '#8d97a1'; g.fillRect(x + 12, y + 12, W2 - 24, H2 - 24);
+        g.fillStyle = '#a3adb7'; g.fillRect(x + W2 * 0.35, y + 22, W2 * 0.55, H2 - 44);
+        // Windows looking forward and out to the sides
+        g.fillStyle = '#163b52';
+        const edge = x + W2 - 8;
+        for (let wy = y + 10; wy < y + H2 - 16; wy += 22) g.fillRect(edge - 2, wy, 8, 14);
+        for (let wx = x + 18; wx < x + W2 - 24; wx += 34) { g.fillRect(wx, y + 3, 22, 6); g.fillRect(wx, y + H2 - 9, 22, 6); }
+        g.strokeStyle = '#49525b'; g.lineWidth = 3; g.strokeRect(x, y, W2, H2);
+        // Radar mast on top
+        g.fillStyle = '#3a4048'; g.beginPath(); g.arc(x + W2 * 0.62, o.y, Math.min(16, o.hh * 0.4), 0, TAU); g.fill();
+        g.strokeStyle = '#c9ced6'; g.lineWidth = 4; g.beginPath(); g.moveTo(x + W2 * 0.62, o.y - Math.min(32, o.hh * 0.7)); g.lineTo(x + W2 * 0.62, o.y + Math.min(32, o.hh * 0.7)); g.stroke();
+    }
+    // The ship's wheel
+    const [hx, hy] = C.helm;
+    g.fillStyle = 'rgba(40,30,20,0.5)'; g.beginPath(); g.arc(hx, hy, 30, 0, TAU); g.fill();
+    g.strokeStyle = '#d9a35b'; g.lineWidth = 6; g.beginPath(); g.arc(hx, hy, 22, 0, TAU); g.stroke();
+    g.lineWidth = 3; for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 4; g.beginPath(); g.moveTo(hx - Math.cos(a) * 22, hy - Math.sin(a) * 22); g.lineTo(hx + Math.cos(a) * 22, hy + Math.sin(a) * 22); g.stroke(); }
+    NAVY_ART[key] = cv;
+    return cv;
+}
+function navyDrawGun(g) {
+    const D = g.D, dead = g.hp <= 0, r = g.r;
+    ctx.save();
+    ctx.translate(g.lx, g.ly);
+    ctx.rotate(g.rel);
+    const steel = dead ? '#2a2826' : g.kind === 'main' ? '#5d6670' : '#69737d', dark = dead ? '#191716' : '#3c4249';
+    if (g.kind === 'main' || (g.kind === 'med' && r >= 24)) {
+        // Barrels first, then the armoured turret over their roots
+        const n = g.kind === 'main' ? 3 : r >= 44 ? 2 : 1, bl = r * (g.kind === 'main' ? 2.1 : 1.9), bw = g.kind === 'main' ? 15 : 10, gap = g.kind === 'main' ? 24 : 18;
+        ctx.fillStyle = dark;
+        for (let i = 0; i < n; i++) { const y = (i - (n - 1) / 2) * gap; ctx.fillRect(r * 0.3, y - bw / 2, bl, bw); ctx.fillStyle = '#23272c'; ctx.fillRect(r * 0.3 + bl - 10, y - bw / 2 - 1, 10, bw + 2); ctx.fillStyle = dark; }
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(4, 6, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = steel; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = dead ? '#1f1d1c' : shade(steel, 0.14); ctx.beginPath(); ctx.ellipse(-r * 0.05, 0, r * 0.78, r * 0.68, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = dark; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+    } else if (g.kind === 'med') {
+        ctx.fillStyle = dark; ctx.fillRect(r * 0.2, -6, r * 2.1, 12);
+        ctx.fillStyle = steel; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+        ctx.strokeStyle = dark; ctx.lineWidth = 3; ctx.stroke();
+    } else if (g.kind === 'torp') {
+        ctx.fillStyle = dark; for (const y of [-11, 11]) ctx.fillRect(-r, y - 8, r * 2.6, 16);
+        ctx.fillStyle = steel; ctx.beginPath(); ctx.arc(0, 0, r * 0.75, 0, TAU); ctx.fill();
+    } else {
+        ctx.fillStyle = '#3a3f46'; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = dark; ctx.fillRect(0, -5, r * 2.3, 10);
+        ctx.fillStyle = dead ? '#2a2826' : '#7c858f'; ctx.fillRect(-r * 0.3, -r * 0.8, r * 0.5, r * 1.6);
+    }
+    if (dead) { ctx.fillStyle = 'rgba(255,120,40,0.35)'; ctx.beginPath(); ctx.arc(0, 0, r * 0.55, 0, TAU); ctx.fill(); }
+    ctx.restore();
+}
+let navySeaPat = null;
+function drawSea(L, T, R, B, now) {
+    if (!navySeaPat) {
+        const [cv, g] = makeCanvas(512, 512), rnd = seededRand(4242);
+        g.strokeStyle = 'rgba(190,232,245,0.20)'; g.lineWidth = 3; g.lineCap = 'round';
+        for (let i = 0; i < 46; i++) { const x = rnd() * 512, y = rnd() * 512, w = 18 + rnd() * 34; for (const [ox, oy] of [[0, 0], [512, 0], [-512, 0], [0, 512], [0, -512]]) { g.beginPath(); g.moveTo(x + ox - w, y + oy); g.quadraticCurveTo(x + ox, y + oy - 9, x + ox + w, y + oy); g.stroke(); } }
+        navySeaPat = cv;
+    }
+    ctx.fillStyle = '#1c6e93';
+    ctx.fillRect(L - 10, T - 10, R - L + 20, B - T + 20);
+    const pat = ctx.createPattern(navySeaPat, 'repeat');
+    if (pat && !lowDetail) for (const [sx, sy, k] of [[9, 4, 1], [-6, 9, 1.6]]) {
+        const ox = (now * sx) % (512 * k), oy = (now * sy) % (512 * k);
+        ctx.save(); ctx.translate(ox, oy); ctx.scale(k, k); ctx.fillStyle = pat; ctx.fillRect((L - ox) / k - 20, (T - oy) / k - 20, (R - L) / k + 40, (B - T) / k + 40); ctx.restore();
+    }
+    for (const q of G.navy.islands) {
+        if (q.x + q.r + 80 < L || q.x - q.r - 80 > R || q.y + q.r + 80 < T || q.y - q.r - 80 > B) continue;
+        ctx.fillStyle = 'rgba(214,240,246,0.32)'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + 52 + Math.sin(now + q.seed) * 8, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#5bb6c9'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + 30, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#e4cf97'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + 4, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#5c9a48'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r - 42, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#4c8a3c'; ctx.beginPath(); ctx.arc(q.x - q.r * 0.2, q.y + q.r * 0.15, q.r * 0.55, 0, TAU); ctx.fill();
+    }
+}
+function drawNavy(L, T, R, B, now) {
+    for (const s of G.navy.ships) {
+        if (s.x + s.C.len / 2 + 80 < L || s.x - s.C.len / 2 - 80 > R || s.y + s.C.len / 2 + 80 < T || s.y - s.C.len / 2 - 80 > B) continue;
+        const C = s.C, art = navyArt(s.kind, s.team);
+        const sink = s.sinkAt ? clamp((G.time - s.sinkAt) / 15000, 0, 1) : 0;
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.a + sink * 0.09);
+        if (sink) { ctx.globalAlpha = clamp(1.25 - sink * 1.3, 0, 1); const k = 1 - sink * 0.14; ctx.scale(k, k); }
+        ctx.fillStyle = 'rgba(0,30,50,0.32)';
+        ctx.save(); ctx.translate(16, 24); navyHullPath(ctx, C, 14); ctx.fill(); ctx.restore();
+        ctx.drawImage(art, -art.width / 2, -art.height / 2);
+        for (const g of s.guns) navyDrawGun(g);
+        // Hull fires
+        for (const q of s.spots) {
+            const flick = 0.75 + Math.sin(now * 9 + q.ph) * 0.25;
+            ctx.fillStyle = 'rgba(20,14,12,0.55)'; ctx.beginPath(); ctx.arc(q.lx, q.ly, q.r * 1.25, 0, TAU); ctx.fill();
+            ctx.fillStyle = `rgba(255,120,40,${0.75 * flick})`; ctx.beginPath(); ctx.arc(q.lx, q.ly, q.r * 0.8 * flick, 0, TAU); ctx.fill();
+            ctx.fillStyle = `rgba(255,214,110,${0.8 * flick})`; ctx.beginPath(); ctx.arc(q.lx, q.ly, q.r * 0.35 * flick, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+        // Boarding planks across to any hull alongside
+        for (const pl of s.planks) {
+            if (pl.x === undefined) continue;
+            ctx.save(); ctx.translate(pl.x, pl.y); ctx.rotate(pl.a);
+            for (const off of [-120, 0, 120]) { ctx.fillStyle = '#7a5a34'; ctx.fillRect(-pl.len / 2, off - 16, pl.len, 32); ctx.fillStyle = '#b08458'; ctx.fillRect(-pl.len / 2, off - 12, pl.len, 24); ctx.fillStyle = 'rgba(0,0,0,0.25)'; for (let x = -pl.len / 2; x < pl.len / 2; x += 18) ctx.fillRect(x, off - 12, 2, 24); }
+            ctx.restore();
+        }
+    }
+    // Where your big gun's shells will land
+    const p = G.player;
+    if (p && !p.dead && p.station && p.station.gun && p.station.kind !== 'mg') {
+        const g = p.station, s = g.ship, wx = navyWx(s, g.lx, g.ly), wy = navyWy(s, g.lx, g.ly), a = s.a + g.rel, m = inputOf(p).world();
+        const d = g.kind === 'torp' || TOUCH.enabled ? g.D.range : clamp(Math.hypot(m.x - wx, m.y - wy), 200, g.D.range), ex = wx + Math.cos(a) * d, ey = wy + Math.sin(a) * d, k = 1 / G.zoom;
+        ctx.save();
+        ctx.setLineDash([16 * k, 12 * k]); ctx.lineWidth = 2 * k; ctx.strokeStyle = 'rgba(255,247,236,0.55)';
+        ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.setLineDash([]); ctx.strokeStyle = G.time >= g.fireAt ? '#ffd166' : '#ff6a5a'; ctx.lineWidth = 3 * k;
+        ctx.beginPath(); ctx.arc(ex, ey, g.D.blastR, 0, TAU); ctx.stroke();
+        ctx.restore();
+    }
+}
+// Names and hull bars, on top of everything
+function drawNavyLabels() {
+    const k = 1 / G.zoom, pl = G.player;
+    for (const s of G.navy.ships) {
+        if (s.sunk || !inView(s.x, s.y, s.C.len / 2)) continue;
+        const f = clamp(s.hp / s.maxHp, 0, 1), w = (s.kind === 'battleship' ? 200 : s.kind === 'destroyer' ? 150 : 110) * k, h = 8 * k, x = s.x - w / 2, y = s.y - s.C.beam / 2 - 34 * k;
+        const mine = pl ? s.team === pl.team : s.team === 0;
+        ctx.fillStyle = 'rgba(8,12,18,0.72)'; ctx.fillRect(x - 2 * k, y - 2 * k, w + 4 * k, h + 4 * k);
+        ctx.fillStyle = f > 0.5 ? (mine ? '#5fd38a' : '#ff6a5a') : f > 0.25 ? '#ffc23d' : '#ff3b30'; ctx.fillRect(x, y, w * f, h);
+        ctx.font = `800 ${15 * k}px Rajdhani, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        const label = `${s.sinkAt ? 'SINKING · ' : !s.helm.crew && s.crewN > 0 ? 'ADRIFT · ' : ''}${s.name}`;
+        ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(label, s.x, y - 3 * k);
+        ctx.fillStyle = TEAMS[s.team].color; ctx.fillText(label, s.x, y - 3 * k);
+    }
+}
+function drawSwimmer(f) {
+    ctx.fillStyle = 'rgba(28,110,147,0.62)';
+    ctx.beginPath(); ctx.ellipse(f.x, f.y + 6, f.r * 1.25, f.r * 0.95, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(220,244,252,0.6)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(f.x, f.y + 6, f.r * 1.35 + Math.sin(G.time / 240) * 2, f.r * 1.05, 0, 0, TAU); ctx.stroke();
+}
+function drawNavyMinimap(g, k) {
+    for (const s of G.navy.ships) {
+        if (s.sunk) continue;
+        g.save();
+        g.translate(s.x * k, s.y * k); g.rotate(s.a);
+        g.fillStyle = s.sinkAt ? '#555' : TEAMS[s.team].color;
+        g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 1;
+        const l = Math.max(7, s.C.len * k), b = Math.max(3, s.C.beam * k * 1.2);
+        g.beginPath(); g.moveTo(l / 2, 0); g.lineTo(l / 4, -b / 2); g.lineTo(-l / 2, -b / 2); g.lineTo(-l / 2, b / 2); g.lineTo(l / 4, b / 2); g.closePath(); g.fill(); g.stroke();
+        g.restore();
+    }
+}
+function drawNavyPreview(g, W, H, now) {
+    g.fillStyle = '#1c6e93'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(190,232,245,0.22)'; g.lineWidth = 2;
+    for (let i = 0; i < 30; i++) { const x = (i * 83 + now * 0.012) % W, y = (i * 53) % H; g.beginPath(); g.moveTo(x - 12, y); g.quadraticCurveTo(x, y - 5, x + 12, y); g.stroke(); }
+    const draw = (kind, team, x, y, a, k) => {
+        const art = navyArt(kind, team);
+        g.save(); g.translate(x, y); g.rotate(a); g.scale(k, k); g.drawImage(art, -art.width / 2, -art.height / 2);
+        const C = NAVY.ships[kind];
+        for (const [gk, lx, ly, r] of C.guns) if (gk !== 'mg') { const rr = r || NAVY.guns[gk].r; g.fillStyle = '#3c4249'; g.fillRect(lx, ly - 18, rr * 2.4, 36); g.fillStyle = '#5d6670'; g.beginPath(); g.arc(lx, ly, rr, 0, TAU); g.fill(); }
+        g.restore();
+    };
+    draw('battleship', 0, W * 0.42, H * 0.68, -0.08, 0.24);
+    draw('battleship', 1, W * 0.6, H * 0.27, Math.PI + 0.06, 0.2);
+    draw('gunboat', 0, W * 0.86, H * 0.8, -0.4, 0.26);
+    draw('destroyer', 1, W * 0.14, H * 0.28, 0.2, 0.2);
+    const t = (now * 0.0006) % 1;
+    g.fillStyle = 'rgba(255,190,90,0.95)'; g.beginPath(); g.arc(lerp(W * 0.4, W * 0.62, t), lerp(H * 0.6, H * 0.3, t), 4, 0, TAU); g.fill();
 }
 
 // ---------- Assassin ----------
@@ -5813,6 +6898,12 @@ function newDemo() {
         return;
     }
     const epic = id === 'epic', zombies = id === 'zombies';
+    if (id === 'navy') {
+        newState('demo', { type: 'navy', teams: 2, size: 30, ships: 1, crew: 25, map: 'sea' });
+        G.alive = G.fighters.length;
+        G.cam.x = c; G.cam.y = c;
+        return;
+    }
     if (id === 'boss') {
         newState('demo', { type: 'boss', count: 24, map: 'cavern' });
         G.alive = G.fighters.length;
@@ -6173,7 +7264,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.murder || G.ghostMode || G.duel) return;
+    if (G.murder || G.ghostMode || G.duel || G.navy) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -6300,7 +7391,7 @@ function applyLoot(f, key, swapIdx, mag, count = 1) {
 // back with new gear, so these drops fade out after a while instead of piling up.
 const DEATH_DROP_LIFE = 60000;
 function dropDeathWeapons(t) {
-    if (t.escaped || t.zombie || t.up || !t.inv) return;
+    if (G.navy || t.escaped || t.zombie || t.up || !t.inv) return;
     const guns = t.inv.filter(k => k && WEAPONS[k] && k !== 'Pistol')
         .map(k => ({ key: k, mag: WEAPONS[k].melee ? undefined : Math.max(0, Math.min(1e6, t.ammo[k] || 0)) }));
     if (!guns.length) return;
@@ -6824,6 +7915,7 @@ function blast(x, y, owner, R, dmg, weapon) {
     }
     if (G.survival) for (const a of G.animals) { const d = Math.hypot(a.x - x, a.y - y); if (!a.dead && d < R) damageAnimal(a, dmg * (1 - d / R) + 20, owner); }
     if (G.world.cars) for (const c of G.world.cars) { const d = Math.hypot(c.x - x, c.y - y); if (!c.dead && d < R + 30) damageCar(c, dmg * 1.4 * (1 - d / (R + 30)) + 15, owner); }
+    if (G.navy) navyBlast(x, y, R, dmg, owner, weapon);
     // Revolution: explosions chew through base walls (a cannon shell hardest of all)
     // (a boss strike's shots only bring down the walls they're aimed at)
     if (G.revolution && weapon !== 'Boss Strike') {
@@ -6967,7 +8059,7 @@ function killFighter(t, killer, weapon) {
     }
     if (t.decoy) { t.dead = true; burst(t.x, t.y, 20, '#ffd166', 220, 'glow'); if (killer && killer.isPlayer === false) killer.target = null; return; }
     // Team modes: you go down first, and a teammate has a chance to get you back up
-    if (G.war && !G.revolution && !t.downed && !t.finishing && !t.vaporized && weapon !== 'zone' && weapon !== 'Collapse' && G.fighters.some(f => f !== t && !f.dead && !f.downed && f.team === t.team)) { goDown(t, killer, weapon); return; }
+    if (G.war && !G.revolution && !G.navy && !t.downed && !t.finishing && !t.vaporized && weapon !== 'zone' && weapon !== 'Collapse' && G.fighters.some(f => f !== t && !f.dead && !f.downed && f.team === t.team)) { goDown(t, killer, weapon); return; }
     t.downed = false;
     t.hp = 0;
     t.dead = true;
@@ -7354,6 +8446,7 @@ function updatePlayer(p, dt) {
     if (I === LOCAL_INPUT && TOUCH.move.on) { mx = TOUCH.move.x; my = TOUCH.move.y; len = 1; }
     // Driving: the car handles the controls (see updateCars)
     if (p.car) return;
+    if (G.navy && navyPlayer(p, I, mx, my, dt)) return;
     autoPickup(p);
     // Survival: frozen on the platform until the countdown ends; resting until you move
     if (G.frozen || p.resting || stunned(p)) {
@@ -7374,7 +8467,7 @@ function updatePlayer(p, dt) {
         // A grenade in hand: the trigger pulls the pin, and letting go throws it where you're aiming
         if (mouse.down && !p.cook) { playerCook(p); if (p.cook) p.cookByTrigger = true; }
         else if (!mouse.down && p.cook && p.cookByTrigger) { p.cookByTrigger = false; playerRelease(p); }
-    } else if (mouse.down) tryAttack(p);
+    } else if (mouse.down && !p.swim) tryAttack(p);
 }
 
 // ---------- Bot AI ----------
@@ -7886,6 +8979,7 @@ function findPath(b, gx, gy, reach = 50, opt = PATH) {
 function updateBot(b, dt) {
     // Downed: lying there waiting for help
     if (b.downed) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
+    if (G.navy) { navyBot(b, dt); return; }
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
     if (G.duel && b.duel && duelBotMove(b, dt)) return;
@@ -8634,6 +9728,7 @@ function hurtPace(f) {
 
 // ----- Decals: things left on the ground (per floor/street, so each layer keeps its own) -----
 function addDecal(d) {
+    if (G.navy) return d;
     const list = G.world.decals || (G.world.decals = []);
     d.born = G.time;
     list.push(d);
@@ -8642,6 +9737,7 @@ function addDecal(d) {
     return d;
 }
 function addCasing(x, y) {
+    if (G.navy) return;
     const list = G.world.casings || (G.world.casings = []);
     list.push({ x, y, a: rand(0, TAU), born: G.time });
     if (list.length > REALISM.casings) list.shift();
@@ -8656,6 +9752,7 @@ function bloodSplat(x, y, ang, size = 1) {
     addDecal({ kind: 'blood', x, y, blobs, life: 120000 });
 }
 function addCorpse(f) {
+    if (G.navy) return;
     const a = f.angle + rand(-0.5, 0.5);
     // The pool spreads out from under the body, so it goes down first
     addDecal({ kind: 'pool', x: f.x - Math.cos(a) * 6, y: f.y - Math.sin(a) * 6, r: rand(28, 40), life: 90000 });
@@ -11127,7 +12224,7 @@ const vt = c => VTYPES[c.type];
 
 // A parked vehicle is a solid obstacle (an axis-aligned box roughly its shape). Helicopters and boats don't block anyone
 function parkCar(c) {
-    if (vt(c).round) return;  // (a castle guard tower: its rooms below are walkable, its walls do the blocking)
+    if (vt(c).round || G.navy) return;  // (a castle guard tower: its rooms below are walkable, its walls do the blocking)
     const T = vt(c), side = Math.abs(Math.sin(c.a)) > 0.7;
     c.box = { type: 'crate', drivecar: c, x: c.x, y: c.y, hw: (side ? T.wid : T.len) / 2, hh: (side ? T.len : T.wid) / 2 };
     if (!T.water) G.world.grid.insertBox(c.box);
@@ -11404,7 +12501,7 @@ function explodeCar(c, by) {
     // The blast goes off before the burnt shell is there to soak it up (it was shielding everyone from it)
     const big = T.hp > 900 ? 1.5 : 1;
     blast(c.x, c.y, by, 200 * big, 110 * big, `${T.name} explosion`);
-    if (!T.water) {
+    if (!T.water && !G.navy) {
         const side = Math.abs(Math.sin(c.a)) > 0.7;
         // The wreck keeps the shape of what it was, lying square to its box
         const wa = side ? (Math.sin(c.a) > 0 ? Math.PI / 2 : -Math.PI / 2) : (Math.cos(c.a) > 0 ? 0 : Math.PI);
@@ -11873,6 +12970,7 @@ const canDrive = b => !isHuman(b) && !b.zombie && !b.decoy && !b.riding && !b.up
 
 // Steer toward a point, swerving round anything in the way; back up and try again when stuck
 function botDrive(c, b, dt) {
+    if (G.navy) return navyPilot(c, b, dt);
     const T = vt(c);
     if (G.time >= (b.driveThink || 0)) {
         b.driveThink = G.time + 300;
@@ -12574,7 +13672,7 @@ function secretGrenades(p) {
 function moveFighter(f, dt) {
     if (f.car) return;
     const ox = f.x, oy = f.y;
-    const slow = (f.downed ? 0.2 : 1) * (f.healing ? 0.5 : 1) * hurtPace(f) * tiredPace(f) * (G.survival && G.world.ponds && inPond(f) ? 0.6 : 1);
+    const slow = (f.downed ? 0.2 : 1) * (f.healing ? 0.5 : 1) * (f.swim ? NAVY.swimPace : 1) * hurtPace(f) * tiredPace(f) * (G.survival && G.world.ponds && inPond(f) ? 0.6 : 1);
     f.x += (f.vx * slow + f.kx) * dt;
     f.y += (f.vy * slow + f.ky) * dt;
     const kd = Math.exp(-7 * dt);
@@ -12678,11 +13776,12 @@ function updateBullets(dt) {
                 if (b.left <= 0 && !b.rocket && inView(b.x, b.y, 30)) G.particles.push({ type: 'smoke', x: b.x, y: b.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 4, color: '170,150,120' });
                 break;
             }
-            if (b.rocket && inView(b.x, b.y, 50) && s === 0 && Math.random() < 0.9) {
+            if (b.rocket && !b.torpedo && inView(b.x, b.y, 50) && s === 0 && Math.random() < 0.9) {
                 G.particles.push({ type: 'smoke', x: b.x, y: b.y, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.9, max: 0.9, size: rand(6, 10), color: '200,196,190' });
                 G.particles.push({ type: 'glow', x: b.x, y: b.y, vx: -b.vx * 0.1, vy: -b.vy * 0.1, life: 0.2, max: 0.2, size: rand(4, 7), color: '#ffb347' });
             }
 
+            if (G.navy && navyBullet(b)) { b.dead = true; break; }
             let wall = null, bush = null;
             if (b.up === undefined) b.up = (b.owner && b.owner.up) || null;
             // (indoors on a castle's middle floor: a shot stops at the outside of the ring)
@@ -12718,14 +13817,14 @@ function updateBullets(dt) {
 
             let hit = null;
             G.fgrid.query(b.x, b.y, 24, f => {
-                if (hit || f.dead || f.car || !foe(b.owner, f) || (b.pierced && b.pierced.has(f))) return;
+                if (hit || b.torpedo || f.dead || f.car || !foe(b.owner, f) || (b.pierced && b.pierced.has(f))) return;
                 // Different levels: the deck shields whoever's under it, and only shots that came up over the parapet reach the deck
                 if ((f.up || null) !== (b.up || null) && (f.up || isMid(b.up) || underRing(b.up, f))) return;
                 const rr = f.r + 3;
                 if ((b.x - f.x) ** 2 + (b.y - f.y) ** 2 < rr * rr) hit = f;
             });
             if (!hit && G.traffic.length && !G.world.floor && bulletHitsCar(b)) { b.dead = true; break; }
-            if (!hit && G.world.cars && bulletHitsDrivenCar(b)) { b.dead = true; break; }
+            if (!hit && G.world.cars && !b.torpedo && bulletHitsDrivenCar(b)) { b.dead = true; break; }
             if (!hit && G.drones && G.drones.length && bulletHitsDrone(b)) { b.dead = true; break; }
             if (!hit && G.survival && !G.world.floor) {
                 let prey = null;
@@ -12825,6 +13924,7 @@ function update(dt) {
     }
     for (const f of G.fighters) if (!f.dead) moveFighter(f, dt);
     separateFighters();
+    if (G.navy) updateNavy(dt);
     if (G.world.cars) updateCars(dt);
     updateBullets(dt);
     updateLobs();
@@ -12855,7 +13955,7 @@ function update(dt) {
 
     updateCamera(dt);
 
-    if (G.mode === 'demo' && (G.fighters.length < 8 || (G.war && G.teamAlive.filter(n => n > 0).length < 2) || (G.noZone && (G.sides.b === 0 || G.sides.a < 5)) || (G.escape && G.time > 90000))) newDemo();
+    if (G.mode === 'demo' && (G.fighters.length < 8 || (G.war && G.teamAlive.filter(n => n > 0).length < 2) || (G.noZone && (G.sides.b === 0 || G.sides.a < 5)) || (G.escape && G.time > 90000) || (G.navy && G.navy.over))) newDemo();
     if (G.survival && G.mode === 'playing' && !G.frozen && G.player && !G.player.dead) survivalReminders();
     // Team modes: once you're dead (and your side fights on), ask whether you want to spectate
     if (G.war && G.mode === 'playing' && G.player && G.player.dead && !G.result && !G.spectateAsked && G.time - (G.player.diedAt || 0) > 1200) askSpectate();
@@ -12905,7 +14005,7 @@ function updateCamera(dt) {
         const p = G.player;
         if (p.scoped && !canScope(p)) p.scoped = false;
         if (p.scoped) p.scopeAt = scopeTarget(p); else p.scopeAt = null;
-        const t = p.scopeAt || p;
+        const t = p.scopeAt || (G.navy && navyLook(p)) || p;
         G.cam.x += (t.x - G.cam.x) * Math.min(1, dt * (p.scopeAt ? 9 : 12));
         G.cam.y += (t.y - G.cam.y) * Math.min(1, dt * (p.scopeAt ? 9 : 12));
     } else if (G.war && G.player && G.spectating) {
@@ -12945,7 +14045,8 @@ function render() {
 
     // Ground
     const W = CONFIG.WORLD_SIZE;
-    if (G.world.floor) drawFloorBase(L, T, R, B);
+    if (G.navy) drawSea(L, T, R, B, now);
+    else if (G.world.floor) drawFloorBase(L, T, R, B);
     else if (G.world.city) drawCity(L, T, R, B);
     else {
         ctx.fillStyle = SPR.grass;
@@ -13054,6 +14155,7 @@ function render() {
     if (chaos) { drawBombs(); drawTraffic(); }
     if (G.extract) drawExtraction(now);
 
+    if (G.navy) drawNavy(L, T, R, B, now);
     // Fighters
     const visible = [];
     for (const f of G.fighters) if (!f.car && !f.up && f.x > L - 80 && f.x < R + 80 && f.y > T - 80 && f.y < B + 80) visible.push(f);
@@ -13066,6 +14168,7 @@ function render() {
             continue;
         }
         drawFighter(f);
+        if (f.swim) drawSwimmer(f);
     }
     for (const f of visible) { drawShieldBubble(f); drawStun(f); drawFrozen(f); }
 
@@ -13108,6 +14211,7 @@ function render() {
     drawFallingRoofs();
     if (G.revolution) drawDecks(L, T, R, B);
 
+    if (G.navy) drawNavyLabels();
     for (const f of visible) drawOverhead(f);
 
     // Keep yourself easy to spot when zoomed far out
@@ -14462,6 +15566,13 @@ function drawRocket(b) {
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(Math.atan2(b.vy, b.vx));
+    if (b.torpedo) {
+        // A dark shape just under the water with a line of foam behind it
+        ctx.fillStyle = 'rgba(232,246,255,0.5)'; ctx.fillRect(-90, -3, 70, 6);
+        ctx.fillStyle = 'rgba(10,30,44,0.8)'; ctx.beginPath(); ctx.ellipse(0, 0, 26, 7, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+        return;
+    }
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = 'rgba(255,170,70,0.9)';
@@ -14748,6 +15859,9 @@ function updateHUD() {
     if (G.revolution) {
         const Rv = G.revolution;
         setHTML(hud.teamScore, 'teams', [0, 1].map(t => `<div class="ts${t === p.team ? ' mine' : ''}${revoLeft(t) === 0 ? ' out' : ''}"><i style="background:${REVO.sides[t].flag}"></i><b>${G.teamAlive[t]}</b><span>${revoName(t)} · ${Rv.bases[t].fallen ? 'base fallen' : `base ${Math.round(baseHealth(Rv.bases[t]) * 100)}% · strike ${Math.floor(Rv.bases[t].strike.ammo / 100) / 10}k/${REVO.strike.cost / 1000}k`}</span></div>`).join('<em>vs</em>'));
+    } else if (G.navy) {
+        const left = G.navy.left || [0, 0], chip = t => `<div class="ts${t === p.team ? ' mine' : ''}${left[t] === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${left[t]}</b><span>${t === p.team ? 'Your ships' : 'Enemy ships'} · ${G.teamAlive[t]} people</span></div>`;
+        setHTML(hud.teamScore, 'teams', chip(0) + '<em>vs</em>' + chip(1));
     } else if (G.war) {
         setHTML(hud.teamScore, 'teams', G.teamAlive.map((n, t) =>
             `<div class="ts${t === p.team ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${n}</b><span>${t === p.team ? 'Your team' : TEAMS[t].name}</span></div>`).join('<em>vs</em>'));
@@ -14765,7 +15879,8 @@ function updateHUD() {
     }
 
     let zt;
-    if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
+    if (G.navy) zt = navyStatus(p);
+    else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
     else if (G.assassin) zt = p.assassin ? "Take them all out · don't get caught" : 'Find the assassin and catch him';
@@ -14867,7 +15982,10 @@ function updateHUD() {
             if ((p.up || null) === L.lower && Math.hypot(p.x - st.b.x, p.y - st.b.y) < 110) stairHint = 'Stand on the stairs to go up to the balcony';
             else if (p.up === L && Math.hypot(p.x - st.t.x, p.y - st.t.y) < 110) stairHint = `Stand on the stairs to go down to the ${L === b ? 'middle floor' : 'ground floor'}`;
         }
-        if (strikeCamOn()) {
+        if (G.navy && navyLabel(p)) {
+            const st = p.station;
+            prompt = st && st.helm ? `<kbd>W</kbd><kbd>S</kbd> Throttle · <kbd>A</kbd><kbd>D</kbd> Steer · <kbd>F</kbd> Leave the wheel` : st ? `Aim and click to fire · <kbd>F</kbd> Leave the gun` : `<kbd>F</kbd> ${navyLabel(p)}`;
+        } else if (strikeCamOn()) {
             prompt = 'Watching the boss strike · <kbd>Space</kbd> to look back';
         } else if (onPad) {
             prompt = pad.ammo >= REVO.strike.cost ? '<kbd>F</kbd> LAUNCH THE BOSS STRIKE' : `<kbd>F</kbd> Load ammo into the boss strike · ${Math.floor(pad.ammo)} / ${REVO.strike.cost}`;
@@ -14981,6 +16099,7 @@ function drawMinimap() {
         g.lineWidth = 2;
         g.beginPath(); g.arc(n.x * k, n.y * k, Math.max(4, NUKE.radius * k), 0, TAU); g.fill(); g.stroke();
     }
+    if (G.navy) drawNavyMinimap(g, k);
     if (G.duel) for (const c of G.duel.cues) if (c.kind === 'shot') { g.strokeStyle = '#ff5a5a'; g.lineWidth = 2; g.beginPath(); g.arc(c.x * k, c.y * k, 6, 0, TAU); g.stroke(); }
     // Airdrop markers
     for (const d of G.airdrops) {
@@ -15108,9 +16227,10 @@ const MODES = [
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
     { id: 'murder', name: 'MURDER MYSTERY', desc: 'One murderer with a knife, one sheriff with a gun, and everyone else innocent. Nobody knows who\'s who. Find the murderer before everyone is gone.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
-    { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' }
+    { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
+    { id: 'navy', name: 'BATTLESHIPS', desc: 'Two fleets at sea. Giant ships with turning cannons, deck guns, torpedoes and helicopters, up to 100 people on each. Take the wheel, man the guns, fly, or board the enemy and capture their ship.' }
 ];
-let murderRolePick = 'random', ghostRolePick = 'hunter';
+let murderRolePick = 'random', ghostRolePick = 'hunter', navyRolePick = 'captain';
 // After the mode and its settings, you pick how the fight is armed
 const WARFARE = {
     normal: { name: 'NORMAL WARFARE', desc: 'Ordinary guns to find in boxes, ordinary cars and trucks.' },
@@ -15127,7 +16247,9 @@ function setMenuMode(i, dir) {
     const m = MODES[menuMode];
     $('mode-name').textContent = m.name;
     $('mode-desc').textContent = m.desc;
-    $('settings-ffa').classList.toggle('hidden', m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-navy').classList.toggle('hidden', m.id !== 'navy');
+    $('solo-friends').classList.toggle('hidden', !soloMap(m.id));
+    $('settings-ffa').classList.toggle('hidden', m.id === 'navy' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-assassin').classList.toggle('hidden', m.id !== 'assassin');
     $('settings-murder').classList.toggle('hidden', m.id !== 'murder');
@@ -15175,6 +16297,7 @@ function drawModePreview(now) {
     let seed = war ? 7 : epic ? 11 : 3;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     if (id === 'zombies') { drawZombiePreview(g, Wd, Ht, now); return; }
+    if (id === 'navy') { drawNavyPreview(g, Wd, Ht, now); return; }
     if (id === 'escape') { drawEscapePreview(g, Wd, Ht, now); return; }
     g.save();
     g.fillStyle = SPR.grass;
@@ -15416,6 +16539,26 @@ function fitSliders(moved) {
 $('surv-slider').addEventListener('input', () => fitSliders('surv'));
 $('zomb-slider').addEventListener('input', () => fitSliders('zomb'));
 $('start-btn').addEventListener('click', openDescription);
+// Battleships: how many a side, and how many people aboard each (the whole game holds 800)
+const navyShipCount = () => clamp(+$('navy-ships').value, 1, 8);
+const navyCrewMax = () => Math.min(NAVY.ships.battleship.crew, Math.floor(NAVY.maxPeople / (2 * navyShipCount())) - NAVY.escortCrew);
+const navyCrewCount = () => clamp(+$('navy-crew').value, 10, navyCrewMax());
+function showNavy() {
+    const max = navyCrewMax();
+    $('navy-crew').max = max;
+    if (+$('navy-crew').value > max) $('navy-crew').value = max;
+    $('navy-ships-value').textContent = navyShipCount();
+    $('navy-crew-value').textContent = navyCrewCount();
+    $('navy-crew-max').textContent = max;
+    $('navy-total').textContent = `${navyShipCount() * 3} ships a side · ${2 * navyShipCount() * (navyCrewCount() + NAVY.escortCrew)} people in all`;
+}
+$('navy-ships').addEventListener('input', showNavy);
+$('navy-crew').addEventListener('input', showNavy);
+for (const btn of document.querySelectorAll('#navy-role button')) btn.addEventListener('click', () => {
+    navyRolePick = btn.dataset.r;
+    for (const b of document.querySelectorAll('#navy-role button')) b.classList.toggle('on', b === btn);
+});
+showNavy();
 // The title screen has two steps: first the game mode, then the opponents and the rest of the settings
 function menuStep(step) {
     const c = $('menu-card');
@@ -15469,14 +16612,16 @@ const BRIEF = {
 };
 BRIEF.murder = [['🔪', '<b>Murderer:</b> a knife that kills in one stab. Take everyone out, but anyone who sees the knife out knows it\'s you.'], ['🔫', '<b>Sheriff:</b> a gun that kills in one shot. Shoot the murderer. Shoot an innocent and you die too.'], ['🙂', '<b>Innocent:</b> stay alive for 3 minutes. If the sheriff goes down, grab the gun: you become the sheriff.'], ['❓', 'Nobody knows who\'s who. Pick your role, or let it be random.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> someone has to stand at the wheel. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Guns:</b> walk up to a cannon, deck gun or torpedo tube and man it. Big shells hurt the hull and the crew, and can knock out enemy guns.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull to climb up.'], ['➕', 'The green cross on deck heals you and refills your ammo.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
+const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
 function controlsFor(id) {
     const t = TOUCH.enabled, list = (t ? CONTROLS_TOUCH : CONTROLS_KEYS).slice();
+    if (id === 'navy') list.push(['🧭', t ? 'The <b>bottom button</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: stick up and down for speed, left and right to steer' : '<b>F</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: <b>W S</b> speed, <b>A D</b> steer']);
     if (id === 'duel') list.push(['🤫', t ? 'Scoped in, you walk slowly and quietly' : 'Hold <b>Shift</b> or scope in to walk slowly and quietly']);
     if (id === 'survival') list.push(['🍖', t ? 'Tap the meat or water on the left to eat or drink' : '<b>C</b> eat · <b>V</b> drink or fill a bucket at water · <b>B</b> rest']);
     if (id === 'revolution') list.push(['💥', t ? 'At your boss strike pad, the bottom button loads ammo or launches it' : 'At your boss strike pad, <b>F</b> loads ammo or launches it']);
@@ -15496,31 +16641,45 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'assassin' ? (assassinRole === 'assassin' ? 'You: Assassin' : 'You: Survivor') : m.id === 'murder' ? `You: ${murderRolePick === 'random' ? 'Random' : murderRolePick[0].toUpperCase() + murderRolePick.slice(1)}` : m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'assassin' ? (assassinRole === 'assassin' ? 'You: Assassin' : 'You: Survivor') : m.id === 'murder' ? `You: ${murderRolePick === 'random' ? 'Random' : murderRolePick[0].toUpperCase() + murderRolePick.slice(1)}` : m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, m.id === 'duel' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'murder' || id === 'ghost' || id === 'duel') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'murder' || id === 'ghost' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
     else startGame(BRIEF_STAGE.map);
 });
 $('brief-back').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    (BRIEF_STAGE.stage === 'desc' ? screens.menu : screens.mapsel).classList.remove('hidden');
+    // (a mode with only one map never showed the map screen: back to whatever came before it)
+    if (BRIEF_STAGE.stage === 'desc') screens.menu.classList.remove('hidden');
+    else if (!soloMap(MODES[menuMode].id)) screens.mapsel.classList.remove('hidden');
+    else if (['ghost', 'navy'].includes(MODES[menuMode].id)) openDescription();
+    else openTypeSelect();
 });
 
 // Pressing Play first asks where to fight (Escape needs streets and towers, so no open countryside there)
 let lastMap = 'ordinary';
+function mapAllowed(id, m) {
+    if (id === 'navy') return m === 'sea';
+    return !(m === 'sea' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
+}
+// The one map a mode can be played on, if there's only one: then there's nothing to choose
+function soloMap(id) {
+    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea'].filter(m => mapAllowed(id, m));
+    return all.length === 1 ? all[0] : null;
+}
 function openMapSelect() {
-    const id = MODES[menuMode].id, escape = id === 'escape';
+    const id = MODES[menuMode].id, escape = id === 'escape', solo = soloMap(id);
+    if (solo) { screens.menu.classList.add('hidden'); screens.typesel.classList.add('hidden'); openBriefing(solo); return; }
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
-        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
+        card.classList.toggle('hidden', !mapAllowed(id, m));
         card.disabled = false;
         card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
     }
@@ -15673,8 +16832,10 @@ function startGame(map = lastMap) {
     if ((id === 'survival' || id === 'duel') && map === 'maze') map = 'ordinary';
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
+    if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
     lastMap = map;
-    const setup = war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
+    const setup = id === 'navy' ? { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick }
+        : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
         : id === 'murder' ? { type: id, count: Math.max(2, Math.min(MURDER.maxPlayers - 1, sliderToCount(+slider.value))), role: murderRolePick }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
@@ -15682,7 +16843,7 @@ function startGame(map = lastMap) {
         : id === 'assassin' ? { type: id, count: sliderToCount(+slider.value), role: assassinRole }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'murder' || id === 'ghost' || id === 'duel' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'murder' || id === 'ghost' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -15695,7 +16856,7 @@ function startGame(map = lastMap) {
     document.body.classList.add('playing');
     canvas.classList.remove('dead');
     mouse.down = false;
-    hud.teamScore.classList.toggle('hidden', !war && !G.noZone);
+    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
@@ -15705,7 +16866,8 @@ function startGame(map = lastMap) {
     hud.energyBar.classList.toggle('hidden', !G.survival);
     hud.cells.water.classList.toggle('hidden', !G.survival);
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
-    if (G.duel) { /* (each round announces itself) */ }
+    if (G.navy) showBanner('BATTLESHIPS', true, `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
+    else if (G.duel) { /* (each round announces itself) */ }
     else if (G.murder) { const r = murderRole(G.player); showBanner(`YOU ARE ${r === 'innocent' ? 'INNOCENT' : 'THE ' + MURDER_ROLE[r]}`, true, r === 'murderer' ? 'Take everyone out. Switch to your knife (slot 2) to stab: one stab kills. Anyone who sees the knife knows it\'s you!' : r === 'sheriff' ? 'One shot kills. Find the murderer and shoot them, but if you shoot an innocent, you die too!' : 'Stay alive for 3 minutes. Watch for anyone with a knife out, and grab the gun if the sheriff goes down.'); }
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
@@ -15878,10 +17040,14 @@ function updateHostList() {
     updateHostStrip();
 }
 function updateHostStrip() {
-    const el = $('host-strip');
-    if (!el) return;
-    el.classList.toggle('hidden', NET.role !== 'host' || !NET.code);
-    if (NET.role === 'host' && NET.code) el.innerHTML = `HOSTING · CODE <strong>${NET.code}</strong> · ${NET.guests.length} friend${NET.guests.length === 1 ? '' : 's'} joined · pick a battlefield to start`;
+    const solo = !!soloMap(MODES[menuMode].id);
+    for (const id of ['host-strip', 'host-strip-setup']) {
+        const el = $(id);
+        if (!el) continue;
+        el.classList.toggle('hidden', NET.role !== 'host' || !NET.code);
+        if (NET.role === 'host' && NET.code) el.innerHTML = `HOSTING · CODE <strong>${NET.code}</strong> · ${NET.guests.length} friend${NET.guests.length === 1 ? '' : 's'} joined · ${id === 'host-strip-setup' ? 'press play to start' : 'pick a battlefield to start'}`;
+    }
+    $('fr-pick').textContent = solo ? 'BACK TO THE GAME SET-UP' : 'PICK A BATTLEFIELD TO START';
 }
 function addGuest(conn) {
     if (NET.guests.length >= NET.maxFriends) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 300); return; }
@@ -16053,7 +17219,8 @@ function drawGuestHud(g) {
     c.fillText(W8 && !W8.melee ? `${reserve}` : '—', W - 28, H - 32);
     // what F does here
     const loot = !p.dead && !p.car && nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE), car = !p.dead && !p.car && !loot && nearestCar(p, 90);
-    const hint = p.car ? 'F  get out' : loot ? `F  pick up ${lootName(loot.key)}` : car ? `F  get in the ${vt(car).name}` : '';
+    const navyHint = G.navy && !p.dead && !p.car ? navyLabel(p) : '';
+    const hint = navyHint ? `F  ${navyHint.toLowerCase()}` : p.car ? 'F  get out' : loot ? `F  pick up ${lootName(loot.key)}` : car ? `F  get in the ${vt(car).name}` : '';
     if (hint) { c.font = '700 16px Rajdhani, sans-serif'; c.textAlign = 'center'; const tw = c.measureText(hint).width + 30; panel(W / 2 - tw / 2, H - 132, tw, 30); c.fillStyle = '#ffd166'; c.fillText(hint, W / 2, H - 116); }
     // out of the game, or the game's over
     if (p.dead || G.result) {
@@ -16152,6 +17319,7 @@ $('net-video').addEventListener('mouseup', e => netSend({ t: 'b', button: e.butt
 $('net-video').addEventListener('contextmenu', e => e.preventDefault());
 $('net-video').addEventListener('wheel', e => netSend({ t: 'w', dy: e.deltaY }), { passive: true });
 $('friends-btn').addEventListener('click', openFriends);
+$('solo-friends').addEventListener('click', openFriends);
 $('fr-host').addEventListener('click', hostGame);
 $('fr-join').addEventListener('click', () => { friendsView('fr-joining'); $('fr-join-msg').textContent = 'Type the code your friend sent you:'; setTimeout(() => $('fr-input').focus(), 0); });
 $('fr-go').addEventListener('click', () => joinGame($('fr-input').value));
@@ -16378,6 +17546,7 @@ function touchFrame() {
         const p = G && G.player;
         if (!p || G.mode !== 'playing' || p.dead || p.zombie) return '';
         if (p.car) return `GET OUT`;
+        if (G.navy && navyLabel(p)) return navyLabel(p).toUpperCase();
         if (G.revolution && nearOwnPad(p)) return 'BOSS STRIKE';
         const l = nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE);
         if (l) return `PICK UP ${lootName(l.key).toUpperCase()}`;

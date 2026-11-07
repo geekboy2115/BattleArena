@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261106a">
+    <link rel="stylesheet" href="style.css?v=20261106b">
 </head>
 
 <body>
@@ -161,6 +161,21 @@
                 </div>
             </div>
 
+            <div class="cpu-select hidden" id="settings-navy">
+                <div class="cpu-row"><span>Play as</span>
+                    <div class="seg" id="navy-role">
+                        <button data-r="captain" class="on">Pilot</button><button data-r="gunner">Gunner</button><button data-r="pilot">Helicopter</button><button data-r="marine">Marine</button>
+                    </div>
+                </div>
+                <div class="cpu-row"><span>Battleships a side</span><strong id="navy-ships-value">3</strong></div>
+                <input type="range" id="navy-ships" min="1" max="8" step="1" value="3">
+                <div class="cpu-scale"><span>1</span><span>8</span></div>
+                <div class="cpu-row"><span>People on each battleship</span><strong id="navy-crew-value">40</strong></div>
+                <input type="range" id="navy-crew" min="10" max="100" step="1" value="40">
+                <div class="cpu-scale"><span>10</span><span id="navy-crew-max">100</span></div>
+                <div class="navy-total" id="navy-total"></div>
+            </div>
+
             <div class="cpu-select" id="settings-ffa">
                 <div class="cpu-row"><span>Opponents</span><strong id="cpu-value">250</strong></div>
                 <input type="range" id="cpu-slider" min="0" max="1000" value="554">
@@ -193,11 +208,13 @@
                 <div class="cpu-scale"><span>1 · Easy</span><span>10 · Insane</span></div>
             </div>
 
+            <div id="host-strip-setup" class="host-strip hidden"></div>
             <button id="mode-go" class="btn primary">NEXT</button>
             <div class="setup-btns">
                 <button id="setup-back" class="btn ghost">BACK</button>
                 <button id="start-btn" class="btn primary">PLAY</button>
             </div>
+            <button id="solo-friends" class="btn primary friends-btn hidden">PLAY WITH FRIENDS</button>
 
             <p class="best">Best kills <strong id="best-kills">0</strong></p>
 
@@ -356,7 +373,7 @@
         </div>
     </div>
 
-    <script src="script.js?v=20261106a"></script>
+    <script src="script.js?v=20261106b"></script>
 </body>
 
 </html>

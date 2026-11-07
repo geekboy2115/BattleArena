@@ -941,7 +941,9 @@ body.fs #fs-btn { opacity: 0.55; }
 /* ---------- Title screen in two steps: 1. the game mode, 2. opponents and settings ---------- */
 #menu-card.step-mode .cpu-select,
 #menu-card.step-mode .setup-head,
-#menu-card.step-mode .setup-btns { display: none !important; }
+#menu-card.step-mode .setup-btns,
+#menu-card.step-mode #solo-friends,
+#menu-card.step-mode #host-strip-setup { display: none !important; }
 #menu-card.step-setup .mode-select,
 #menu-card.step-setup .mode-dots,
 #menu-card.step-setup #mode-go,
@@ -970,3 +972,5 @@ body.touch #hud:has(#team-score:not(.hidden)) #hud-bottom { top: 66px; }
 .cpu-row:has(.seg[id$="-role"]) { flex-wrap: wrap; gap: 8px; }
 .seg[id$="-role"] { width: 100%; }
 .seg[id$="-role"] button { flex: 1; width: auto; padding-left: 4px; padding-right: 4px; font-size: 15px; }
+
+.navy-total { margin-top: 6px; text-align: center; font-weight: 700; opacity: 0.8; font-size: 0.92em; }
