@@ -5126,20 +5126,20 @@ const NAVY = {
                 { lx: -420, ly: 0, a: 'hall', b: 'subdeck', toB: 'Take the stairs down to the submarine deck', toA: 'Climb back up to the gun deck' }
             ],
             medical: { lx: -760, ly: 0, r: 60, room: 'hall' },
-            // Topside only two big turrets and two deck guns; everyone else fights from the deck with what's in the gun racks
+            // Topside only two big turrets and two deck guns; everyone else fights from the deck with guns from the hangar below
             guns: [['main', 640, 0], ['main', -560, 0], ['mg', 870, -70], ['mg', 870, 70],
                 ['missile', 840, -55, null, 'hall'], ['missile', 840, 55, null, 'hall'],
                 ['med', 640, -150, null, 'hall'], ['med', 640, 150, null, 'hall'], ['med', 380, -165, null, 'hall'], ['med', 380, 165, null, 'hall'],
                 ['med', 120, -165, null, 'hall'], ['med', 120, 165, null, 'hall'], ['med', -140, -165, null, 'hall'], ['med', -140, 165, null, 'hall'],
                 ['med', -400, -165, null, 'hall'], ['med', -400, 165, null, 'hall'], ['med', -640, -160, null, 'hall'], ['med', -640, 160, null, 'hall']],
-            racks: [[380, -180], [380, 180], [-380, -180], [-380, 180]],
+            // The weapons hangar, below on the gun deck: grab a heavy gun, then take it up top to fight from the rail
+            racks: [[385, -95, 'hall'], [385, 95, 'hall'], [120, -95, 'hall'], [120, 95, 'hall']],
             pad: [-860, 0], subbays: [{ kind: 'sub', lx: 330, ly: 0 }, { kind: 'subsmall', lx: -740, ly: 0 }], supply: [[-715, 120], [880, 0]]
         },
         destroyer: {
             name: 'Destroyer', len: 1120, beam: 260, hp: 14000, speed: 205, accel: 30, turn: 0.2, crew: 20, bow: 224, aft: 336, helm: [132, 0],
             boxes: [{ x: 20, y: 0, hw: 90, hh: 62, k: 'bridge' }, { x: -155, y: 0, hw: 45, hh: 34, k: 'funnel' }],
             guns: [['med', 330, 0, 44], ['torp', -265, -72], ['torp', -265, 72], ['mg', -470, 0]],
-            racks: [[-360, -100], [-360, 100]],
             supply: [[450, 0]]
         },
         gunboat: {
@@ -5213,8 +5213,8 @@ function addShip(kind, team, x, y, a) {
         if (gun.r >= 44) s.blocks.push({ x: lx, y: ly, r: gun.r });
     }
     s.subbays = (C.subbays || []).map(b => ({ ...b, car: null, claim: null, at: 0 }));
-    s.racks = (C.racks || []).map(([lx, ly]) => ({ lx, ly }));
-    for (const r of s.racks) s.blocks.push({ x: r.lx, y: r.ly, hw: 44, hh: 14, box: true });
+    s.racks = (C.racks || []).map(([lx, ly, room]) => ({ lx, ly, room: room || null }));
+    for (const r of s.racks) if (!r.room) s.blocks.push({ x: r.lx, y: r.ly, hw: 44, hh: 14, box: true });
     N.ships.push(s);
     if (C.pad) navyAddHeli(s);
     for (const bay of s.subbays) navyAddSub(s, bay);
@@ -5386,6 +5386,11 @@ function navyAction(p) {
         const d = Math.hypot(lx - link.lx, ly - link.ly);
         if (d < 70) consider(d, { link, to: link.a === room ? link.b : link.a, text: link.a === room ? link.toB : link.toA });
     }
+    for (const r of s.racks || []) {
+        if (r.room !== room) continue;
+        const d = Math.hypot(lx - r.lx, ly - r.ly);
+        if (d < 80) consider(d, { rack: r, text: 'Take a heavy gun from the hangar' });
+    }
     if (room) {
         if (s.team === p.team) for (const g of s.guns) {
             if (g.hp <= 0 || g.room !== room || g.crew) continue;
@@ -5402,10 +5407,6 @@ function navyAction(p) {
         if (g.hp <= 0 || g.room || g.crew) continue;
         const d = Math.hypot(lx - g.lx, ly - g.ly);
         if (d < g.r + 60) consider(d, { st: g, text: `Man the ${g.D.name.toLowerCase()}` });
-    }
-    for (const r of s.racks || []) {
-        const d = Math.hypot(lx - r.lx, ly - r.ly);
-        if (d < 80) consider(d, { rack: r, text: 'Take a heavy gun from the rack' });
     }
     if (best) return best;
     if (nearestCar(p, 90)) return null;
@@ -5652,6 +5653,12 @@ function updateNavy(dt) {
                         if (g.room !== f.room) continue;
                         const ddx = lx - g.lx, ddy = ly - g.ly, d = Math.hypot(ddx, ddy) || 0.01, min = g.r + f.r;
                         if (d < min) { lx = g.lx + ddx / d * min; ly = g.ly + ddy / d * min; }
+                    }
+                    for (const r of on.racks) {
+                        if (r.room !== f.room) continue;
+                        const nx = clamp(lx, r.lx - 44, r.lx + 44), ny = clamp(ly, r.ly - 14, r.ly + 14), ddx = lx - nx, ddy = ly - ny, d = Math.hypot(ddx, ddy);
+                        if (d >= f.r) continue;
+                        if (d > 0) { lx = nx + ddx / d * f.r; ly = ny + ddy / d * f.r; } else ly = r.ly + (ly < r.ly ? -1 : 1) * (14 + f.r);
                     }
                     lx = clamp(lx, -C.len / 2 + 30 + f.r, C.len / 2 - 30 - f.r);
                     const hw = Math.max(2, navyHw(C, lx) - 18 - f.r);
@@ -6087,6 +6094,14 @@ function navyHullPath(g, C, pad = 0) {
     for (let i = n; i >= 0; i--) { const x = -L2 + (C.len * i) / n, y = navyHw(C, x) + pad; g.lineTo(x + (i === n ? pad : i === 0 ? -pad : 0), y); }
     g.closePath();
 }
+// A gun rack: walk up and take a heavy gun
+function navyDrawRack(g, rx, ry) {
+    g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(rx - 44 + 4, ry - 14 + 5, 88, 28);
+    g.fillStyle = '#4a3a26'; roundRect(g, rx - 44, ry - 14, 88, 28, 5); g.fill();
+    g.strokeStyle = '#ffd166'; g.lineWidth = 2; roundRect(g, rx - 44, ry - 14, 88, 28, 5); g.stroke();
+    g.fillStyle = '#1d1f23';
+    for (let k = -3; k <= 3; k++) g.fillRect(rx + k * 11 - 2, ry - 10, 4, 20);
+}
 function navyArt(kind, team) {
     const key = kind + team;
     if (NAVY_ART[key]) return NAVY_ART[key];
@@ -6137,14 +6152,8 @@ function navyArt(kind, team) {
         g.strokeStyle = col; g.lineWidth = 4; roundRect(g, x0 + 6, y0 + 6, w2 - 12, h2 - 12, 16); g.stroke();
         g.save(); g.translate(br.lx, y0 - 14); g.rotate(Math.PI / 2); g.fillStyle = 'rgba(255,247,236,0.85)'; g.font = '700 18px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('BRIDGE', 0, 0); g.restore();
     }
-    // Gun racks along the rails: walk up and take a heavy gun
-    for (const [rx, ry] of C.racks || []) {
-        g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(rx - 44 + 4, ry - 14 + 5, 88, 28);
-        g.fillStyle = '#4a3a26'; roundRect(g, rx - 44, ry - 14, 88, 28, 5); g.fill();
-        g.strokeStyle = '#ffd166'; g.lineWidth = 2; roundRect(g, rx - 44, ry - 14, 88, 28, 5); g.stroke();
-        g.fillStyle = '#1d1f23';
-        for (let k = -3; k <= 3; k++) g.fillRect(rx + k * 11 - 2, ry - 10, 4, 20);
-    }
+    // Gun racks out on the open deck (the battleship keeps hers below, in the hangar)
+    for (const [rx, ry, room] of C.racks || []) if (!room) navyDrawRack(g, rx, ry);
     // Stairs down, wherever they meet the open deck
     for (const link of C.links || []) {
         if (link.a !== null) continue;
@@ -6331,6 +6340,13 @@ function drawNavyInterior(L, T, R, B, now) {
     ctx.fillStyle = 'rgba(255,209,102,0.75)'; ctx.font = '700 26px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.save(); ctx.translate(-880, 0); ctx.rotate(Math.PI / 2); ctx.fillText(`DECK ${room.deck} · ${room.name}`, 0, 0); ctx.restore();
     for (const g of s.guns) if (g.room === p.room) navyDrawGun(g);
+    const racks = s.racks.filter(r => r.room === p.room);
+    for (const r of racks) navyDrawRack(ctx, r.lx, r.ly);
+    if (racks.length) {
+        const mx = racks.reduce((a, r) => a + r.lx, 0) / racks.length;
+        ctx.fillStyle = 'rgba(255,209,102,0.7)'; ctx.font = '700 16px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.save(); ctx.translate(mx, 0); ctx.rotate(Math.PI / 2); ctx.fillText('WEAPONS HANGAR', 0, 0); ctx.restore();
+    }
     if (p.room === 'hall') {
         ctx.fillStyle = 'rgba(255,209,102,0.6)'; ctx.font = '700 15px Rajdhani, sans-serif'; ctx.textAlign = 'center';
         ctx.save(); ctx.translate(760, 0); ctx.rotate(Math.PI / 2); ctx.fillText('MISSILE HANGAR', 0, 0); ctx.restore();
@@ -16661,7 +16677,7 @@ const BRIEF = {
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Gun racks</b> line the top deck: walk up and grab a rocket launcher, minigun, heavy MG or Barrett, and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the submarine deck, is further down: a 10-person sub with two torpedo tubes and a 5-person midget sub with one. Either dives the moment you launch it, safe from gunfire while submerged.'], ['👁️', 'You only see (and can only shoot) the people on the deck you\'re on.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the submarine deck, is further down: a 10-person sub with two torpedo tubes and a 5-person midget sub with one. Either dives the moment you launch it, safe from gunfire while submerged.'], ['👁️', 'You only see (and can only shoot) the people on the deck you\'re on.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
