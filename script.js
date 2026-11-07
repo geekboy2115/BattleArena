@@ -5103,7 +5103,7 @@ function drawDuelOverlay(now) {
 // takes over, and if an enemy takes the wheel the ship is theirs. When hulls touch you can walk across and board.
 // A fleet is finished when it has no ship afloat with anyone left on it.
 const NAVY = {
-    maxPeople: 800, escortCrew: 25, swimPace: 0.5, drown: 1.2, board: 110, heliBack: 60000,
+    maxPeople: 800, playerHp: 300, escortCrew: 25, swimPace: 0.5, drown: 1.2, board: 110, heliBack: 60000,
     guns: {
         main: { name: 'Main Cannon', rate: 5000, speed: 1500, range: 4200, dmg: 16, blastR: 125, hull: 100, hp: 2200, r: 78, turn: 0.9, zoom: 0.3 },
         med: { name: 'Deck Cannon', rate: 2400, speed: 1500, range: 3000, dmg: 22, blastR: 85, hull: 45, hp: 800, r: 30, turn: 1.8, zoom: 0.42 },
@@ -5291,6 +5291,7 @@ function navyCrewman(s, name, isPlayerToo) {
     f.inv = [gun, 'Pistol']; f.slot = 0;
     f.ammo = human ? { [gun]: 300, Pistol: 60 } : { [gun]: Infinity, Pistol: Infinity };
     f.armor = 100; f.likesCars = false;
+    if (human) f.hp = f.maxHp = NAVY.playerHp;  // (real players are tougher out here: 300 health)
     f.items.bandage = 3; f.items.medkit = 1; f.items.grenade = 2;
     f.boarder = Math.random() < (s.kind === 'gunboat' ? 0.9 : 0.5);
     f.postX = rand(-0.42, 0.42) * s.C.len; f.postY = rand(0.35, 1); f.nextThink = rand(0, 500);
@@ -17406,6 +17407,7 @@ function attachGuest(g) {
         G.fighters.push(best);
     }
     best.remote = g; best.name = g.name;
+    if (G.navy) best.hp = best.maxHp = NAVY.playerHp;  // (a friend joining Battleships gets the player's 300 health too)
     best.mode = 'wander'; best.goal = null; best.path = null; best.target = null; best.vx = best.vy = 0;
     if (best.up && !G.revolution) best.up = null;
     g.f = best; g.cam = { x: best.x, y: best.y }; g.va = null; g.hurt = 0;
