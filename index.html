@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261107n">
+    <link rel="stylesheet" href="style.css?v=20261107o">
 </head>
 
 <body>
@@ -148,7 +148,7 @@
             <div class="cpu-select hidden" id="settings-navy">
                 <div class="cpu-row"><span>Fleet</span>
                     <div class="seg" id="navy-fleet">
-                        <button data-f="huge" class="on">Huge ship</button><button data-f="big">Big ships</button><button data-f="mini">Mini ships</button>
+                        <button data-f="big" class="on">Normal</button><button data-f="huge">Huge ship</button><button data-f="mini">Mini ships</button>
                     </div>
                 </div>
                 <div class="cpu-row"><span>Play as</span>
@@ -156,12 +156,12 @@
                         <button data-r="captain" class="on">Pilot</button><button data-r="gunner">Gunner</button><button data-r="pilot">Helicopter</button><button data-r="marine">Marine</button>
                     </div>
                 </div>
-                <div id="navy-huge-opts">
+                <div id="navy-huge-opts" class="hidden">
                 <div class="cpu-row"><span>People on each huge ship</span><strong id="navy-huge-value">150</strong></div>
                 <input type="range" id="navy-huge" min="20" max="300" step="1" value="150">
                 <div class="cpu-scale"><span>20</span><span>300</span></div>
                 </div>
-                <div id="navy-big-opts" class="hidden">
+                <div id="navy-big-opts">
                 <div class="cpu-row"><span>Battleships a side</span><strong id="navy-ships-value">1</strong></div>
                 <input type="range" id="navy-ships" min="1" max="8" step="1" value="1">
                 <div class="cpu-scale"><span>1</span><span>8</span></div>
@@ -383,7 +383,7 @@
         </div>
     </div>
 
-    <script src="script.js?v=20261107n"></script>
+    <script src="script.js?v=20261107o"></script>
 </body>
 
 </html>
