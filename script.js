@@ -5103,7 +5103,7 @@ function drawDuelOverlay(now) {
 // takes over, and if an enemy takes the wheel the ship is theirs. When hulls touch you can walk across and board.
 // A fleet is finished when it has no ship afloat with anyone left on it.
 const NAVY = {
-    maxPeople: 800, playerHp: 300, escortCrew: 25, swimPace: 0.5, drown: 1.2, board: 110, heliBack: 60000,
+    maxPeople: 800, playerHp: 300, hullMul: 0.6, escortCrew: 25, swimPace: 0.5, drown: 1.2, board: 110, heliBack: 60000,
     guns: {
         main: { name: 'Main Cannon', rate: 5000, speed: 1500, range: 4200, dmg: 16, blastR: 125, hull: 100, hp: 2200, r: 78, turn: 0.9, zoom: 0.3 },
         med: { name: 'Deck Cannon', rate: 2400, speed: 1500, range: 3000, dmg: 22, blastR: 85, hull: 45, hp: 800, r: 30, turn: 1.8, zoom: 0.42 },
@@ -5605,6 +5605,8 @@ function navyCollide(dt) {
 }
 function navyHurt(s, d, by) {
     if (s.sinkAt || d <= 0) return;
+    d *= NAVY.hullMul;
+    if (by) d *= closeGameMul(by.team, s.team);
     s.hp -= d; s.hitAt = G.time;
     while (s.spots.length < Math.floor((1 - Math.max(0, s.hp) / s.maxHp) * 9)) {
         const o = navyDeckSpot(s);
@@ -5840,6 +5842,12 @@ function navyShipTick(s, dt) {
         if (fun && !s.sinkAt && inView(navyWx(s, fun.x, 0), navyWy(s, fun.x, 0), 200) && Math.random() < dt * 10) G.particles.push({ type: 'smoke', x: navyWx(s, fun.x, 0), y: navyWy(s, fun.x, 0), vx: -ca * s.speed * 0.5 + rand(-16, 16), vy: -sa * s.speed * 0.5 + rand(-16, 16), life: rand(1.2, 2.2), max: 2.2, size: rand(14, 26), color: s.hp < s.maxHp * 0.4 ? '40,36,40' : '110,110,115' });
     }
     for (const q of s.spots) if (inView(navyWx(s, q.lx, q.ly), navyWy(s, q.lx, q.ly), 120) && Math.random() < dt * 4) G.particles.push({ type: 'smoke', x: navyWx(s, q.lx, q.ly), y: navyWy(s, q.lx, q.ly), vx: rand(-20, 20), vy: rand(-30, 0), life: rand(0.8, 1.6), max: 1.6, size: rand(10, 20), color: '50,44,44' });
+    // The fleet that's behind patches its hulls up as it fights (the further behind, the faster)
+    const left = N.left;
+    if (left && !s.sinkAt && s.hp < s.maxHp) {
+        const gap = Math.max(...left) - (left[s.team] || 0);
+        if (gap > 0) { s.hp = Math.min(s.maxHp, s.hp + s.maxHp * CLOSE.repair * gap * dt); while (s.spots.length > Math.floor((1 - s.hp / s.maxHp) * 9)) s.spots.pop(); }
+    }
     // A new helicopter is flown out, or a new submarine towed in, to a ship that lost hers
     if (C.pad && !s.heli && !s.sinkAt && G.time >= s.heliAt && s.heliAt) { s.heliAt = 0; navyAddHeli(s); }
     if (s.heli && (s.heli.dead || (s.heli.onShip !== s))) { if (s.heli.dead && !s.heliAt) s.heliAt = G.time + NAVY.heliBack; s.heli = null; }
@@ -5872,10 +5880,29 @@ function navyCheck() {
     // Ships sinking doesn't end it on its own: crew can still be swimming, ashore on an island,
     // flying a helicopter, or standing aboard a ship they've boarded. Only a wholly dead team ends it.
     if (G.mode === 'demo') { if (!G.teamAlive[0] || !G.teamAlive[1]) N.over = true; return; }
-    if (G.result || (G.teamAlive[0] > 0 && G.teamAlive[1] > 0)) return;
+    if (G.result) return;
+    // A fleet with no ship left has a minute to capture one, or it's beaten; with both fleets sunk, whoever has
+    // more people left wins after 45 seconds (so a few survivors on an island can't keep it going forever)
+    let loser = G.teamAlive[0] === 0 ? 0 : G.teamAlive[1] === 0 ? 1 : -1;
+    if (loser < 0) {
+        const p = G.player;
+        for (const t of [0, 1]) {
+            if (left[t] > 0) { N.strandedAt && (N.strandedAt[t] = 0); continue; }
+            N.strandedAt = N.strandedAt || [0, 0];
+            if (!N.strandedAt[t]) {
+                N.strandedAt[t] = G.time;
+                if (p) showBanner(t === p.team ? 'YOUR FLEET IS SUNK!' : 'THE ENEMY FLEET IS SUNK!', t === p.team, t === p.team ? 'Board and capture an enemy ship within a minute, or it\'s over' : 'Their survivors have a minute to capture a ship. Don\'t let them!');
+            }
+        }
+        const st = N.strandedAt || [0, 0];
+        if (st[0] && st[1]) { if (G.time - Math.max(st[0], st[1]) > 45000) loser = G.teamAlive[0] === G.teamAlive[1] ? (left[0] >= left[1] ? 1 : 0) : G.teamAlive[0] < G.teamAlive[1] ? 0 : 1; }
+        else if (st[0] && G.time - st[0] > 60000) loser = 0;
+        else if (st[1] && G.time - st[1] > 60000) loser = 1;
+        if (loser < 0) return;
+    }
     N.over = true;
-    const p = G.player, won = G.teamAlive[p.team] > 0;
-    G.result = won ? { won: true, place: 1, title: 'ENEMY FLEET DESTROYED', sub: `Every enemy sailor is down.${p.dead ? ' You went down, but your fleet finished it.' : ''}` } : { won: false, place: 2, title: 'FLEET LOST', sub: 'Your whole crew is gone.' };
+    const p = G.player, won = loser !== p.team, wiped = G.teamAlive[loser] === 0;
+    G.result = won ? { won: true, place: 1, title: 'ENEMY FLEET DESTROYED', sub: wiped ? `Every enemy sailor is down.${p.dead ? ' You went down, but your fleet finished it.' : ''}` : 'Their fleet is sunk and their last survivors are stranded.' } : { won: false, place: 2, title: 'FLEET LOST', sub: wiped ? 'Your whole crew is gone.' : 'Your fleet is sunk and nobody captured a ship in time.' };
     G.overAt = G.time + 2200;
     if (won) startVictory('The enemy fleet is destroyed');
     else canvas.classList.add('dead');
@@ -8281,6 +8308,21 @@ function blast(x, y, owner, R, dmg, weapon) {
     Sound.boom(Sound.volAt(x, y), big);
 }
 
+// ---------- Keeping team games close ----------
+// No blowouts: the side that's ahead hits softer and the side that's behind hits harder, by how far apart they are
+// (ships afloat in Battleships, people still in it in the other team games). 2 to 1 means the leader does half
+// damage and the other side double, so a side that falls behind claws its way back and games finish close.
+const CLOSE = { min: 0.3, max: 2.5, repair: 0.004 };
+function sideStrength(team) {
+    if (G.navy) return G.navy.left ? G.navy.left[team] || 0 : 1;
+    return G.teamAlive ? G.teamAlive[team] || 0 : 1;
+}
+function closeGameMul(att, def) {
+    if (att === null || att === undefined || def === null || def === undefined || att === def || !G.war) return 1;
+    const a = Math.max(1, sideStrength(att)), d = Math.max(1, sideStrength(def));
+    // (gunfights between people snowball much faster than ship battles, so on land it pushes back harder)
+    return G.navy ? clamp(d / a, CLOSE.min, CLOSE.max) : clamp(Math.pow(d / a, 1.7), 0.12, 5);
+}
 function damage(t, amount, attacker, weapon) {
     if (t.dead || (attacker && attacker !== t && !foe(attacker, t))) return;
     // Inside a vehicle you're protected: it takes the hits (bullets, blasts and crashes all hit the vehicle itself)
@@ -8288,8 +8330,9 @@ function damage(t, amount, attacker, weapon) {
     if (G.duel && t.duel) { duelHit(t, attacker, weapon); return; }
     if (t.car && !t.car.dead) return;
     if (G.time < (t.protectUntil || 0)) return;  // just respawned
-    if (t.downed) { t.downHp -= amount; t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
+    if (t.downed) { t.downHp -= amount * (G.war && attacker && attacker !== t ? closeGameMul(attacker.team, t.team) : 1); t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
     let dmg = amount;
+    if (G.war && attacker && attacker !== t) dmg *= closeGameMul(attacker.team, t.team);
     if (t.isPlayer && G.strikeCam) G.strikeCam = null;  // (watching a boss strike: getting hurt brings the camera back)
     // Escape: stray airstrikes, bombs and burning cars only half hurt the group
     if (G.escape && !attacker && !t.soldier) dmg *= ESCAPE.ambient;
