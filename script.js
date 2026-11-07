@@ -1219,7 +1219,7 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'cavern') return generateCavern();
     if (type === 'haunted') return generateHaunted();
     if (type === 'sea') return generateSea();
-    // Wasteland (Assassin's map): open ground with long sightlines, a few lone trees and wreckage strewn about
+    // Wasteland (the sniping map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
     const W = CONFIG.WORLD_SIZE;
@@ -4633,8 +4633,8 @@ function newState(mode, setup) {
     const W = CONFIG.WORLD_SIZE;
     const zombies = setup.type === 'zombies', escape = setup.type === 'escape', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
-    const revolution = setup.type === 'revolution', assassin = setup.type === 'assassin', bossFight = setup.type === 'boss';
-    const murder = setup.type === 'murder', ghostMode = setup.type === 'ghost', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
+    const revolution = setup.type === 'revolution', bossFight = setup.type === 'boss';
+    const ghostMode = setup.type === 'ghost', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution || navy ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4644,7 +4644,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin || bossFight, assassin, bossFight, bossF: null, murder, ghostMode, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4693,8 +4693,8 @@ function newState(mode, setup) {
         zone: { cx: W / 2, cy: W / 2, r: W * 0.72, phase: 0, state: 'wait', timer: ZONE_PHASES[0].wait, dmg: 1, sx: 0, sy: 0, sr: 0, tcx: W / 2, tcy: W / 2, tr: 0 }
     };
     setNextZoneTarget(G.zone);
-    // (no red zone at all in Survival or Murder Mystery)
-    if (G.noZone || revolution || survival || murder || navy) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    // (no red zone at all in Survival)
+    if (G.noZone || revolution || survival || navy) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Ghost is played in one fixed circle in the middle of the map
     const arena = ghostMode ? GHOST.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
@@ -4704,8 +4704,7 @@ function newState(mode, setup) {
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
-    // (Murder Mystery has none: the knife and the sheriff's gun are the only weapons)
-    const noLoot = murder || duel || navy;
+    const noLoot = duel || navy;
     if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
@@ -4730,8 +4729,8 @@ function newState(mode, setup) {
     initChaos();
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
-    // (no vehicles at all on the Assassin's wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !murder && !ghostMode && !duel && !navy) spawnCars(); else G.world.cars = [];
+    // (no vehicles at all on the wasteland)
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !duel && !navy) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (navy) setupNavy(setup);
     else if (war) {
@@ -4742,10 +4741,10 @@ function newState(mode, setup) {
     } else {
         if (mode === 'playing') addPlayer(findSpawn(null, 0), null);
         const avoid = G.player ? [G.player] : null;
-        if (G.player && (zombies || assassin || bossFight || ghostMode)) G.player.team = 0;
+        if (G.player && (zombies || bossFight || ghostMode)) G.player.team = 0;
         for (let i = 0; i < cpuCount; i++) {
             const s = findSpawn(avoid, 600);
-            const same = zombies || assassin || bossFight || ghostMode;
+            const same = zombies || bossFight || ghostMode;
             const b = createFighter(s.x, s.y, { name: botName(i), color: same ? SURVIVOR_COLOR : pick(BOT_COLORS), team: same ? 0 : null });
             if (G.epic) b.chasesDrops = Math.random() < 0.8;
             G.fighters.push(b);
@@ -4757,9 +4756,7 @@ function newState(mode, setup) {
     }
     if (hightech && setup.map !== 'wasteland' && setup.map !== 'cavern') gearUpHighTech();
     if (revolution) for (const f of G.fighters) f.hp = f.maxHp = REVO.hp;
-    if (assassin && mode === 'playing') { spreadOut(); pickAssassin(setup.role === 'assassin' ? G.player : null); }
     if (bossFight) setupBossFight();
-    if (murder && mode === 'playing') setupMurder(setup.role);
     if (duel) setupDuel();
     if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
     G.alive = G.fighters.length;
@@ -4784,141 +4781,13 @@ function placeInArena(R, apart) {
     }
     if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
 }
-const arenaR = () => (G.murder ? MURDER.arena : G.world.terrain === 'haunted' ? HAUNT.half + 50 : G.zone.r) - 200;
+const arenaR = () => (G.world.terrain === 'haunted' ? HAUNT.half + 50 : G.zone.r) - 200;
 const arenaPoint = (R = arenaR()) => { const c = CONFIG.WORLD_SIZE / 2; for (let t = 0; t < 20; t++) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * R, x = c + Math.cos(a) * d, y = c + Math.sin(a) * d; if (!blockedAt(G.world.grid, x, y, 30)) return { x, y }; } return { x: c, y: c }; };
 // A bot strolling about the circle: a new spot every so often
 function strollArena(b) {
     if (b.mode !== 'zone' || !b.goal || b.goal.huntOf || dist(b, b.goal) < 60 || G.time > (b.strollUntil || 0)) {
         b.mode = 'zone'; b.goal = arenaPoint(); b.strollUntil = G.time + rand(5000, 11000);
     }
-}
-
-// ---------- Murder Mystery ----------
-// One murderer with a knife, one sheriff with a gun, everyone else innocent - and nobody knows who's who.
-// The knife kills in one stab and the sheriff's gun in one shot. Anyone who sees the knife out knows who the murderer is.
-// If the sheriff shoots an innocent, the sheriff dies too and drops the gun: whoever picks it up is the new sheriff.
-// Innocents win if the murderer goes down or the time runs out; the murderer wins if nobody else is left.
-const MURDER = { arena: 1500, time: 180000, sight: 560, cool: [4000, 8000], lonely: 380, maxPlayers: 40 };
-const MURDER_ROLE = { murderer: 'MURDERER', sheriff: 'SHERIFF', innocent: 'INNOCENT' };
-function setupMurder(role) {
-    placeInArena(MURDER.arena, 260);
-    const p = G.player, others = G.fighters.filter(f => f !== p);
-    if (role === 'random') role = pick(['murderer', 'sheriff', ...Array(Math.max(1, G.fighters.length - 2)).fill('innocent')]);
-    const m = role === 'murderer' ? p : pick(others);
-    const s = role === 'sheriff' ? p : pick(others.filter(f => f !== m));
-    m.murderer = true; m.inv = [null, 'Dagger']; m.slot = 0;
-    if (s) { s.sheriff = true; s.inv = [null, 'Pistol']; s.slot = 1; equipNew(s, 'Pistol'); }
-    G.murdererF = m;
-    G.murderEnd = MURDER.time;
-}
-const murderRole = f => f.murderer ? 'murderer' : f.sheriff ? 'sheriff' : 'innocent';
-// The knife kills in one stab and the sheriff's gun in one shot; punches barely hurt
-function murderDamage(t, amount, attacker, weapon) {
-    if (!attacker || attacker === t) return amount;
-    if (weapon === 'Dagger' && attacker.murderer) return 999;
-    if (weapon === 'Pistol') return 999;
-    if (weapon === 'Fist') return Math.min(amount, 3);
-    return amount;
-}
-function murderDeath(t, killer) {
-    // The gun falls to the ground when the sheriff goes down
-    if (t.inv.includes('Pistol')) {
-        const [l] = dropItems(t.x, t.y, [{ key: 'Pistol' }], 0.4);
-        G.murderGun = l;
-        if (G.mode === 'playing' && !G.result) showBanner('THE SHERIFF IS DOWN', true, 'The gun is on the ground. Whoever picks it up is the new sheriff!');
-    }
-    // Shot an innocent: the sheriff pays for it
-    if (killer && killer !== t && killer.sheriff && !t.murderer && !killer.dead) G.guilty = killer;
-}
-function updateMurder(dt) {
-    if (G.mode !== 'playing') return;
-    const m = G.murdererF;
-    if (G.guilty) {
-        const k = G.guilty; G.guilty = null;
-        if (!k.dead) { addFloat(k.x, k.y - 40, 'SHOT AN INNOCENT!', '#ff5a5f', true); k.guiltyDeath = true; killFighter(k, null, 'Shot an innocent'); }
-    }
-    // Whoever picks up the gun becomes the sheriff
-    for (const f of G.fighters) if (!f.dead && !f.sheriff && !f.murderer && f.inv.includes('Pistol')) {
-        f.sheriff = true; f.knows = false;
-        if (f.isPlayer) showBanner("YOU'RE THE SHERIFF NOW", true, 'One shot kills. Shoot the murderer, but if you shoot an innocent, you die too!');
-        else if (G.player && !G.player.dead) addFloat(f.x, f.y - 40, 'NEW SHERIFF', '#7fd4ff', true);
-    }
-    // Anyone who sees the knife out knows who the murderer is
-    if (m && !m.dead && held(m) === 'Dagger' && G.time >= (G.nextWitness || 0)) {
-        G.nextWitness = G.time + 200;
-        G.fgrid.query(m.x, m.y, MURDER.sight, f => { if (f !== m && !f.dead && !f.knows && Math.hypot(f.x - m.x, f.y - m.y) < MURDER.sight && lineOfSight(f, m)) f.knows = true; });
-    }
-    if (G.result) return;
-    const p = G.player, left = G.fighters.filter(f => !f.dead && !f.murderer).length;
-    let won = null, title, sub;
-    if (!m || m.dead) { won = !p.murderer; title = p.murderer ? 'YOU WERE STOPPED' : 'THE MURDERER IS DOWN!'; sub = m && m.killedBy ? `${m.killedBy === p ? 'You' : m.killedBy.name} took out the murderer${p.murderer ? '' : ` (${m.name})`}.` : 'The murderer is gone.'; }
-    else if (left === 0) { won = !!p.murderer; title = p.murderer ? 'NOBODY IS LEFT' : 'THE MURDERER WINS'; sub = p.murderer ? 'You got every last one of them.' : `It was ${m.name}.`; }
-    else if (G.time >= G.murderEnd) { won = !p.murderer; title = p.murderer ? "TIME'S UP" : 'SURVIVED!'; sub = p.murderer ? `${left} got away.` : `The murderer was ${m.name}. ${left} made it.`; }
-    if (won === null) return;
-    if (!won && p.dead) return;  // (you already lost)
-    G.result = { won, place: won ? 1 : 2, title, sub };
-    G.overAt = G.time + 2400;
-    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
-}
-// The bots: the murderer stalks anyone on their own, the sheriff hunts the murderer once spotted,
-// innocents stroll about, run from a murderer they've seen and go for a dropped gun
-function murderBot(b) {
-    b.nextThink = G.time + rand(150, 300);
-    const m = G.murdererF, gun = G.murderGun;
-    if (!b.murderer && !b.sheriff && gun && !gun.gone && dist(b, gun) < 900 && !(b.knows && m && !m.dead && dist(m, gun) < 250)) { b.mode = 'loot'; b.goal = gun; return; }
-    if (b.murderer) {
-        const v = b.victim;
-        if (v && !v.dead && G.time < b.huntUntil) {
-            const d = dist(b, v);
-            if (d < 170 && lineOfSight(b, v)) {
-                if (b.slot !== 1) switchSlot(b, 1);
-                if (b.target !== v) b.engageAt = G.time + 120;
-                b.mode = 'fight'; b.target = v; b.hasLOS = true;
-            } else {
-                if (b.slot !== 0) switchSlot(b, 0);
-                b.mode = 'zone'; b.goal = { x: v.x, y: v.y, huntOf: v };
-            }
-            return;
-        }
-        if (v) { b.victim = null; b.nextKill = G.time + rand(...MURDER.cool); }
-        if (b.slot !== 0) switchSlot(b, 0);
-        if (G.time >= (b.nextKill || 0)) {
-            // Someone on their own, with nobody else close enough to see
-            let best = null, bd = 900;
-            for (const f of G.fighters) {
-                if (f === b || f.dead) continue;
-                const d = dist(b, f);
-                if (d > bd) continue;
-                let lonely = true;
-                G.fgrid.query(f.x, f.y, MURDER.lonely, q => { if (q !== f && q !== b && !q.dead && Math.hypot(q.x - f.x, q.y - f.y) < MURDER.lonely) lonely = false; });
-                if (lonely) { bd = d; best = f; }
-            }
-            if (best) { b.victim = best; b.huntUntil = G.time + 9000; return; }
-        }
-        strollArena(b);
-        return;
-    }
-    if (b.sheriff && m && !m.dead && b.knows) {
-        const d = dist(b, m);
-        if (d < 600 && lineOfSight(b, m) && clearShot(b, m)) {
-            if (b.target !== m) b.engageAt = G.time + rand(250, 500);
-            b.mode = 'fight'; b.target = m; b.hasLOS = true; b.lastSeen = G.time;
-        } else { b.mode = 'zone'; b.goal = { x: m.x, y: m.y, huntOf: m }; b.target = null; }
-        return;
-    }
-    if (b.knows && m && !m.dead && dist(b, m) < 650) { b.mode = 'flee'; b.target = m; b.fleeUntil = G.time + 3000; return; }
-    strollArena(b);
-}
-
-// A bot sheriff only fires with nobody else in the way or right beside the murderer
-function clearShot(b, m) {
-    const dx = m.x - b.x, dy = m.y - b.y, L2 = dx * dx + dy * dy || 1;
-    for (const f of G.fighters) {
-        if (f === b || f === m || f.dead) continue;
-        const t = clamp(((f.x - b.x) * dx + (f.y - b.y) * dy) / L2, 0, 1.15);
-        if (Math.hypot(b.x + dx * t - f.x, b.y + dy * t - f.y) < f.r + 26) return false;
-    }
-    return true;
 }
 
 // ---------- Ghost ----------
@@ -5067,7 +4936,6 @@ function duelHit(t, attacker, weapon) {
         return;
     }
     if (attacker && attacker.isPlayer) { G.hitMarker = 1; Sound.hit(); attacker.kills++; }
-    if (inView(t.x, t.y, 300)) cubeDeath(t);
     t.duelOut = true;
     addKillfeed(t, weapon === 'zone' ? null : attacker, weapon);
     if (t.isPlayer) { G.flash = 0.5; G.flashColor = '255,40,70'; Sound.death(); }
@@ -5250,23 +5118,28 @@ const NAVY = {
             // The bridge is open: anyone (bots included) can walk straight in off the deck and take the wheel.
             // The stairs inside it are the only way further down, into the gated, player-only decks below.
             bridge: { lx: 40, ly: 0, hw: 160, hh: 100 },
-            rooms: { hall: { lx: -320, ly: 0, hw: 450, hh: 100 }, subdeck: { lx: -320, ly: 0, hw: 450, hh: 110 } },
+            // Three decks stacked in the same hull, each one covering the whole ship:
+            // 1 the top deck (the bridge with the wheel, two big turrets, gun racks), 2 the gun deck, 3 the submarine deck
+            rooms: { hall: { hull: true, name: 'GUN DECK', deck: 2 }, subdeck: { hull: true, name: 'SUBMARINE DECK', deck: 3 } },
             links: [
-                { lx: -100, ly: 0, a: null, b: 'hall', toB: 'Take the stairs down to the gun deck', toA: 'Climb back up to the bridge' },
-                { lx: -700, ly: 0, a: 'hall', b: 'subdeck', toB: 'Take the stairs down to the submarine deck', toA: 'Climb back up to the gun deck' }
+                { lx: -100, ly: 0, a: null, b: 'hall', toB: 'Take the stairs down to the gun deck', toA: 'Climb back up to the top deck' },
+                { lx: -420, ly: 0, a: 'hall', b: 'subdeck', toB: 'Take the stairs down to the submarine deck', toA: 'Climb back up to the gun deck' }
             ],
-            medical: { lx: -630, ly: 40, r: 55, room: 'hall' },
-            guns: [['main', 680, 0], ['main', 430, 0], ['main', -400, 0], ['main', -600, 0], ['med', 540, -165], ['med', 540, 165], ['med', -60, -165], ['med', -60, 165], ['med', -500, -165], ['med', -500, 165],
-                ['mg', 840, -90], ['mg', 840, 90], ['mg', 300, -180], ['mg', 300, 180], ['mg', -200, -175], ['mg', -200, 175], ['mg', -780, -120], ['mg', -780, 120],
-                ['missile', 70, -40, null, 'hall'], ['missile', 70, 40, null, 'hall'],
-                ['med', -80, -55, null, 'hall'], ['med', -80, 55, null, 'hall'], ['med', -220, -55, null, 'hall'], ['med', -220, 55, null, 'hall'],
-                ['med', -360, -55, null, 'hall'], ['med', -360, 55, null, 'hall'], ['med', -500, -55, null, 'hall'], ['med', -500, 55, null, 'hall']],
-            pad: [-860, 0], subbays: [{ kind: 'sub', lx: -580, ly: 0 }, { kind: 'subsmall', lx: -150, ly: 0 }], supply: [[-715, 120], [880, 0]]
+            medical: { lx: -760, ly: 0, r: 60, room: 'hall' },
+            // Topside only two big turrets and two deck guns; everyone else fights from the deck with what's in the gun racks
+            guns: [['main', 640, 0], ['main', -560, 0], ['mg', 870, -70], ['mg', 870, 70],
+                ['missile', 840, -55, null, 'hall'], ['missile', 840, 55, null, 'hall'],
+                ['med', 640, -150, null, 'hall'], ['med', 640, 150, null, 'hall'], ['med', 380, -165, null, 'hall'], ['med', 380, 165, null, 'hall'],
+                ['med', 120, -165, null, 'hall'], ['med', 120, 165, null, 'hall'], ['med', -140, -165, null, 'hall'], ['med', -140, 165, null, 'hall'],
+                ['med', -400, -165, null, 'hall'], ['med', -400, 165, null, 'hall'], ['med', -640, -160, null, 'hall'], ['med', -640, 160, null, 'hall']],
+            racks: [[380, -180], [380, 180], [-380, -180], [-380, 180]],
+            pad: [-860, 0], subbays: [{ kind: 'sub', lx: 330, ly: 0 }, { kind: 'subsmall', lx: -740, ly: 0 }], supply: [[-715, 120], [880, 0]]
         },
         destroyer: {
             name: 'Destroyer', len: 1120, beam: 260, hp: 14000, speed: 205, accel: 30, turn: 0.2, crew: 20, bow: 224, aft: 336, helm: [132, 0],
             boxes: [{ x: 20, y: 0, hw: 90, hh: 62, k: 'bridge' }, { x: -155, y: 0, hw: 45, hh: 34, k: 'funnel' }],
-            guns: [['med', 330, 0, 44], ['med', -360, 0, 44], ['torp', -265, -72], ['torp', -265, 72], ['mg', 215, -84], ['mg', 215, 84], ['mg', -470, -55], ['mg', -470, 55]],
+            guns: [['med', 330, 0, 44], ['torp', -265, -72], ['torp', -265, 72], ['mg', -470, 0]],
+            racks: [[-360, -100], [-360, 100]],
             supply: [[450, 0]]
         },
         gunboat: {
@@ -5340,6 +5213,8 @@ function addShip(kind, team, x, y, a) {
         if (gun.r >= 44) s.blocks.push({ x: lx, y: ly, r: gun.r });
     }
     s.subbays = (C.subbays || []).map(b => ({ ...b, car: null, claim: null, at: 0 }));
+    s.racks = (C.racks || []).map(([lx, ly]) => ({ lx, ly }));
+    for (const r of s.racks) s.blocks.push({ x: r.lx, y: r.ly, hw: 44, hh: 14, box: true });
     N.ships.push(s);
     if (C.pad) navyAddHeli(s);
     for (const bay of s.subbays) navyAddSub(s, bay);
@@ -5370,6 +5245,19 @@ function navyDeckSpot(s) {
         if (!s.blocks.some(o => (o.box ? Math.abs(lx - o.x) < o.hw + 26 && Math.abs(ly - o.y) < o.hh + 26 : Math.hypot(lx - o.x, ly - o.y) < o.r + 26))) return { lx, ly };
     }
     return { lx: s.helm.lx, ly: s.helm.ly };
+}
+// What the gun racks on deck hand out: heavy guns for shooting at ships, helicopters and boarders from the rail
+const NAVY_RACK = ['Rocket Launcher', 'Heavy MG', 'Minigun', 'Barrett', 'Homing Launcher', 'Machine Gun'];
+function navyTakeRack(p) {
+    const have = p.inv.filter(Boolean), gun = pick(NAVY_RACK.filter(k => WEAPONS[k] && !have.includes(k))) || pick(NAVY_RACK);
+    if (p.inv.length < 3) p.inv.push(null);
+    let slot = p.inv.indexOf(null); if (slot < 0) slot = p.slot;
+    p.inv[slot] = gun; p.slot = slot;
+    const mag = WEAPONS[gun].mag || 30;
+    p.ammo[gun] = Math.max(p.ammo[gun] === Infinity ? Infinity : p.ammo[gun] || 0, isHuman(p) ? Math.max(60, mag * 6) : Infinity);
+    if (typeof equipNew === 'function') equipNew(p, gun);
+    if (p.isPlayer) addFloat(p.x, p.y - 30, `Took a ${gun}`, '#ffd166');
+    Sound.tone(420, 0.15, 'triangle', 0.08);
 }
 const NAVY_GUNS = [['Assault Rifle', 10], ['Machine Gun', 3], ['Shotgun', 2], ['Vector', 2], ['Rocket Launcher', 1]];
 function navyCrewman(s, name, isPlayerToo) {
@@ -5515,6 +5403,10 @@ function navyAction(p) {
         const d = Math.hypot(lx - g.lx, ly - g.ly);
         if (d < g.r + 60) consider(d, { st: g, text: `Man the ${g.D.name.toLowerCase()}` });
     }
+    for (const r of s.racks || []) {
+        const d = Math.hypot(lx - r.lx, ly - r.ly);
+        if (d < 80) consider(d, { rack: r, text: 'Take a heavy gun from the rack' });
+    }
     if (best) return best;
     if (nearestCar(p, 90)) return null;
     if (navyHw(s.C, lx) - Math.abs(ly) < 62 || s.C.len / 2 - Math.abs(lx) < 62) return { jump: true, text: 'Jump overboard' };
@@ -5527,6 +5419,7 @@ function navyUse(p) {
     if (act.leave) navyLeave(p);
     else if (act.link) { p.room = act.to; if (p.isPlayer) addFloat(p.x, p.y - 30, act.text, '#fff7ec'); Sound.tone(act.to ? 180 : 260, 0.2, 'triangle', 0.08); }
     else if (act.st) navyMan(p, act.st);
+    else if (act.rack) navyTakeRack(p);
     else if (act.jump) {
         const s = p.ship, lx = navyLx(s, p.x, p.y), ly = navyLy(s, p.x, p.y), side = ly >= 0 ? 1 : -1, hw = navyHw(s.C, lx);
         const end = s.C.len / 2 - Math.abs(lx) < 62 && hw - Math.abs(ly) >= 62;
@@ -5556,9 +5449,9 @@ function navyStatus(p) {
     const N = G.navy, hull = s => `${Math.max(1, Math.ceil(s.hp / s.maxHp * 100))}%`;
     if (p.dead) return 'You\'re gone: your fleet fights on';
     if (p.car) return vt(p.car).torp ? (p.car.submerged ? 'Submerged · torpedoes locked and loaded' : 'Submarine · dive and hunt the enemy fleet') : 'Flying · sink the enemy fleet';
-    if (p.station && p.station.helm) { const s = p.station.ship; return `At the wheel of the ${s.name} · throttle ${Math.round(s.throttle * 100)}% · hull ${hull(s)}`; }
+    if (p.station && p.station.helm) { const s = p.station.ship; return `Deck 1 · at the wheel of the ${s.name} · throttle ${Math.round(s.throttle * 100)}% · hull ${hull(s)}`; }
     if (p.station) return `${p.station.D.name}${p.station.room ? ' (below deck)' : ''} on the ${p.station.ship.name} · hull ${hull(p.station.ship)}`;
-    if (p.room) return `${p.room === 'hall' ? 'On the gun deck' : 'In the submarine bay'}, below decks on the ${p.ship.name} · hull ${hull(p.ship)}`;
+    if (p.room) return `${p.room === 'hall' ? 'Deck 2: the gun deck' : 'Deck 3: the submarine deck'}, below decks on the ${p.ship.name} · hull ${hull(p.ship)}`;
     if (p.swim) return `In the water! You\'re drowning: swim to a ship · ${Math.ceil(p.hp)} health`;
     if (p.ship) return p.ship.team === p.team ? `On the ${p.ship.name} · hull ${hull(p.ship)}${p.ship.helm.crew ? '' : ' · NOBODY AT THE WHEEL!'}` : `Aboard the enemy ${p.ship.name}: take the wheel to capture it`;
     return 'Ashore on an island';
@@ -5755,8 +5648,14 @@ function updateNavy(dt) {
             if (!f.station) {
                 const room = f.room && C.rooms && C.rooms[f.room];
                 if (room) {
-                    lx = clamp(lx, room.lx - room.hw + f.r, room.lx + room.hw - f.r);
-                    ly = clamp(ly, room.ly - room.hh + f.r, room.ly + room.hh - f.r);
+                    for (const g of on.guns) {
+                        if (g.room !== f.room) continue;
+                        const ddx = lx - g.lx, ddy = ly - g.ly, d = Math.hypot(ddx, ddy) || 0.01, min = g.r + f.r;
+                        if (d < min) { lx = g.lx + ddx / d * min; ly = g.ly + ddy / d * min; }
+                    }
+                    lx = clamp(lx, -C.len / 2 + 30 + f.r, C.len / 2 - 30 - f.r);
+                    const hw = Math.max(2, navyHw(C, lx) - 18 - f.r);
+                    ly = clamp(ly, -hw, hw);
                 } else {
                     f.room = null;
                     for (const o of on.blocks) {
@@ -6238,29 +6137,13 @@ function navyArt(kind, team) {
         g.strokeStyle = col; g.lineWidth = 4; roundRect(g, x0 + 6, y0 + 6, w2 - 12, h2 - 12, 16); g.stroke();
         g.save(); g.translate(br.lx, y0 - 14); g.rotate(Math.PI / 2); g.fillStyle = 'rgba(255,247,236,0.85)'; g.font = '700 18px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('BRIDGE', 0, 0); g.restore();
     }
-    // The lower decks: the gun hallway and, further down, the submarine bay — stacked below the same stretch of hull
-    if (C.rooms && C.rooms.hall) {
-        const hall = C.rooms.hall, sub = C.rooms.subdeck || hall;
-        const x0 = hall.lx - hall.hw, hh = Math.max(hall.hh, sub.hh), y0 = hall.ly - hh, w2 = hall.hw * 2, h2 = hh * 2;
-        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(x0 + 8, y0 + 10, w2, h2);
-        g.fillStyle = '#24272d'; g.fillRect(x0, y0, w2, h2);
-        g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1;
-        for (let gx = x0 + 14; gx < x0 + w2 - 10; gx += 24) { g.beginPath(); g.moveTo(gx, y0 + 6); g.lineTo(gx, y0 + h2 - 6); g.stroke(); }
-        g.strokeStyle = '#3a3e45'; g.lineWidth = 3; g.strokeRect(x0, y0, w2, h2);
-        g.save(); g.translate(hall.lx + hall.hw * 0.35, y0 - 14); g.rotate(Math.PI / 2); g.fillStyle = 'rgba(255,209,102,0.85)'; g.font = '700 18px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('GUN DECK', 0, 0); g.restore();
-        if (C.subbays && C.subbays.length) { g.save(); g.translate(C.subbays[0].lx, y0 - 14); g.rotate(Math.PI / 2); g.fillStyle = 'rgba(127,216,255,0.85)'; g.font = '700 18px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('SUBMARINE BAY', 0, 0); g.restore(); }
-        // The medical bay: a white cross on red, below deck
-        if (C.medical) {
-            const { lx: mx, ly: my } = C.medical;
-            g.fillStyle = '#b9343f'; roundRect(g, mx - 34, my - 34, 68, 68, 8); g.fill();
-            g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 3; roundRect(g, mx - 34, my - 34, 68, 68, 8); g.stroke();
-            g.fillStyle = '#fff'; g.fillRect(mx - 22, my - 7, 44, 14); g.fillRect(mx - 7, my - 22, 14, 44);
-        }
-        // Hatches down to the sub bays, in the floor
-        for (const bay of C.subbays || []) {
-            g.fillStyle = '#163b52'; g.beginPath(); g.arc(bay.lx, bay.ly, 55, 0, TAU); g.fill();
-            g.strokeStyle = '#7fd8ff'; g.lineWidth = 4; g.beginPath(); g.arc(bay.lx, bay.ly, 46, 0, TAU); g.stroke();
-        }
+    // Gun racks along the rails: walk up and take a heavy gun
+    for (const [rx, ry] of C.racks || []) {
+        g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(rx - 44 + 4, ry - 14 + 5, 88, 28);
+        g.fillStyle = '#4a3a26'; roundRect(g, rx - 44, ry - 14, 88, 28, 5); g.fill();
+        g.strokeStyle = '#ffd166'; g.lineWidth = 2; roundRect(g, rx - 44, ry - 14, 88, 28, 5); g.stroke();
+        g.fillStyle = '#1d1f23';
+        for (let k = -3; k <= 3; k++) g.fillRect(rx + k * 11 - 2, ry - 10, 4, 20);
     }
     // Stairs down, wherever they meet the open deck
     for (const link of C.links || []) {
@@ -6273,6 +6156,7 @@ function navyArt(kind, team) {
     }
     // Funnel (and, on smaller ships, the bridge/cabin box — the battleship's own bridge is drawn above as a room)
     for (const o of C.boxes) {
+        if (o.k === undefined) continue;
         const x = o.x - o.hw, y = o.y - o.hh, W2 = o.hw * 2, H2 = o.hh * 2;
         g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x + 10, y + 12, W2, H2);
         if (o.k === 'funnel') {
@@ -6390,7 +6274,7 @@ function drawNavy(L, T, R, B, now) {
         ctx.fillStyle = 'rgba(0,30,50,0.32)';
         ctx.save(); ctx.translate(16, 24); navyHullPath(ctx, C, 14); ctx.fill(); ctx.restore();
         ctx.drawImage(art, -art.width / 2, -art.height / 2);
-        for (const g of s.guns) navyDrawGun(g);
+        for (const g of s.guns) if (!g.room) navyDrawGun(g);  // (the guns below deck only show from inside)
         // Hull fires
         for (const q of s.spots) {
             const flick = 0.75 + Math.sin(now * 9 + q.ph) * 0.25;
@@ -6433,22 +6317,26 @@ function drawNavyInterior(L, T, R, B, now) {
     ctx.translate(s.x, s.y);
     ctx.rotate(s.a + sink * 0.09);
     if (sink) { ctx.globalAlpha = clamp(1.25 - sink * 1.3, 0, 1); const k = 1 - sink * 0.14; ctx.scale(k, k); }
-    // A solid floor covering the whole hull: the open deck above isn't what you're looking at any more
-    navyHullPath(ctx, C, 0); ctx.fillStyle = '#14161a'; ctx.fill();
-    const x0 = room.lx - room.hw, y0 = room.ly - room.hh, w2 = room.hw * 2, h2 = room.hh * 2;
-    ctx.fillStyle = '#23262b'; ctx.fillRect(x0, y0, w2, h2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
-    for (let gx = x0 + 16; gx < x0 + w2 - 10; gx += 26) { ctx.beginPath(); ctx.moveTo(gx, y0 + 6); ctx.lineTo(gx, y0 + h2 - 6); ctx.stroke(); }
-    ctx.strokeStyle = '#3a3e45'; ctx.lineWidth = 3; ctx.strokeRect(x0, y0, w2, h2);
-    ctx.fillStyle = 'rgba(255,209,102,0.7)'; ctx.font = '700 22px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.save(); ctx.translate(room.lx, y0 - 20); ctx.rotate(Math.PI / 2); ctx.fillText(p.room === 'hall' ? 'GUN DECK' : 'SUBMARINE DECK', 0, 0); ctx.restore();
+    // The whole hull is this deck's floor: the deck above isn't what you're looking at any more
+    navyHullPath(ctx, C, 0); ctx.fillStyle = '#101216'; ctx.fill();
+    ctx.save(); navyHullPath(ctx, C, -16); ctx.fillStyle = p.room === 'hall' ? '#26292f' : '#1d2a33'; ctx.fill(); ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+    for (let gx = -C.len / 2; gx < C.len / 2; gx += 40) { ctx.beginPath(); ctx.moveTo(gx, -C.beam / 2); ctx.lineTo(gx, C.beam / 2); ctx.stroke(); }
+    for (let gy = -C.beam / 2; gy < C.beam / 2; gy += 40) { ctx.beginPath(); ctx.moveTo(-C.len / 2, gy); ctx.lineTo(C.len / 2, gy); ctx.stroke(); }
+    // (bulkheads with doorways down the middle, so it reads as rooms along the ship)
+    ctx.fillStyle = '#3a3e45';
+    for (const bx of [520, 250, -10, -270, -540]) { ctx.fillRect(bx - 5, -C.beam / 2, 10, C.beam / 2 - 60); ctx.fillRect(bx - 5, 60, 10, C.beam / 2 - 60); }
+    ctx.restore();
+    ctx.strokeStyle = '#3a3e45'; ctx.lineWidth = 6; navyHullPath(ctx, C, -16); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,209,102,0.75)'; ctx.font = '700 26px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.save(); ctx.translate(-880, 0); ctx.rotate(Math.PI / 2); ctx.fillText(`DECK ${room.deck} · ${room.name}`, 0, 0); ctx.restore();
     for (const g of s.guns) if (g.room === p.room) navyDrawGun(g);
     if (p.room === 'hall') {
         ctx.fillStyle = 'rgba(255,209,102,0.6)'; ctx.font = '700 15px Rajdhani, sans-serif'; ctx.textAlign = 'center';
-        ctx.save(); ctx.translate(70, -58); ctx.rotate(Math.PI / 2); ctx.fillText('HANGAR', 0, 0); ctx.restore();
+        ctx.save(); ctx.translate(760, 0); ctx.rotate(Math.PI / 2); ctx.fillText('MISSILE HANGAR', 0, 0); ctx.restore();
         if (C.medical) {
             const m = C.medical;
-            ctx.fillStyle = '#2f9e5b'; roundRect(ctx, m.lx - 34, m.ly - 34, 68, 68, 8); ctx.fill();
+            ctx.fillStyle = '#b9343f'; roundRect(ctx, m.lx - 34, m.ly - 34, 68, 68, 8); ctx.fill();
             ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3; roundRect(ctx, m.lx - 34, m.ly - 34, 68, 68, 8); ctx.stroke();
             ctx.fillStyle = '#fff'; ctx.fillRect(m.lx - 22, m.ly - 7, 44, 14); ctx.fillRect(m.lx - 7, m.ly - 22, 14, 44);
             ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '700 13px Rajdhani, sans-serif'; ctx.fillText('MEDICAL', m.lx, m.ly - 46);
@@ -6520,53 +6408,6 @@ function drawNavyPreview(g, W, H, now) {
     draw('destroyer', 1, W * 0.14, H * 0.28, 0.2, 0.2);
     const t = (now * 0.0006) % 1;
     g.fillStyle = 'rgba(255,190,90,0.95)'; g.beginPath(); g.arc(lerp(W * 0.4, W * 0.62, t), lerp(H * 0.6, H * 0.3, t), 4, 0, TAU); g.fill();
-}
-
-// ---------- Assassin ----------
-// One fighter is the assassin: a Barrett with 2000 rounds (a Railgun in High Tech) and a medkit.
-// He looks just like everyone else in the dark. Any survivor that touches him catches him.
-const ASSASSIN = { ammo: 2000, catchGap: 10, apart: 650, spawnApart: 900 };
-function pickAssassin(who) {
-    const a = who || pick(G.fighters.filter(f => !f.isPlayer));
-    if (!a) return;
-    a.assassin = true;
-    a.team = 1;
-    const gun = G.hightech ? 'Railgun' : 'Barrett';
-    a.inv[0] = gun; a.slot = 0;
-    a.ammo[gun] = ASSASSIN.ammo;
-    a.items.medkit = 1;
-    G.assassinF = a;
-}
-// Everyone starts well apart from everyone else, all over the map
-function spreadOut() {
-    const placed = [], W = CONFIG.WORLD_SIZE;
-    for (const f of G.fighters) {
-        let best = null, bestD = -1;
-        for (let t = 0; t < 30; t++) {
-            const x = rand(250, W - 250), y = rand(250, W - 250);
-            if (blockedAt(G.world.grid, x, y, 40) || buildingAt(x, y)) continue;
-            let d = Infinity;
-            for (const q of placed) { d = Math.min(d, Math.hypot(q.x - x, q.y - y)); if (d < bestD) break; }
-            if (d > bestD) { bestD = d; best = { x, y }; }
-            if (d >= ASSASSIN.spawnApart) break;
-        }
-        if (!best) continue;
-        placed.push(best);
-        f.x = best.x; f.y = best.y; f.vx = f.vy = 0;
-    }
-    if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
-}
-// A survivor right up against the assassin catches him
-function checkAssassinCaught() {
-    const a = G.assassinF;
-    if (!a || a.dead) return;
-    let by = null;
-    G.fgrid.query(a.x, a.y, a.r * 2 + ASSASSIN.catchGap + 10, f => { if (!by && f !== a && !f.dead && f.team === 0 && Math.hypot(f.x - a.x, f.y - a.y) < f.r + a.r + ASSASSIN.catchGap) by = f; });
-    if (!by) return;
-    a.caughtBy = by;
-    addFloat(a.x, a.y - 40, 'CAUGHT!', '#ffd166', true);
-    burst(a.x, a.y, 24, '#ffd166', 240, 'glow');
-    killFighter(a, by, 'Caught');
 }
 
 // ---------- Boss Fight ----------
@@ -7049,7 +6890,7 @@ function updateOutbreak(dt) {
         if (f.dead) continue;
         if (G.zombies) {
             if (f.zombie) { b++; f.hp = Math.min(f.maxHp, f.hp + ZOMBIE.regen * dt); } else a++;
-        } else if (f.soldier || f.assassin || f.giant) b++;
+        } else if (f.soldier || f.giant) b++;
         else {
             a++;
             // Out of the fight for a while, the group patches itself up
@@ -7071,19 +6912,6 @@ function updateOutbreak(dt) {
         const heli = G.world.floor ? G.world.floor.heli : G.extract;
         if (heli && !p.dead && dist(p, heli) < ESCAPE.heliR) boardHelicopter();
         else if (!G.world.floor && G.time >= G.nextReinf) { reinforce(); G.nextReinf = G.time + rand(...(G.world.maze ? ESCAPE.maze.reinforce : ESCAPE.reinforceEvery)); }
-    } else if (G.assassin) {
-        checkAssassinCaught();
-        const p2 = G.player, caught = !G.assassinF || G.assassinF.dead;
-        if (!caught && a > 0) return;
-        if (p2.dead && !p2.assassin) return;  // (you already lost)
-        const won = p2.assassin ? !caught : caught;
-        const how = G.assassinF && G.assassinF.caughtBy ? `${G.assassinF.caughtBy === p2 ? 'You' : G.assassinF.caughtBy.name} caught the assassin.` : 'The assassin is down.';
-        G.result = won
-            ? { won: true, place: 1, title: p2.assassin ? 'MISSION COMPLETE' : 'ASSASSIN CAUGHT!', sub: p2.assassin ? 'Nobody is left. Nobody saw you.' : how }
-            : { won: false, place: 2, title: p2.assassin ? 'CAUGHT!' : 'THE ASSASSIN WINS', sub: p2.assassin ? how : 'Every survivor has been taken out.' };
-        G.overAt = G.time + 2200;
-        if (won) startVictory(G.result.sub);
-        else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
     } else if (G.zombies && (a === 0 || b === 0)) {
         // You're on whichever side you're on now: the horde can win with you in it
         const zombieWin = a === 0;
@@ -7476,7 +7304,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.murder || G.ghostMode || G.duel || G.navy) return;
+    if (G.ghostMode || G.duel || G.navy) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -7622,7 +7450,6 @@ function expireDeathDrops() {
 
 // Picks up (part of) a loot pile; leftovers stay on the ground
 function takeLoot(f, l, swapIdx) {
-    if (G.murder && f.murderer && l.key === 'Pistol') return 0;
     const took = applyLoot(f, l.key, swapIdx, l.mag, l.count);
     if (took >= l.count) removeLoot(l);
     else l.count -= took;
@@ -8203,7 +8030,6 @@ function damage(t, amount, attacker, weapon) {
     if (G.duel && t.duel) { duelHit(t, attacker, weapon); return; }
     if (t.car && !t.car.dead) return;
     if (G.time < (t.protectUntil || 0)) return;  // just respawned
-    if (G.murder) amount = murderDamage(t, amount, attacker, weapon);
     if (t.downed) { t.downHp -= amount; t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
     let dmg = amount;
     if (t.isPlayer && G.strikeCam) G.strikeCam = null;  // (watching a boss strike: getting hurt brings the camera back)
@@ -8280,9 +8106,8 @@ function killFighter(t, killer, weapon) {
     G.alive--;
     if (killer && killer !== t) killer.kills++;
 
-    // (in the menu's background battle people just fall as bodies; in a real game they break into cubes)
-    if (!t.escaped && !t.vaporized && G.mode !== 'demo') { if (inView(t.x, t.y, 300)) cubeDeath(t); }
-    else if (!t.escaped && !t.vaporized) addCorpse(t);
+    // (in the menu's background battle people fall as bodies; in a real game they're just gone, no effect)
+    if (!t.escaped && !t.vaporized && G.mode === 'demo') addCorpse(t);
     dropDeathWeapons(t);
     if (G.mode === 'demo' && inView(t.x, t.y, 100)) {
         burst(t.x, t.y, 22, t.color, 260, 'blood');
@@ -8290,17 +8115,12 @@ function killFighter(t, killer, weapon) {
         G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 50, color: t.color });
     }
 
-    // (Murder Mystery: the feed never says who did it, or how)
-    if (G.mode !== 'demo') { if (G.murder) addKillfeed(t, killer && killer.isPlayer ? killer : null, killer && killer.isPlayer ? weapon : weapon === 'Shot an innocent' ? 'shot an innocent' : 'murdered'); else addKillfeed(t, killer, weapon); }
-    if (G.murder) murderDeath(t, killer);
+    if (G.mode !== 'demo') addKillfeed(t, killer, weapon);
 
     if (G.war) { warDeath(t, killer, weapon); return; }
     if (t.isPlayer && G.result) return;
-    if (t.isPlayer && t.assassin) return;  // (Assassin: caught or taken down, it's reported as a catch)
     if (t.isPlayer) {
         G.result = { won: false, place: G.escape ? G.sides.a + G.escaped : G.alive + 1, sub: G.escape ? `The army got you. ${G.escaped} of ${ESCAPE.people} people escaped.` : G.bossFight && G.bossF && !G.bossF.dead ? `The boss still has ${Math.ceil(G.bossF.hp / G.bossF.maxHp * 100)}% of his health left.` : null, killer: killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null) };
-        if (t.guiltyDeath) Object.assign(G.result, { sub: 'You shot an innocent, so you went down too.', killer: null });
-        else if (G.murder) G.result.sub = t.murderer ? 'The murderer has been stopped.' : `The murderer was ${G.murdererF ? G.murdererF.name : 'someone'}.`;
         G.overAt = G.time + 1800;
         G.timeScale = 0.25;
         G.flash = 0.5;
@@ -8756,7 +8576,6 @@ function marchTarget(b) {
 
 function botThink(b) {
     if (b.zombie) { zombieThink(b); return; }
-    if (G.murder) { murderBot(b); return; }
     if (G.duel && b.duel) { duelThink(b); return; }
     if (G.ghostMode && b.ghost) { ghostBot(b); return; }
     const K = AIK();
@@ -8874,17 +8693,6 @@ function botThink(b) {
     }
     // Boss Fight: the giant tracks down the team, and the team goes after him
     if (G.bossFight && (b.giant || b.team === 0) && (b.giant || b.inv.some(Boolean)) && bossHunt(b)) return;
-    // Assassin: survivors can't stay together. Anyone too close to another survivor heads off on their own
-    if (G.assassin && b.team === 0 && G.mode === 'playing') {
-        let near = null, nd = ASSASSIN.apart;
-        G.fgrid.query(b.x, b.y, ASSASSIN.apart, f => { if (f !== b && !f.dead && f.team === 0) { const d = Math.hypot(f.x - b.x, f.y - b.y); if (d < nd) { nd = d; near = f; } } });
-        if (near) {
-            const a = (nd > 1 ? Math.atan2(b.y - near.y, b.x - near.x) : rand(0, TAU)) + rand(-0.5, 0.5), W = CONFIG.WORLD_SIZE;
-            b.mode = 'zone';
-            b.goal = { x: clamp(b.x + Math.cos(a) * ASSASSIN.apart * 1.6, 150, W - 150), y: clamp(b.y + Math.sin(a) * ASSASSIN.apart * 1.6, 150, W - 150) };
-            return;
-        }
-    }
     // Already on the way to some loot, a crate or a car: see it through instead of changing its mind as it walks
     if (b.mode === 'loot' && b.goal && !b.goal.gone && !claimedByOther(b.goal, b)) return;
     if (b.mode === 'box' && b.goal && !b.goal.broken) return;
@@ -10285,9 +10093,9 @@ function drawGroundDetail(L, T, R, B) {
 function dayT() { return (G.time / DAY.length + (G.dayPhase || 0)) % 1; }
 // 0 in daylight, DAY.dark at the dead of night
 const ZOMBIE_DARK = 1;
-const pitchDark = () => !!G && (G.zombies || G.assassin || G.ghostMode) && G.mode !== 'demo';  // Zombies is played in pitch dark: your flashlight is all you've got
+const pitchDark = () => !!G && (G.zombies || G.ghostMode) && G.mode !== 'demo';  // Zombies is played in pitch dark: your flashlight is all you've got
 function darkness() {
-    if ((G.zombies || G.assassin || G.ghostMode) && G.mode !== 'demo') return ZOMBIE_DARK;
+    if ((G.zombies || G.ghostMode) && G.mode !== 'demo') return ZOMBIE_DARK;
     if (G.world.terrain === 'cavern') return CAVERN.dark;
     if (!G.dayCycle || G.world.floor) return 0;
     const t = dayT();
@@ -14063,6 +13871,8 @@ function updateBullets(dt) {
             let hit = null;
             G.fgrid.query(b.x, b.y, 24, f => {
                 if (hit || b.torpedo || f.dead || f.car || !foe(b.owner, f) || (b.pierced && b.pierced.has(f))) return;
+                // (Battleships: a hand gun only hits people on the same deck; ship's guns fire out over the sea)
+                if (G.navy && !b.overShip && b.owner && ((b.owner.room || null) !== (f.room || null))) return;
                 // Different levels: the deck shields whoever's under it, and only shots that came up over the parapet reach the deck
                 if ((f.up || null) !== (b.up || null) && (f.up || isMid(b.up) || underRing(b.up, f))) return;
                 const rr = f.r + 3;
@@ -14131,7 +13941,6 @@ function update(dt) {
     if (G.world.stairs.length && G.mode === 'playing' && G.player && !G.player.dead && !G.frozen && !G.player.car) checkStairs(dt);
     if (G.war && G.time >= G.war.nextCenter) updateTeamCenters();
     if (G.noZone) updateOutbreak(dt);
-    if (G.murder) updateMurder(dt);
     if (G.ghostMode) updateGhost(dt);
     if (G.duel) updateDuel(dt);
     if (G.world.maze && G.escape && G.mode === 'playing') updateMazeFog();
@@ -14404,7 +14213,12 @@ function render() {
     if (G.navy) drawNavyInterior(L, T, R, B, now);
     // Fighters
     const visible = [];
-    for (const f of G.fighters) if (!f.car && !f.up && f.x > L - 80 && f.x < R + 80 && f.y > T - 80 && f.y < B + 80) visible.push(f);
+    const deckOf = f => (f && f.room && f.ship ? f.ship : null), myDeck = G.player ? G.player.room || null : null, myShip = deckOf(G.player);
+    for (const f of G.fighters) if (!f.car && !f.up && f.x > L - 80 && f.x < R + 80 && f.y > T - 80 && f.y < B + 80) {
+        // (Battleships: you only see the people on the deck you're on; below deck, only your own ship's)
+        if (G.navy && ((f.room || null) !== myDeck || (myDeck && deckOf(f) !== myShip))) continue;
+        visible.push(f);
+    }
     if (G.world.cars) { drawCars(); drawDriveRoute(); }
     for (const f of visible) {
         if (f.ghost && !f.dead) {
@@ -16117,9 +15931,7 @@ function updateHUD() {
         const B = G.bossF, pct = B ? Math.max(0, Math.ceil(B.hp / B.maxHp * 100)) : 0;
         if (G.bossFight) setHTML(hud.teamScore, 'teams', chip(a, SURVIVOR_COLOR, 'Your team', true) + '<em>vs</em>'
             + `<div class="boss-hp${B && B.rage ? ' rage' : ''}"><span>THE BOSS${b > 1 ? ` + ${b - 1} guard${b === 2 ? '' : 's'}` : ''}</span><div><i style="width:${pct}%"></i><s style="width:${B ? clamp(B.armor / BOSS.armor, 0, 1) * 100 : 0}%"></s></div><b>${pct}%</b></div>`);
-        else setHTML(hud.teamScore, 'teams', G.assassin
-            ? chip(a, SURVIVOR_COLOR, 'Survivors', !p.assassin) + '<em>vs</em>' + chip(b, '#e0303a', b ? 'Assassin' : 'Caught', !!p.assassin)
-            : G.zombies
+        else setHTML(hud.teamScore, 'teams', G.zombies
             ? chip(a, SURVIVOR_COLOR, 'Survivors', !p.zombie) + '<em>vs</em>' + chip(b, ZOMBIE.color, 'Zombies', p.zombie)
             : chip(a, '#fff7ec', 'Running', true) + chip(G.escaped, '#7dffb0', 'Escaped', false) + '<em>vs</em>' + chip(b, '#9aa86a', 'Soldiers', false));
     }
@@ -16129,8 +15941,6 @@ function updateHUD() {
     else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
-    else if (G.assassin) zt = p.assassin ? "Take them all out · don't get caught" : 'Find the assassin and catch him';
-    else if (G.murder) { const r = murderRole(p), n = G.fighters.filter(f => !f.dead && !f.murderer).length; zt = `${MURDER_ROLE[r]} · ${r === 'murderer' ? `${n} left to get` : r === 'sheriff' ? 'find the murderer' : 'stay alive'} · ${fmtTime(Math.max(0, (G.murderEnd - G.time) / 1000))}`; }
     else if (G.ghostMode) zt = p.ghost ? `Haunt them all · ${G.fighters.filter(f => !f.dead && !f.ghost).length} hunters left` : 'Find the ghost · follow its glowing footprints';
     else if (G.escape) {
         const F = G.world.floor;
@@ -16419,7 +16229,7 @@ function addKillfeed(victim, killer, weapon) {
     const el = document.createElement('div');
     el.className = 'kf' + (mine ? ' mine' : '');
     if (killer && killer !== victim) el.innerHTML = `${name(killer)}<span class="w">${weapon}</span>${name(victim)}`;
-    else el.innerHTML = `${name(victim)}<span class="w">${weapon === 'zone' ? 'lost to the zone' : weapon === 'escaped' ? 'escaped the city' : weapon === 'starved' ? 'starved to death' : weapon === 'dehydrated' ? 'died of thirst' : weapon === 'murdered' || weapon === 'shot an innocent' ? weapon : 'died'}</span>`;
+    else el.innerHTML = `${name(victim)}<span class="w">${weapon === 'zone' ? 'lost to the zone' : weapon === 'escaped' ? 'escaped the city' : weapon === 'starved' ? 'starved to death' : weapon === 'dehydrated' ? 'died of thirst' : 'died'}</span>`;
     hud.killfeed.appendChild(el);
     while (hud.killfeed.children.length > 5) hud.killfeed.firstChild.remove();
     setTimeout(() => { el.style.opacity = '0'; }, 5000);
@@ -16462,21 +16272,18 @@ showAiLevel();
 const teamSlider = $('team-slider');
 
 // ---------- Game modes (title screen carousel) ----------
-let assassinRole = 'survivor';
 const MODES = [
     { id: 'zombies', name: 'ZOMBIES', desc: 'Pitch dark: all you have is your flashlight, and the zombies\' glowing eyes. Pick how many survivors and zombies. Anyone the horde takes down turns into a zombie. Zombies that die stay dead.' },
     { id: 'war', name: 'TEAMS', desc: 'Teams battle it out. Arm your squad from big supply crates and wipe out the other teams.' },
     { id: 'ffa', name: 'FREE FOR ALL', desc: 'Every player for themselves. Last one standing wins.' },
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
-    { id: 'assassin', name: 'ASSASSIN', desc: 'Pitch dark. One assassin with a Barrett hides among the survivors and picks them off. Survivors win if they catch him (touch him or take him down); he wins if nobody is left. Play as either side.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
-    { id: 'murder', name: 'MURDER MYSTERY', desc: 'One murderer with a knife, one sheriff with a gun, and everyone else innocent. Nobody knows who\'s who. Find the murderer before everyone is gone.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
     { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
     { id: 'navy', name: 'BATTLESHIPS', desc: 'Two fleets at sea. Giant ships with turning cannons, deck guns, torpedoes and helicopters, up to 100 people on each. Take the wheel, man the guns, fly, or board the enemy and capture their ship.' }
 ];
-let murderRolePick = 'random', ghostRolePick = 'hunter', navyRolePick = 'captain';
+let ghostRolePick = 'hunter', navyRolePick = 'captain';
 // After the mode and its settings, you pick how the fight is armed
 const WARFARE = {
     normal: { name: 'NORMAL WARFARE', desc: 'Ordinary guns to find in boxes, ordinary cars and trucks.' },
@@ -16497,10 +16304,8 @@ function setMenuMode(i, dir) {
     $('solo-friends').classList.toggle('hidden', !soloMap(m.id));
     $('settings-ffa').classList.toggle('hidden', m.id === 'navy' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
-    $('settings-assassin').classList.toggle('hidden', m.id !== 'assassin');
-    $('settings-murder').classList.toggle('hidden', m.id !== 'murder');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
-    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'assassin' ? 'Survivors' : m.id === 'boss' ? 'Teammates' : m.id === 'murder' ? `Other players (up to ${MURDER.maxPlayers - 1})` : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : 'Opponents';
+    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
     // Revolution is always two sides
     $('team-count').closest('.cpu-row').classList.toggle('hidden', m.id === 'revolution');
@@ -16765,8 +16570,8 @@ function sliderToCount(v) {
     return t < 0.5 ? Math.max(1, Math.round(1 + (t / 0.5) * 99)) : Math.min(MAX_BOTS, Math.round(100 + ((t - 0.5) / 0.5) * (MAX_BOTS - 100)));
 }
 
-// (Murder Mystery and Ghost only take so many players)
-const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'murder' ? MURDER.maxPlayers - 1 : id === 'ghost' ? GHOST.maxPlayers - 1 : Infinity; };
+// (Ghost only takes so many players)
+const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'ghost' ? GHOST.maxPlayers - 1 : Infinity; };
 const showCpuValue = () => { $('cpu-value').textContent = Math.min(cpuCap(), sliderToCount(+slider.value)); };
 slider.addEventListener('input', showCpuValue);
 showCpuValue();
@@ -16839,7 +16644,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'murder' || id === 'ghost' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -16852,13 +16657,11 @@ const BRIEF = {
     zombies: [['🎯', '<b>Goal:</b> survive. Survivors win when every zombie is dead; the horde wins when everyone is turned.'], ['🌑', 'It is pitch dark. Only your flashlight lights the way, and zombies show glowing green eyes.'], ['🧟', 'If a zombie gets you, you turn into one, and then you hunt the survivors.'], ['💉', 'Cures can turn zombies back into survivors.']],
     survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat, and drink at ponds.'], ['😴', 'Rest when you are tired.'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
     revolution: [['🎯', '<b>Goal:</b> wipe out the other side or bring down their castle.'], ['🏰', 'Each side has a castle with healing rooms, an armory, guard towers and cannons on the walls.'], ['💥', 'Load ammo into your boss strike pad and launch it at the enemy castle.'], ['☠️', 'No revives: when you die, you stay dead.']],
-    assassin: [['🎯', '<b>Survivors:</b> find the assassin and touch him (or take him down) to win.'], ['🔫', '<b>Assassin:</b> a Barrett with 2000 rounds and a medkit (a Railgun in High Tech). Take everyone out without getting caught.'], ['🌑', 'Pitch dark. Everyone has a flashlight.'], ['🔭', 'Sniper rifles have an 8x night-vision scope.'], ['🚶', 'Survivors spread out: they can\'t stay together.']],
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
-BRIEF.murder = [['🔪', '<b>Murderer:</b> a knife that kills in one stab. Take everyone out, but anyone who sees the knife out knows it\'s you.'], ['🔫', '<b>Sheriff:</b> a gun that kills in one shot. Shoot the murderer. Shoot an innocent and you die too.'], ['🙂', '<b>Innocent:</b> stay alive for 3 minutes. If the sheriff goes down, grab the gun: you become the sheriff.'], ['❓', 'Nobody knows who\'s who. Pick your role, or let it be random.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Guns:</b> walk up to a cannon, deck gun or torpedo tube and man it. Big shells hurt the hull and the crew, and can knock out enemy guns.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Below deck:</b> stairs inside the bridge lead down to a long gun deck, lined with more cannons, a missile battery that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Submarine deck:</b> further stairs down lead to two submarine bays — a 10-person sub with two torpedo tubes, and a 5-person midget sub with one. Either dives the moment you launch it, safe from gunfire while submerged.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Gun racks</b> line the top deck: walk up and grab a rocket launcher, minigun, heavy MG or Barrett, and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the submarine deck, is further down: a 10-person sub with two torpedo tubes and a 5-person midget sub with one. Either dives the moment you launch it, safe from gunfire while submerged.'], ['👁️', 'You only see (and can only shoot) the people on the deck you\'re on.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
@@ -16887,7 +16690,7 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'assassin' ? (assassinRole === 'assassin' ? 'You: Assassin' : 'You: Survivor') : m.id === 'murder' ? `You: ${murderRolePick === 'random' ? 'Random' : murderRolePick[0].toUpperCase() + murderRolePick.slice(1)}` : m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
@@ -16897,8 +16700,8 @@ function openBriefing(map) {
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'murder' || id === 'ghost' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
-    else startGame(BRIEF_STAGE.map);
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
+    else { const map = BRIEF_STAGE.map; quickMatch(() => startGame(map)); }
 });
 $('brief-back').addEventListener('click', () => {
     $('brief').classList.add('hidden');
@@ -16913,7 +16716,7 @@ $('brief-back').addEventListener('click', () => {
 let lastMap = 'ordinary';
 function mapAllowed(id, m) {
     if (id === 'navy') return m === 'sea';
-    return !(m === 'sea' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
+    return !(m === 'sea' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
 // The one map a mode can be played on, if there's only one: then there's nothing to choose
 function soloMap(id) {
@@ -16940,7 +16743,7 @@ const MAP_DESC = {
     mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.',
     haunted: 'A giant haunted mansion full of candlelit rooms and coffins, in a foggy cemetery of graves, crypts and dead trees behind an iron fence.',
     cavern: 'The boss\'s lair: a giant cave deep underground with rocks everywhere, glowing crystals and lava cracks.',
-    wasteland: 'Made for Assassin: wide open ground, a few lone trees and broken junk everywhere, no cars. Snipe from far away.'
+    wasteland: 'Made for sniping: wide open ground, a few lone trees and broken junk everywhere, no cars. Snipe from far away.'
 };
 const ESCAPE_MAP_DESC = {
     city: 'Cross the city to the HQ tower and fight up 12 floors to the helicopter.',
@@ -17047,15 +16850,11 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
-for (const [sel, set] of [['#murder-role', v => { murderRolePick = v; }], ['#ghost-role', v => { ghostRolePick = v; }]])
+for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }]])
     for (const b of document.querySelectorAll(sel + ' button')) b.addEventListener('click', () => {
         set(b.dataset.r);
         for (const o of document.querySelectorAll(sel + ' button')) o.classList.toggle('on', o === b);
     });
-for (const b of document.querySelectorAll('#assassin-role button')) b.addEventListener('click', () => {
-    assassinRole = b.dataset.r;
-    for (const o of document.querySelectorAll('#assassin-role button')) o.classList.toggle('on', o === b);
-});
 $('sl-ok').addEventListener('click', () => closeStrikeLoad(true));
 $('sl-cancel').addEventListener('click', () => closeStrikeLoad(false));
 $('spectate-btn').addEventListener('click', () => {
@@ -17074,7 +16873,7 @@ function startGame(map = lastMap) {
     if (id === 'revolution' && map === 'maze') map = 'ordinary';
     // Escape has no open countryside to cross, and Survival has no maze
     if (id === 'escape' && map === 'ordinary') map = 'city';
-    if (id !== 'assassin' && id !== 'duel' && map === 'wasteland') map = 'ordinary';
+    if (id !== 'duel' && map === 'wasteland') map = 'ordinary';
     if ((id === 'survival' || id === 'duel') && map === 'maze') map = 'ordinary';
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
@@ -17083,13 +16882,11 @@ function startGame(map = lastMap) {
     const setup = id === 'navy' ? { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick }
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
-        : id === 'murder' ? { type: id, count: Math.max(2, Math.min(MURDER.maxPlayers - 1, sliderToCount(+slider.value))), role: murderRolePick }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
-        : id === 'assassin' ? { type: id, count: sliderToCount(+slider.value), role: assassinRole }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'murder' || id === 'ghost' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'ghost' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -17106,7 +16903,7 @@ function startGame(map = lastMap) {
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.murder || !!G.duel);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
@@ -17114,14 +16911,12 @@ function startGame(map = lastMap) {
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
     if (G.navy) showBanner('BATTLESHIPS', true, `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
-    else if (G.murder) { const r = murderRole(G.player); showBanner(`YOU ARE ${r === 'innocent' ? 'INNOCENT' : 'THE ' + MURDER_ROLE[r]}`, true, r === 'murderer' ? 'Take everyone out. Switch to your knife (slot 2) to stab: one stab kills. Anyone who sees the knife knows it\'s you!' : r === 'sheriff' ? 'One shot kills. Find the murderer and shoot them, but if you shoot an innocent, you die too!' : 'Stay alive for 3 minutes. Watch for anyone with a knife out, and grab the gun if the sheriff goes down.'); }
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
     else if (G.hightech && war) showBanner(`HIGH TECH TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Find quantum guns in the crates and grab a mech!');
     else if (war) showBanner(`TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, false, 'Grab guns from the supply crates near your base');
     else if (G.bossFight) showBanner('BOSS FIGHT', true, `You + ${G.fighters.filter(f => f.team === 0).length - 1} vs THE BOSS. Don't get close!`);
-    else if (G.assassin) showBanner('ASSASSIN', true, G.player.assassin ? `You're the assassin. ${G.alive - 1} survivors in the dark. If one of them touches you, you're caught!` : `An assassin with a ${G.hightech ? 'Railgun' : 'Barrett'} is hiding among ${G.alive - 1} of you. Find him and catch him!`);
     else if (G.zombies) { const z = G.fighters.filter(f => f.zombie).length; showBanner('ZOMBIES', true, `${z} zombies are out there. Survive with ${G.fighters.length - z - 1} other survivors.`); }
     else if (G.escape) showBanner('ESCAPE', true, G.world.terrain === 'maze' ? 'Find a way through the maze to the helicopter. Machine-gun nests, minefields, and the map only shows where you\'ve been!'
         : G.world.terrain === 'mountain' ? 'Climb the mountains with your group to the helicopter on the snowy summit!'
@@ -17137,6 +16932,8 @@ function startGame(map = lastMap) {
 
 function toMenu() {
     netGameEnded();
+    // (a quick-match host stops taking players once they leave the game)
+    if (NET.mm) netStop();
     newDemo();
     screens.pause.classList.add('hidden');
     screens.over.classList.add('hidden');
@@ -17255,7 +17052,7 @@ function netStop() {
     for (const g of NET.guests) dropGuest(g, true);
     NET.guests = [];
     if (NET.peer) { try { NET.peer.destroy(); } catch (e) { /* already gone */ } }
-    NET.peer = null; NET.role = null; NET.code = null; NET.conn = null;
+    NET.peer = null; NET.role = null; NET.code = null; NET.conn = null; NET.mm = false;
     stopViewing();
     updateHostStrip();
 }
@@ -17299,7 +17096,7 @@ function addGuest(conn) {
     if (NET.guests.length >= NET.maxFriends) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 300); return; }
     const used = new Set(NET.guests.map(g => g.n));
     let n = 1; while (used.has(n)) n++;
-    const g = { n, name: `Friend ${n}`, conn, call: null, f: null, w: 1280, h: 720, input: { keys: new Set(), mouse: { x: 640, y: 360, down: false }, world: null }, cam: { x: 0, y: 0 }, zoom: 1, va: null, hurt: 0 };
+    const g = { n, name: NET.mm ? `Player ${n + 1}` : `Friend ${n}`, conn, call: null, f: null, w: 1280, h: 720, input: { keys: new Set(), mouse: { x: 640, y: 360, down: false }, world: null }, cam: { x: 0, y: 0 }, zoom: 1, va: null, hurt: 0 };
     g.input.world = () => ({ x: (g.input.mouse.x - g.w / 2) / g.zoom + g.cam.x, y: (g.input.mouse.y - g.h / 2) / g.zoom + g.cam.y });
     NET.guests.push(g);
     conn.on('data', msg => onGuestMsg(g, msg));
@@ -17514,12 +17311,15 @@ function onHostMsg(m) {
     if (m.t === 'welcome') $('fr-join-msg').textContent = `Connected as ${m.name}! Waiting for the host to start the game...`;
     if (m.t === 'full') $('fr-join-msg').textContent = 'That game is full.';
     if (m.t === 'start') $('fr-join-msg').textContent = `Joining ${m.mode}...`;
+    if (m.t === 'end' && NET.mm) { mmBackToMenu(); return; }
     if (m.t === 'end') { stopViewing(true); $('fr-join-msg').textContent = 'The host is back at the menu. Waiting for the next game...'; }
 }
 function startViewing(stream) {
     const v = $('net-video');
     NET.stream = stream; NET.viewing = true;
     v.srcObject = stream; v.classList.remove('hidden');
+    $('matchmaking').classList.add('hidden');
+    $('nl-title').textContent = NET.mm ? 'ONLINE GAME' : 'FRIEND\'S GAME';
     v.play().catch(() => { /* starts on the next click */ });
     for (const k in screens) screens[k].classList.add('hidden');
     $('friends').classList.add('hidden');
@@ -17579,6 +17379,88 @@ $('fr-back').addEventListener('click', () => {
 });
 $('nl-leave').addEventListener('click', () => { netStop(); $('friends').classList.add('hidden'); toMenu(); });
 $('nl-back').addEventListener('click', () => $('net-leave').classList.add('hidden'));
+
+// ----- Quick match -----
+// Pressing start looks for anyone else starting the same mode right now and puts you in one game together, so
+// two people don't each run their own game full of hundreds of bots. Each mode has a few lobby ids on the broker:
+// if one is taken, that player's game is running and you join it (taking over one of their bots, like a friend);
+// if none is, you claim one and start straight away, and whoever presses start next joins you.
+// Nobody waits for a game to fill up: the bots fill in for everyone who isn't there.
+const MM = { slots: 4, wait: 6000, joinWait: 9000, busy: false, run: 0 };
+function quickMatch(start) {
+    Sound.init();  // (while we still have the click)
+    if (NET.role || MM.busy) { start(); return; }
+    const run = ++MM.run, mode = MODES[menuMode].id;
+    MM.busy = true;
+    $('mm-msg').textContent = 'Looking for other players...';
+    $('matchmaking').classList.remove('hidden');
+    let done = false, timer = 0;
+    const live = () => !done && MM.run === run;
+    const finish = how => { if (!live()) return; done = true; MM.busy = false; clearTimeout(timer); how(); };
+    const solo = () => finish(() => { netStop(); $('matchmaking').classList.add('hidden'); start(); });
+    MM.solo = solo;
+    timer = setTimeout(solo, MM.wait);
+    const lobby = k => `${NET.prefix}mm-${mode}-${k}`;
+    // Someone already playing on this slot? Join them
+    const trySlot = (k, tries) => {
+        if (!live()) return;
+        if (k >= MM.slots) { solo(); return; }
+        netStop();
+        const peer = new Peer();
+        NET.peer = peer; NET.role = 'guest'; NET.mm = true;
+        peer.on('error', err => {
+            if (NET.peer !== peer || !live()) return;
+            if (err.type === 'peer-unavailable') hostSlot(k, tries); else solo();
+        });
+        peer.on('open', () => {
+            if (!live()) return;
+            const conn = peer.connect(lobby(k), { reliable: true });
+            NET.conn = conn;
+            conn.on('open', () => conn.send({ t: 'hello', w: window.innerWidth, h: window.innerHeight }));
+            conn.on('data', m => {
+                if (!m || typeof m !== 'object') return;
+                if (m.t === 'full') { if (live()) trySlot(k + 1, 0); return; }
+                if (m.t === 'welcome' && live()) finish(() => {
+                    $('mm-msg').textContent = 'Found a game! Joining...';
+                    // (if their picture never arrives, play on your own instead)
+                    setTimeout(() => { if (NET.peer === peer && !NET.viewing) { netStop(); $('matchmaking').classList.add('hidden'); start(); } }, MM.joinWait);
+                });
+                if (m.t === 'end') { mmBackToMenu(); return; }
+            });
+            conn.on('close', () => { if (NET.peer === peer && NET.viewing) mmBackToMenu(); });
+        });
+        peer.on('call', call => {
+            call.answer();
+            call.on('stream', s => startViewing(s));
+            call.on('close', () => { if (NET.peer === peer) mmBackToMenu(); });
+        });
+    };
+    // Nobody there: take the slot, start playing, and let the next players in
+    const hostSlot = (k, tries) => {
+        if (!live()) return;
+        netStop();
+        const peer = new Peer(lobby(k));
+        NET.peer = peer; NET.role = 'host'; NET.mm = true;
+        peer.on('open', () => finish(() => { $('matchmaking').classList.add('hidden'); start(); }));
+        peer.on('error', err => {
+            if (NET.peer !== peer || !live()) return;
+            // (somebody claimed it a moment before us: join them instead; an id stuck on the broker, try the next)
+            if (err.type === 'unavailable-id') trySlot(tries < 1 ? k : k + 1, tries + 1); else solo();
+        });
+        peer.on('connection', conn => conn.on('open', () => addGuest(conn)));
+    };
+    loadPeerJS().then(() => trySlot(0, 0), solo);
+}
+// Out of a quick-match game you joined: back to the title screen
+function mmBackToMenu() {
+    if (!NET.mm || NET.role !== 'guest') return;
+    netStop();
+    $('net-leave').classList.add('hidden');
+    $('friends').classList.add('hidden');
+    $('matchmaking').classList.add('hidden');
+    toMenu();
+}
+$('mm-solo').addEventListener('click', () => { if (MM.solo) MM.solo(); });
 
 // ---------- Touch controls (phones and iPads) ----------
 // Left thumb: a joystick that walks you (as fast as you push it). Right thumb: a joystick that aims, and fires

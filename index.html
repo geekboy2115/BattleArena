@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261107b">
+    <link rel="stylesheet" href="style.css?v=20261107c">
 </head>
 
 <body>
@@ -135,22 +135,6 @@
             <div class="setup-head">
                 <div class="setup-step">STEP 2 OF 2 · SET UP</div>
                 <div class="setup-mode" id="setup-mode"></div>
-            </div>
-
-            <div class="cpu-select hidden" id="settings-assassin">
-                <div class="cpu-row"><span>Play as</span>
-                    <div class="seg" id="assassin-role">
-                        <button data-r="survivor" class="on">Survivor</button><button data-r="assassin">Assassin</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="cpu-select hidden" id="settings-murder">
-                <div class="cpu-row"><span>Play as</span>
-                    <div class="seg" id="murder-role">
-                        <button data-r="random" class="on">Random</button><button data-r="innocent">Innocent</button><button data-r="sheriff">Sheriff</button><button data-r="murderer">Murderer</button>
-                    </div>
-                </div>
             </div>
 
             <div class="cpu-select hidden" id="settings-ghost">
@@ -306,11 +290,20 @@
         </div>
     </div>
 
+    <!-- Pressing start: anyone else starting the same mode right now ends up in the same game -->
+    <div id="matchmaking" class="overlay menu-overlay hidden">
+        <div class="menu-card small">
+            <h2 class="card-title">FINDING PLAYERS</h2>
+            <p class="go-sub" id="mm-msg">Looking for other players...</p>
+            <button id="mm-solo" class="btn ghost">JUST PLAY</button>
+        </div>
+    </div>
+
     <!-- Playing on a friend's game: their picture of your view -->
     <video id="net-video" class="hidden" autoplay playsinline muted></video>
     <div id="net-leave" class="overlay hidden">
         <div class="menu-card small">
-            <h2 class="card-title">FRIEND'S GAME</h2>
+            <h2 class="card-title" id="nl-title">FRIEND'S GAME</h2>
             <button id="nl-back" class="btn primary">BACK TO THE GAME</button>
             <button id="nl-leave" class="btn ghost">LEAVE GAME</button>
         </div>
@@ -373,7 +366,7 @@
         </div>
     </div>
 
-    <script src="script.js?v=20261107b"></script>
+    <script src="script.js?v=20261107c"></script>
 </body>
 
 </html>
