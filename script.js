@@ -477,7 +477,7 @@ window.addEventListener('blur', () => { keys.clear(); mouse.down = false; player
 window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 canvas.addEventListener('mousedown', e => {
     const car = G && G.mode === 'playing' && G.player && !G.player.dead && G.player.car;
-    if (car && !vt(car).fixed && (e.button === 2 || (e.button === 0 && !(vt(car).gun || vt(car).cannon || vt(car).rockets)))) {
+    if (car && !vt(car).fixed && (e.button === 2 || (e.button === 0 && !(vt(car).gun || vt(car).cannon || vt(car).rockets || vt(car).torp)))) {
         const m = mouseWorld();
         setDriveGoal(car, m.x, m.y);
         return;
@@ -5134,7 +5134,7 @@ const NAVY = {
                 ['med', -400, -165, null, 'hall'], ['med', -400, 165, null, 'hall'], ['med', -640, -160, null, 'hall'], ['med', -640, 160, null, 'hall']],
             // The weapons hangar, below on the gun deck: grab a heavy gun, then take it up top to fight from the rail
             racks: [[385, -95, 'hall'], [385, 95, 'hall'], [120, -95, 'hall'], [120, 95, 'hall']],
-            pad: [-860, 0], subbays: [{ kind: 'sub', lx: 330, ly: 0 }, { kind: 'subsmall', lx: -740, ly: 0 }], supply: [[-715, 120], [880, 0]]
+            pad: [-860, 0], subbays: [{ kind: 'sub', lx: 560, ly: -105 }, { kind: 'sub', lx: 300, ly: 105 }, { kind: 'sub', lx: 40, ly: -105 }, { kind: 'subsmall', lx: -200, ly: 105 }, { kind: 'subsmall', lx: -650, ly: -105 }, { kind: 'subsmall', lx: -650, ly: 105 }], supply: [[-715, 120], [880, 0]]
         },
         destroyer: {
             name: 'Destroyer', len: 1120, beam: 260, hp: 14000, speed: 205, accel: 30, turn: 0.2, crew: 20, bow: 224, aft: 336, helm: [132, 0],
@@ -5226,6 +5226,24 @@ function navyAddHeli(s) {
     G.world.cars.push(c);
     s.heli = c; s.heliClaim = null;
     return c;
+}
+// Where you climb out of a boat or a sub: up onto a ship's deck right beside you, or onto an island's beach
+function navyLanding(c) {
+    const reach = vt(c).len / 2 + 140;
+    for (const q of G.navy.ships) {
+        if (q.sinkAt || q.sunk) continue;
+        const lx = navyLx(q, c.x, c.y), ly = navyLy(q, c.x, c.y);
+        if (!navyInHull(q, lx, ly, reach)) continue;
+        const tx = clamp(lx, -q.C.len / 2 + 80, q.C.len / 2 - 80), hw = Math.max(0, navyHw(q.C, tx) - 50), ty = clamp(ly, -hw, hw);
+        return { x: navyWx(q, tx, ty), y: navyWy(q, tx, ty), ship: q };
+    }
+    for (const isl of G.navy.islands) {
+        const d = Math.hypot(c.x - isl.x, c.y - isl.y);
+        if (d > isl.r + reach) continue;
+        const ux = d ? (c.x - isl.x) / d : 1, uy = d ? (c.y - isl.y) / d : 0;
+        for (const k of [0.9, 0.8, 0.7, 0.55, 0.4, 0]) { const x = isl.x + ux * isl.r * k, y = isl.y + uy * isl.r * k; if (!blockedAt(G.world.grid, x, y, 22) || k === 0) return { x, y, ship: null }; }
+    }
+    return null;
 }
 // A submarine bay, down through the bottom of the hull: launches into the water, not the air
 function navyAddSub(s, bay) {
@@ -5452,7 +5470,7 @@ function navyStatus(p) {
     if (p.car) return vt(p.car).torp ? (p.car.submerged ? 'Submerged · torpedoes locked and loaded' : 'Submarine · dive and hunt the enemy fleet') : 'Flying · sink the enemy fleet';
     if (p.station && p.station.helm) { const s = p.station.ship; return `Deck 1 · at the wheel of the ${s.name} · throttle ${Math.round(s.throttle * 100)}% · hull ${hull(s)}`; }
     if (p.station) return `${p.station.D.name}${p.station.room ? ' (below deck)' : ''} on the ${p.station.ship.name} · hull ${hull(p.station.ship)}`;
-    if (p.room) return `${p.room === 'hall' ? 'Deck 2: the gun deck' : 'Deck 3: the submarine deck'}, below decks on the ${p.ship.name} · hull ${hull(p.ship)}`;
+    if (p.room && p.ship) return `${p.room === 'hall' ? 'Deck 2: the gun deck' : 'Deck 3: the submarine deck'}, below decks on the ${p.ship.name} · hull ${hull(p.ship)}`;
     if (p.swim) return `In the water! You\'re drowning: swim to a ship · ${Math.ceil(p.hp)} health`;
     if (p.ship) return p.ship.team === p.team ? `On the ${p.ship.name} · hull ${hull(p.ship)}${p.ship.helm.crew ? '' : ' · NOBODY AT THE WHEEL!'}` : `Aboard the enemy ${p.ship.name}: take the wheel to capture it`;
     return 'Ashore on an island';
@@ -5615,12 +5633,13 @@ function updateNavy(dt) {
             const s = c.onShip; c.onShip = null;
             if (s.heli === c) { s.heli = null; s.heliClaim = null; s.heliAt = G.time + NAVY.heliBack; }
             else if (c.homeBay) { c.homeBay.car = null; c.homeBay.claim = null; c.homeBay.at = G.time + NAVY.heliBack; c.submerged = true; }
+            for (const f of [c.driver, ...c.riders]) { f.room = null; f.ship = null; }
         }
         if (c.onShip) { const s = c.onShip; if (s.sunk) { damageCar(c, 1e6, null); continue; } c.x = navyWx(s, c.lx, c.ly); c.y = navyWy(s, c.lx, c.ly); c.a = s.a + c.la; c.speed = 0; c.turret = c.a; }
         else if (!c.driver) {
             const s = N.ships.find(q => !q.sinkAt && navyInHull(q, navyLx(q, c.x, c.y), navyLy(q, c.x, c.y), -20));
             if (s) { c.onShip = s; c.lx = navyLx(s, c.x, c.y); c.ly = navyLy(s, c.x, c.y); c.la = c.a - s.a; if (c.homeBay) { if (!c.homeBay.car) c.homeBay.car = c; } else if (!s.heli) s.heli = c; }
-            else if (navyIsland(c.x, c.y)) c.speed = 0;
+            else if (navyIsland(c.x, c.y) || vt(c).water) c.speed = 0;
             else damageCar(c, 1e6, null);
         }
     }
@@ -6334,7 +6353,7 @@ function drawNavyInterior(L, T, R, B, now) {
     for (let gy = -C.beam / 2; gy < C.beam / 2; gy += 40) { ctx.beginPath(); ctx.moveTo(-C.len / 2, gy); ctx.lineTo(C.len / 2, gy); ctx.stroke(); }
     // (bulkheads with doorways down the middle, so it reads as rooms along the ship)
     ctx.fillStyle = '#3a3e45';
-    for (const bx of [520, 250, -10, -270, -540]) { ctx.fillRect(bx - 5, -C.beam / 2, 10, C.beam / 2 - 60); ctx.fillRect(bx - 5, 60, 10, C.beam / 2 - 60); }
+    if (p.room === 'hall') for (const bx of [520, 250, -10, -270, -540]) { ctx.fillRect(bx - 5, -C.beam / 2, 10, C.beam / 2 - 60); ctx.fillRect(bx - 5, 60, 10, C.beam / 2 - 60); }
     ctx.restore();
     ctx.strokeStyle = '#3a3e45'; ctx.lineWidth = 6; navyHullPath(ctx, C, -16); ctx.stroke();
     ctx.fillStyle = 'rgba(255,209,102,0.75)'; ctx.font = '700 26px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -12179,8 +12198,8 @@ const VTYPES = {
     quad: { name: 'Quad Bike', len: 56, wid: 34, accel: 700, brake: 1000, max: 600, reverse: 200, turn: 3.2, hp: 220, ram: 0.1, share: 0.8, offroad: true },
     heli: { name: 'Helicopter', len: 110, wid: 60, accel: 420, brake: 700, max: 720, reverse: 300, turn: 2.2, hp: 500, ram: 0, share: 0.3, fly: true },
     boat: { name: 'Speedboat', len: 70, wid: 30, accel: 600, brake: 800, max: 700, reverse: 200, turn: 2.6, hp: 300, ram: 0.1, share: 0.6, water: true },
-    sub: { name: 'Submarine', len: 180, wid: 40, accel: 190, brake: 460, max: 240, reverse: 100, turn: 1.1, hp: 2400, ram: 0, share: 0, water: true, torp: true, torpTubes: 2, seats: 9 },
-    subsmall: { name: 'Midget Submarine', len: 100, wid: 26, accel: 240, brake: 520, max: 300, reverse: 130, turn: 1.6, hp: 1100, ram: 0, share: 0, water: true, torp: true, torpTubes: 1, seats: 4 },
+    sub: { name: 'Submarine', len: 180, wid: 40, accel: 190, brake: 460, max: 240, reverse: 100, turn: 1.1, hp: 2400, ram: 0, share: 0, water: true, torp: true, torpTubes: 2, torpRate: 6000 },
+    subsmall: { name: 'Midget Submarine', len: 100, wid: 26, accel: 240, brake: 520, max: 300, reverse: 130, turn: 1.6, hp: 1100, ram: 0, share: 0, water: true, torp: true, torpTubes: 1, torpRate: 4000 },
     dozer: { name: 'Bulldozer', len: 96, wid: 60, accel: 220, brake: 600, max: 230, reverse: 120, turn: 1.5, hp: 1500, ram: 0.3, share: 0.15, crush: true, walls: true },
     supercar: { name: 'Supercar', len: 88, wid: 40, accel: 950, brake: 1300, max: 1020, reverse: 260, turn: 2.9, hp: 260, ram: 0.16, share: 0.3 },
     icecream: { name: 'Ice-Cream Truck', len: 96, wid: 48, accel: 380, brake: 800, max: 430, reverse: 180, turn: 2.0, hp: 520, ram: 0.15, share: 0.25, music: true },
@@ -12252,7 +12271,7 @@ function nearestCar(p, range, landOnly = false) {
         if (c.dead || c.driver || (landOnly && vt(c).water)) continue;
         // Below decks, rooms share the open deck's coordinates: don't let a topside spawn point coincide
         // with a car moored on a different level and make it look reachable through the floor.
-        if (G.navy && (c.homeRoom || null) !== (p.room || null)) continue;
+        if (G.navy && c.onShip && (c.homeRoom || null) !== (p.room || null)) continue;
         const d = Math.hypot(c.x - p.x, c.y - p.y) - (vt(c).round ? vt(c).len / 2 + 70 : vt(c).len * 0.3);  // (a big round tower: anywhere round its edge)
         if (d < bd) { bd = d; best = c; }
     }
@@ -12285,7 +12304,6 @@ function enterCar(p, c) {
 function exitCar(p) {
     const c = p.car;
     if (!c) return;
-    if (vt(c).torp) c.submerged = false;  // she surfaces so you can climb out
     if (p.towerUp) {
         // Back out onto the walkway, on the inside of the tower
         const b = p.towerUp, a = Math.atan2(b.c.y - c.y, b.c.x - c.x);
@@ -12293,6 +12311,12 @@ function exitCar(p) {
         p.x = c.x + Math.cos(a) * (vt(c).len / 2 + 50); p.y = c.y + Math.sin(a) * (vt(c).len / 2 + 50); p.vx = p.vy = 0;
         return;
     }
+    const land = G.navy && vt(c).water && !p.dead && !c.dead ? navyLanding(c) : null;
+    if (G.navy && vt(c).water && !p.dead && !c.dead && !land) {
+        if (p.isPlayer && G.time - (p.exitNag || -1e9) > 1500) { p.exitNag = G.time; addFloat(c.x, c.y - 50, 'Get next to a ship or an island to climb out', '#ffd166'); }
+        return;
+    }
+    if (vt(c).torp) c.submerged = false;  // she surfaces so you can climb out
     const T = vt(c), out = Math.max(T.wid / 2 + 26, 40);
     const spots = [c.a - Math.PI / 2, c.a + Math.PI / 2, c.a + Math.PI, c.a].map(a => ({ x: c.x + Math.cos(a) * out, y: c.y + Math.sin(a) * out }));
     // Out of a boat you swim for the nearest shore spot; out of a helicopter you just drop
@@ -12303,6 +12327,11 @@ function exitCar(p) {
     c.speed = 0;
     c.auto = null;  // a route you set doesn't carry on without you
     for (const f of c.riders) { const q = spawnNear(c, 120, f.r); f.x = q.x; f.y = q.y; f.car = null; f.riding = false; f.nextThink = G.time; }
+    if (land) for (const f of [p, ...c.riders]) {
+        f.x = land.x + rand(-20, 20); f.y = land.y + rand(-20, 20); f.vx = f.vy = 0;
+        f.ship = land.ship; f.swim = false; f.room = null; f.noClimb = 0;
+        if (f.isPlayer) addFloat(f.x, f.y - 34, land.ship ? `Aboard the ${land.ship.name}` : 'Ashore', '#fff7ec');
+    }
     c.riders = [];
     if (!c.dead) parkCar(c);
 }
@@ -12375,7 +12404,10 @@ function updateCars(dt) {
         const probes = [[T.len / 2, 0], [T.len / 2, T.wid / 2 - 4], [T.len / 2, -T.wid / 2 + 4], [-T.len / 2, T.wid / 2 - 4], [-T.len / 2, -T.wid / 2 + 4]];
         const pts = probes.map(([lx, ly]) => ({ x: nx + lx * ca - ly * sa, y: ny + lx * sa + ly * ca }));
         let blocked = nx < 50 || ny < 50 || nx > W - 50 || ny > W - 50;
-        if (!blocked && T.water && G.navy) { for (const q of G.navy.ships) if (!q.sinkAt && navyInHull(q, navyLx(q, nx, ny), navyLy(q, nx, ny), 30)) { blocked = true; break; } }
+        if (!blocked && T.water && G.navy) {
+            if (navyIsland(nx, ny, T.wid / 2 + 10)) blocked = true;
+            else if (!c.submerged) for (const q of G.navy.ships) if (!q.sinkAt && navyInHull(q, navyLx(q, nx, ny), navyLy(q, nx, ny), 30)) { blocked = true; break; }
+        }
         else if (!blocked && T.water) blocked = pts.some(q => !inPond(q));
         else if (!blocked && !T.fly) {
             // The tank and the bulldozer flatten what's in front of them (the dozer even goes through walls)
@@ -12462,7 +12494,7 @@ function vehicleFire(c, p) {
     c.firedAt = G.time;
     if (T.torp) {
         const D = NAVY.guns.torp, n = T.torpTubes || 1;
-        c.fireAt = G.time + D.rate;
+        c.fireAt = G.time + (T.torpRate || D.rate);
         for (let i = 0; i < n; i++) {
             const off = (i - (n - 1) / 2) * 16, ox = -Math.sin(a) * off, oy = Math.cos(a) * off;
             G.bullets.push({ x: mx + ox, y: my + oy, vx: Math.cos(a) * D.speed, vy: Math.sin(a) * D.speed, dmg: D.dmg, owner: p, left: D.range, weapon: 'Torpedo', heavy: true, rocket: true, torpedo: true, blastR: D.blastR, blastDmg: D.dmg });
@@ -16677,7 +16709,7 @@ const BRIEF = {
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the submarine deck, is further down: a 10-person sub with two torpedo tubes and a 5-person midget sub with one. Either dives the moment you launch it, safe from gunfire while submerged.'], ['👁️', 'You only see (and can only shoot) the people on the deck you\'re on.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the submarine deck, is further down: three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see (and can only shoot) the people on the deck you\'re on.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
@@ -17144,7 +17176,7 @@ function onGuestMsg(g, m) {
         const p = g.f, down = !!m.down;
         if (m.button === 0) I.mouse.down = down;
         if (!p || !G || G.mode !== 'playing' || p.dead) return;
-        if (down && p.car && !vt(p.car).fixed && (m.button === 2 || (m.button === 0 && !(vt(p.car).gun || vt(p.car).cannon || vt(p.car).rockets)))) { I.mouse.down = false; const w = I.world(); setDriveGoal(p.car, w.x, w.y); return; }
+        if (down && p.car && !vt(p.car).fixed && (m.button === 2 || (m.button === 0 && !(vt(p.car).gun || vt(p.car).cannon || vt(p.car).rockets || vt(p.car).torp)))) { I.mouse.down = false; const w = I.world(); setDriveGoal(p.car, w.x, w.y); return; }
         if (m.button === 2) down ? playerCook(p) : playerRelease(p);
     } else if (m.t === 'w') {
         const p = g.f;
