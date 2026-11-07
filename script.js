@@ -5768,11 +5768,13 @@ function navyCheck() {
     const left = [0, 0];
     for (const s of N.ships) if (!s.sinkAt && s.crewN > 0) left[s.team]++;
     N.left = left;
-    if (G.mode === 'demo') { if (!left[0] || !left[1]) N.over = true; return; }
-    if (G.result || (left[0] && left[1])) return;
+    // Ships sinking doesn't end it on its own: crew can still be swimming, ashore on an island,
+    // flying a helicopter, or standing aboard a ship they've boarded. Only a wholly dead team ends it.
+    if (G.mode === 'demo') { if (!G.teamAlive[0] || !G.teamAlive[1]) N.over = true; return; }
+    if (G.result || (G.teamAlive[0] > 0 && G.teamAlive[1] > 0)) return;
     N.over = true;
-    const p = G.player, won = left[p.team] > 0;
-    G.result = won ? { won: true, place: 1, title: 'ENEMY FLEET DESTROYED', sub: `Every enemy ship is sunk or captured.${p.dead ? ' You went down, but your fleet finished it.' : ''}` } : { won: false, place: 2, title: 'FLEET LOST', sub: 'Your side has no ships left afloat.' };
+    const p = G.player, won = G.teamAlive[p.team] > 0;
+    G.result = won ? { won: true, place: 1, title: 'ENEMY FLEET DESTROYED', sub: `Every enemy sailor is down.${p.dead ? ' You went down, but your fleet finished it.' : ''}` } : { won: false, place: 2, title: 'FLEET LOST', sub: 'Your whole crew is gone.' };
     G.overAt = G.time + 2200;
     if (won) startVictory('The enemy fleet is destroyed');
     else canvas.classList.add('dead');
@@ -8188,7 +8190,7 @@ function warDeath(t, killer, weapon) {
     if (G.revolution) { revoDeath(t, killer, weapon); return; }
     const w = G.war;
     if (--G.teamAlive[t.team] === 0) w.out.push(t.team);
-    if (G.mode === 'demo') return;
+    if (G.navy || G.mode === 'demo') return;
     if (t.isPlayer) {
         G.killedBy = killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null);
         G.timeScale = 0.25;
