@@ -4632,7 +4632,7 @@ function newState(mode, setup) {
     const zombies = setup.type === 'zombies', escape = setup.type === 'escape', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', assassin = setup.type === 'assassin', bossFight = setup.type === 'boss';
-    const murder = setup.type === 'murder', ghostMode = setup.type === 'ghost';
+    const murder = setup.type === 'murder', ghostMode = setup.type === 'ghost', duel = setup.type === 'duel' && mode === 'playing';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4642,7 +4642,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin || bossFight, assassin, bossFight, bossF: null, murder, ghostMode, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || assassin || bossFight, assassin, bossFight, bossF: null, murder, ghostMode, duel: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4703,7 +4703,8 @@ function newState(mode, setup) {
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
     // (Murder Mystery has none: the knife and the sheriff's gun are the only weapons)
-    if (!murder) for (const s of G.world.lootSpots) {
+    const noLoot = murder || duel;
+    if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
         let key = weightedPick(GROUND_TABLE);
@@ -4711,13 +4712,13 @@ function newState(mode, setup) {
         spawnLoot(s.x, s.y, key);
     }
     const caveK = G.world.cave ? 0.12 : 1;  // (the cavern is a lot smaller than the whole world)
-    const boxes = murder ? 0 : Math.min(800, 220 + cpuCount * 0.6) * caveK;
+    const boxes = noLoot ? 0 : Math.min(800, 220 + cpuCount * 0.6) * caveK;
     for (let i = 0; i < boxes; i++) {
         const s = findSpawn(null, 0);
         if (!blockedAt(G.world.grid, s.x, s.y, 34) && !buildingAt(s.x, s.y, 30)) addLootBox(s.x, s.y);
     }
     // Supplies lying out in the open are rare; most loot comes from boxes, airdrops and kills
-    const scatter = murder ? 0 : Math.min(150, 30 + cpuCount * 0.12) * caveK;
+    const scatter = noLoot ? 0 : Math.min(150, 30 + cpuCount * 0.12) * caveK;
     for (let i = 0; i < scatter; i++) {
         const s = findSpawn(null, 0);
         spawnLoot(s.x, s.y, survival && Math.random() < 0.25 ? pick(['water', 'bucket', 'meat']) : weightedPick(GROUND_TABLE));
@@ -4728,7 +4729,7 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the Assassin's wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !murder && !ghostMode) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !murder && !ghostMode && !duel) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (war) {
         spawnTeams(W / 2, setup.baseDist || W * 0.33);
@@ -4756,6 +4757,7 @@ function newState(mode, setup) {
     if (assassin && mode === 'playing') { spreadOut(); pickAssassin(setup.role === 'assassin' ? G.player : null); }
     if (bossFight) setupBossFight();
     if (murder && mode === 'playing') setupMurder(setup.role);
+    if (duel) setupDuel();
     if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
     G.alive = G.fighters.length;
 }
@@ -5020,6 +5022,207 @@ function drawGhostSteps(camX, camY, zoom) {
         ctx.restore();
     }
     ctx.restore();
+}
+
+// ---------- Sniper Duel ----------
+// You against one enemy sniper, first to 3 rounds. One hit kills. You can't see far without the scope, so you listen:
+// footsteps carry (walking slowly with Shift or while scoped is much quieter), a shot gives your position away, and a
+// scope aimed at you glints. Bots can only see where they're facing. After a while the safe circle closes in.
+const DUEL = { wins: 3, arena: 3000, shrinkAt: 90000, shrinkFor: 90000, end: 480, hear: 1100, hearSneak: 300, stepEvery: 0.42, zoneDmg: 8, ammo: 12, sneak: 0.45, pause: 3500, count: 3000, apart: 2200 };
+function setupDuel() {
+    const me = G.player, en = G.fighters.find(f => f !== me);
+    en.name = 'The Sniper'; en.color = '#c0392b'; en.dark = shade(en.color, -0.45); en.light = shade(en.color, 0.35); en.likesCars = false;
+    me.duel = en.duel = true;
+    G.duel = { score: [0, 0], round: 0, over: false, cues: [], me, en, nextRoundAt: 0, roundStart: 0 };
+    duelRound();
+}
+function duelRound() {
+    const D = G.duel, W = CONFIG.WORLD_SIZE, c = W / 2, a = rand(0, TAU);
+    D.round++; D.over = false; D.cues = []; D.nextRoundAt = 0; D.roundStart = G.time + DUEL.count;
+    G.bullets = [];
+    Object.assign(G.zone, { cx: c, cy: c, tcx: c, tcy: c, r: DUEL.arena, tr: DUEL.arena, state: 'final', dmg: DUEL.zoneDmg });
+    [D.me, D.en].forEach((f, i) => {
+        const s = spawnNear({ x: c + Math.cos(a + i * Math.PI) * DUEL.apart, y: c + Math.sin(a + i * Math.PI) * DUEL.apart }, 300, 40, true);
+        Object.assign(f, { x: s.x, y: s.y, vx: 0, vy: 0, hp: 100, maxHp: 100, armor: 0, inv: ['Sniper', 'Dagger'], slot: 0, ammo: { Sniper: DUEL.ammo }, duelOut: false, mode: 'wander', goal: null, target: null, path: null, heard: null, duelAim: false, aimT: 0, holdUntil: 0, moveUntil: 0, duelSneak: false, stepT: 0, duelShot: f.lastShot, angle: a + i * Math.PI + Math.PI, nextThink: G.time + DUEL.count });
+    });
+    G.cam.x = D.me.x; G.cam.y = D.me.y;
+    G.frozen = true; G.startAt = G.time + DUEL.count; G.lastCount = 0;
+    showBanner(`ROUND ${D.round}`, true, `You ${D.score[0]} - ${D.score[1]} The Sniper · first to ${DUEL.wins}`);
+}
+// Any hit is a kill. Ends the round, or the match
+function duelHit(t, attacker, weapon) {
+    const D = G.duel;
+    if (D.over) return;
+    D.over = true; G.frozen = true;
+    const w = t === D.me ? 1 : 0;
+    D.score[w]++;
+    const final = D.score[w] >= DUEL.wins, dist0 = attacker ? Math.round(dist(attacker, t) / 10) : 0;
+    const how = weapon === 'zone' ? 'caught outside the circle' : `${dist0}m ${weapon === 'Dagger' ? 'knife kill' : 'shot'}`;
+    if (final && w === 1) {
+        killFighter(t, attacker, weapon);
+        Object.assign(G.result, { title: 'DUEL LOST', sub: `The Sniper won ${D.score[1]} - ${D.score[0]} (${how}).` });
+        return;
+    }
+    if (attacker && attacker.isPlayer) { G.hitMarker = 1; Sound.hit(); attacker.kills++; playerKillFx(t); }
+    if (inView(t.x, t.y, 300)) cubeDeath(t);
+    t.duelOut = true;
+    addKillfeed(t, weapon === 'zone' ? null : attacker, weapon);
+    if (t.isPlayer) { G.flash = 0.5; G.flashColor = '255,40,70'; Sound.death(); }
+    if (final) {
+        const sub = `You won the duel ${D.score[0]} - ${D.score[1]} (${how}).`;
+        G.result = { won: true, place: 1, title: 'DUEL WON', sub }; G.overAt = G.time + 2500; startVictory(sub);
+        return;
+    }
+    D.nextRoundAt = G.time + DUEL.pause;
+    showBanner(w === 0 ? 'ROUND YOURS' : 'YOU WERE HIT', true, `${how[0].toUpperCase()}${how.slice(1)} · You ${D.score[0]} - ${D.score[1]} The Sniper`);
+}
+function updateDuel(dt) {
+    const D = G.duel;
+    if (D.nextRoundAt) { if (!G.result && G.time >= D.nextRoundAt) duelRound(); return; }
+    if (D.over) return;
+    if (G.frozen) {
+        const left = Math.ceil((G.startAt - G.time) / 1000);
+        if (left !== G.lastCount && left > 0) { G.lastCount = left; Sound.tone(440, 0.08, 'square', 0.06); }
+        if (G.time >= G.startAt) { G.frozen = false; showBanner('GO!', false, 'Stay quiet. Use your scope.'); Sound.tone(880, 0.3, 'square', 0.1); }
+        return;
+    }
+    const rt = G.time - D.roundStart, k = clamp((rt - DUEL.shrinkAt) / DUEL.shrinkFor, 0, 1);
+    if (k > 0 && !D.warned) { D.warned = D.round; if (G.mode === 'playing') showBanner('THE CIRCLE IS CLOSING', false, 'Nobody can hide forever'); }
+    if (D.warned && D.warned !== D.round && k === 0) D.warned = 0;
+    G.zone.r = G.zone.tr = lerp(DUEL.arena, DUEL.end, k);
+    for (const f of [D.me, D.en]) {
+        const o = f === D.me ? D.en : D.me, d = dist(f, o);
+        // Footsteps
+        if (Math.hypot(f.vx, f.vy) > 30) {
+            f.stepT -= dt;
+            if (f.stepT <= 0) {
+                f.stepT = DUEL.stepEvery * (f.duelSneak ? 1.5 : 1);
+                const R = f.duelSneak ? DUEL.hearSneak : DUEL.hear;
+                if (d < R) {
+                    if (o.isPlayer) { const fz = d > 400 ? 45 : 0; D.cues.push({ kind: 'step', x: f.x + rand(-fz, fz), y: f.y + rand(-fz, fz), t: G.time, life: 800 }); Sound.tone(85, 0.07, 'triangle', 0.22 * (1 - d / R) + 0.04); }
+                    else o.heard = { x: f.x + rand(-70, 70), y: f.y + rand(-70, 70), t: G.time };
+                }
+            }
+        }
+        // A shot tells everyone where it came from
+        if (f.lastShot !== f.duelShot) {
+            f.duelShot = f.lastShot;
+            if (held(f) === 'Sniper') { if (o.isPlayer) D.cues.push({ kind: 'shot', x: f.x, y: f.y, t: G.time, life: 3000 }); else o.heard = { x: f.x, y: f.y, t: G.time, shot: true }; }
+        }
+    }
+    D.cues = D.cues.filter(c => G.time - c.t < c.life);
+}
+// Somewhere to go next: under a tree or in a bush near (tx, ty), inside the circle
+function duelCover(b, tx, ty, spread) {
+    const z = G.zone, list = [];
+    G.world.grid.query(tx, ty, spread, o => {
+        if ((o.type !== 'tree' && o.type !== 'bush') || o.broken || o.dead) return;
+        if (Math.hypot(o.x - z.cx, o.y - z.cy) > z.r - 180 || Math.hypot(o.x - b.x, o.y - b.y) < 120) return;
+        list.push(o);
+    });
+    for (let i = 0; i < 8 && list.length; i++) {
+        const o = pick(list), a = Math.atan2(b.y - o.y, b.x - o.x), R = o.type === 'tree' ? o.r + b.r + 10 : 0, g = { x: o.x + Math.cos(a) * R, y: o.y + Math.sin(a) * R };
+        if (!blockedAt(G.world.grid, g.x, g.y, b.r) && !buildingAt(g.x, g.y)) return g;
+    }
+    for (let i = 0; i < 12; i++) {
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * spread, g = { x: tx + Math.cos(a) * d, y: ty + Math.sin(a) * d };
+        if (Math.hypot(g.x - z.cx, g.y - z.cy) < z.r - 180 && !blockedAt(G.world.grid, g.x, g.y, b.r + 8)) return g;
+    }
+    return { x: z.cx + rand(-150, 150), y: z.cy + rand(-150, 150) };
+}
+function duelThink(b) {
+    b.nextThink = G.time + rand(170, 300);
+    const D = G.duel, K = AIK(), L = K.level || 5, e = b === D.me ? D.en : D.me, z = G.zone;
+    if (D.over || e.duelOut) { b.duelAim = false; return; }
+    const d = dist(b, e), to = Math.atan2(e.y - b.y, e.x - b.x), moving = Math.hypot(e.vx, e.vy) > 30;
+    const range = (1300 + 70 * L) * (moving && !e.duelSneak ? 1.15 : 0.85);
+    const sees = d < range && (d < 260 || Math.abs(angleDiff(b.angle, to)) < 1.25) && (!e.hidden || d < CONFIG.HIDDEN_SIGHT + L * 15) && lineOfSight(b, e);
+    if (sees) {
+        b.seenAt = G.time; b.lastSpot = { x: e.x, y: e.y };
+        if (!b.duelAim) { b.duelAim = true; b.aimT = G.time; b.aimDelay = Math.max(350, 1700 - 110 * L) + rand(0, 500); b.aimErr = (Math.random() + Math.random() - 1) * 0.024 * K.aim * (0.6 + d / 1500); }
+        return;
+    }
+    if (b.duelAim) {
+        if (G.time - (b.seenAt || 0) < 700) return;
+        b.duelAim = false; b.heard = { x: b.lastSpot.x, y: b.lastSpot.y, t: G.time };
+    }
+    // A scope pointed at you glints: it gives the shooter away
+    if (e.scopeAt && Math.hypot(e.scopeAt.x - b.x, e.scopeAt.y - b.y) < 320 && Math.random() < 0.08 * L / 5 && lineOfSight(b, e)) { b.heard = { x: e.x, y: e.y, t: G.time }; b.holdUntil = 0; b.moveUntil = 0; }
+    const heard = b.heard && G.time - b.heard.t < 9000 ? b.heard : null;
+    const outside = Math.hypot(b.x - z.cx, b.y - z.cy) > z.r - 150;
+    if (outside) { b.mode = 'zone'; b.duelSneak = false; if (!b.goal || Math.hypot(b.goal.x - z.cx, b.goal.y - z.cy) > z.r - 100) b.goal = duelCover(b, z.cx, z.cy, Math.max(200, z.r * 0.5)); b.moveUntil = G.time + 3000; return; }
+    if (b.mode === 'duelhold' && G.time < b.holdUntil && !(heard && heard.shot && !b.reacted)) return;
+    if (b.mode === 'zone' && b.goal && dist(b, b.goal) > 45 && G.time < b.moveUntil) return;
+    if (b.mode === 'zone' && b.goal && dist(b, b.goal) <= 45) {
+        // Got there: settle in and watch
+        b.mode = 'duelhold'; b.holdUntil = G.time + rand(2500, 6000); b.scan = heard ? Math.atan2(heard.y - b.y, heard.x - b.x) : b.lastSpot ? Math.atan2(b.lastSpot.y - b.y, b.lastSpot.x - b.x) : Math.atan2(z.cy - b.y, z.cx - b.x);
+        b.reacted = false;
+        return;
+    }
+    // Move on: close in on what was heard (quietly when near), otherwise work toward the middle of the circle
+    b.reacted = true;
+    const t = heard || b.lastSpot || { x: z.cx, y: z.cy }, dt0 = Math.hypot(t.x - b.x, t.y - b.y), keep = Math.min(dt0, 650), ax = t.x + (b.x - t.x) / (dt0 || 1) * keep, ay = t.y + (b.y - t.y) / (dt0 || 1) * keep;
+    b.duelSneak = dt0 < 1200;
+    b.goal = duelCover(b, ax + (t === heard ? rand(-250, 250) : 0), ay + rand(-250, 250), heard ? 380 : 650);
+    b.mode = 'zone'; b.moveUntil = G.time + 9000;
+}
+// What the bot does this frame when it isn't walking: lining up a shot, or watching from cover
+function duelBotMove(b, dt) {
+    const D = G.duel, K = AIK(), L = K.level || 5, e = b === D.me ? D.en : D.me;
+    if (b.duelAim && !e.duelOut) {
+        b.vx = b.vy = 0; b._wantSpeed = 0;
+        const d = dist(b, e), lead = Math.min(1, 0.4 + 0.06 * L) * d / WEAPONS.Sniper.speed;
+        const want = Math.atan2(e.y + e.vy * lead - b.y, e.x + e.vx * lead - b.x) + b.aimErr;
+        b.angle += angleDiff(b.angle, want) * Math.min(1, dt * 7 * K.turn);
+        if (held(b) !== 'Sniper') b.slot = 0;
+        if (G.time - b.aimT > b.aimDelay && Math.abs(angleDiff(b.angle, want)) < 0.02 && lineOfSight(b, e)) {
+            if (!(b.ammo.Sniper > 0)) b.ammo.Sniper = DUEL.ammo;
+            tryAttack(b);
+            // Never stay where you just fired from
+            b.duelAim = false; b.aimT = 0; b.reacted = true; b.duelSneak = false;
+            const a = Math.atan2(b.y - e.y, b.x - e.x) + (Math.random() < 0.5 ? 1 : -1) * rand(1, 1.6);
+            b.goal = duelCover(b, b.x + Math.cos(a) * 420, b.y + Math.sin(a) * 420, 320); b.mode = 'zone'; b.moveUntil = G.time + 6000; b.nextThink = G.time + 900;
+        }
+        return true;
+    }
+    if (b.mode === 'duelhold') {
+        b.vx = b.vy = 0; b._wantSpeed = 0;
+        b.angle += angleDiff(b.angle, (b.scan || 0) + Math.sin(G.time / 900) * 1.1) * Math.min(1, dt * 2.5);
+        return true;
+    }
+    return false;
+}
+// The cues you play by: footsteps, shots and scope glints, with an arrow at the screen's edge when they're off-screen
+function drawDuelOverlay(now) {
+    const D = G.duel, p = D.me;
+    if (D.over || G.frozen || p.dead) return;
+    const zoom = G.zoom, sx = x => (x - G.cam.x) * zoom + viewW / 2, sy = y => (y - G.cam.y) * zoom + viewH / 2;
+    const arrow = (x, y, col, label, a = 1) => {
+        const X = sx(x), Y = sy(y), m = 46;
+        if (X > m && X < viewW - m && Y > m && Y < viewH - m) return;
+        const ang = Math.atan2(Y - viewH / 2, X - viewW / 2), k = Math.min((viewW / 2 - m) / Math.max(0.01, Math.abs(Math.cos(ang))), (viewH / 2 - m) / Math.max(0.01, Math.abs(Math.sin(ang))));
+        const ax = viewW / 2 + Math.cos(ang) * k, ay = viewH / 2 + Math.sin(ang) * k;
+        ctx.save(); ctx.globalAlpha = a; ctx.translate(ax, ay);
+        ctx.font = '800 13px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        const tx = -Math.cos(ang) * 26, ty = -Math.sin(ang) * 22; ctx.strokeText(label, tx, ty); ctx.fillStyle = col; ctx.fillText(label, tx, ty);
+        ctx.rotate(ang); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-3, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.stroke(); ctx.fill();
+        ctx.restore();
+    };
+    for (const c of D.cues) {
+        const u = (G.time - c.t) / c.life, col = c.kind === 'shot' ? '#ff5a5a' : '#ffe08a';
+        ctx.strokeStyle = col; ctx.globalAlpha = 1 - u; ctx.lineWidth = c.kind === 'shot' ? 4 : 2.5;
+        ctx.beginPath(); ctx.arc(sx(c.x), sy(c.y), (c.kind === 'shot' ? 20 + u * 90 : 8 + u * 34), 0, TAU); ctx.stroke();
+        ctx.globalAlpha = 1;
+        arrow(c.x, c.y, col, c.kind === 'shot' ? 'SHOT' : 'STEPS', 1 - u * 0.6);
+    }
+    const e = D.en;
+    if (e.duelAim) {
+        const X = sx(e.x), Y = sy(e.y), f = 0.75 + Math.sin(now * 22) * 0.25, R = 38 * f;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = '#fff6c8';
+        for (const a of [0, Math.PI / 2]) { ctx.save(); ctx.translate(X, Y); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(-R, 0); ctx.lineTo(0, -3); ctx.lineTo(R, 0); ctx.lineTo(0, 3); ctx.closePath(); ctx.fill(); ctx.restore(); }
+        ctx.beginPath(); ctx.arc(X, Y, 5 * f, 0, TAU); ctx.fill(); ctx.restore();
+        arrow(e.x, e.y, '#fff6c8', 'GLINT');
+    }
 }
 
 // ---------- Assassin ----------
@@ -5970,7 +6173,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.murder || G.ghostMode) return;
+    if (G.murder || G.ghostMode || G.duel) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -6693,6 +6896,7 @@ function damage(t, amount, attacker, weapon) {
     if (t.dead || (attacker && attacker !== t && !foe(attacker, t))) return;
     // Inside a vehicle you're protected: it takes the hits (bullets, blasts and crashes all hit the vehicle itself)
     // until it's destroyed, and only then does anything get through to you
+    if (G.duel && t.duel) { duelHit(t, attacker, weapon); return; }
     if (t.car && !t.car.dead) return;
     if (G.time < (t.protectUntil || 0)) return;  // just respawned
     if (G.murder) amount = murderDamage(t, amount, attacker, weapon);
@@ -7157,7 +7361,8 @@ function updatePlayer(p, dt) {
         else { p.vx = p.vy = 0; const m = mouseWorld(); p.angle = Math.atan2(m.y - p.y, m.x - p.x); return; }
     }
     // (the jet pack makes you faster)
-    const sp = CONFIG.PLAYER_SPEED * (p.zombie ? 1.08 : 1) * (p.perk === 'jet' ? 1.35 : 1) * (p.ghost ? GHOST.speed : 1);
+    if (G.duel) p.duelSneak = !!p.scoped || I.keys.has('ShiftLeft') || I.keys.has('ShiftRight');
+    const sp = CONFIG.PLAYER_SPEED * (p.zombie ? 1.08 : 1) * (p.perk === 'jet' ? 1.35 : 1) * (p.ghost ? GHOST.speed : 1) * (G.duel && p.duelSneak ? DUEL.sneak : 1);
     if (mx || my) p.moveHeading = Math.atan2(my, mx);
     p.vx = (mx / len) * sp;
     p.vy = (my / len) * sp;
@@ -7270,6 +7475,7 @@ function marchTarget(b) {
 function botThink(b) {
     if (b.zombie) { zombieThink(b); return; }
     if (G.murder) { murderBot(b); return; }
+    if (G.duel && b.duel) { duelThink(b); return; }
     if (G.ghostMode && b.ghost) { ghostBot(b); return; }
     const K = AIK();
     b.nextThink = G.time + (b.boss ? rand(90, 160) : rand(220, 480) * K.think);
@@ -7682,7 +7888,8 @@ function updateBot(b, dt) {
     if (b.downed) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
-    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.zombie ? ZOMBIE.speed : 1) * (b.ghost ? GHOST.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1), faceMove = true;
+    if (G.duel && b.duel && duelBotMove(b, dt)) return;
+    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.duelSneak ? 0.6 : 1) * (b.zombie ? ZOMBIE.speed : 1) * (b.ghost ? GHOST.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1), faceMove = true;
 
     switch (b.mode) {
         case 'fight': {
@@ -12582,6 +12789,7 @@ function update(dt) {
     if (G.noZone) updateOutbreak(dt);
     if (G.murder) updateMurder(dt);
     if (G.ghostMode) updateGhost(dt);
+    if (G.duel) updateDuel(dt);
     if (G.world.maze && G.escape && G.mode === 'playing') updateMazeFog();
     if (G.survival) { if (!G.frozen && !G.world.floor) updateAnimals(dt); updateCountdown(); }
     updateDayCycle();
@@ -12612,7 +12820,7 @@ function update(dt) {
             if (f.car && !f.car.dead) { if (f.car.driver === f) damageCar(f.car, z.dmg * dt * vt(f.car).hp / 100, null); continue; }
             f.hp -= z.dmg * dt;
             if (f.isPlayer) G.hurt = Math.max(G.hurt, 0.35);
-            if (f.hp <= 0) killFighter(f, null, 'zone');
+            if (f.hp <= 0) { if (G.duel && f.duel) duelHit(f, null, 'zone'); else killFighter(f, null, 'zone'); }
         }
     }
     for (const f of G.fighters) if (!f.dead) moveFighter(f, dt);
@@ -12926,7 +13134,7 @@ function render() {
     // Night falls over the world (but not over the damage numbers)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawLighting(camX, camY, zoom);
-    if (G.survival) drawCountdown();
+    if (G.survival || (G.duel && !G.duel.nextRoundAt && !G.duel.over)) drawCountdown();
     if (G.world.terrain === 'mountain') drawSnowfall(now);
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, Math.round(-camX * dpr * zoom), Math.round(-camY * dpr * zoom));
     drawFloats();
@@ -12935,6 +13143,7 @@ function render() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(vignette, 0, 0, viewW, viewH);
     if (p && p.scopeAt && !p.dead) drawScope();
+    if (G.duel) drawDuelOverlay(now);
     if (p) {
         const low = p.hp < 30 ? (0.25 + Math.sin(now * 6) * 0.12) * (1 - p.hp / 30) + 0.1 : 0;
         const a = Math.min(1, G.hurt * 0.8 + low);
@@ -13981,6 +14190,7 @@ function playerGlow(x, y, r) {
 }
 
 function drawFighter(f) {
+    if (f.duelOut) return;
     if (f.downed) { drawDowned(f); return; }
     // (the boss is drawn as a normal fighter blown up to giant size, gun and all)
     const gk = f.giant ? f.r / CONFIG.RADIUS : 1, r = f.giant ? CONFIG.RADIUS : f.r;
@@ -14159,6 +14369,7 @@ function drawFighter(f) {
 // Health bars over hurt bots
 function drawOverhead(f) {
     const p = G.player;
+    if (f.duelOut) return;
     if (f.ghost && f !== p && !ghostSeen(f)) return;
     if (f.hidden && p && !p.dead && f !== p && foe(p, f) && dist(f, p) > CONFIG.HIDDEN_SIGHT) return;
     if (f.healing) {
@@ -14554,7 +14765,8 @@ function updateHUD() {
     }
 
     let zt;
-    if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
+    if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
+    else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
     else if (G.assassin) zt = p.assassin ? "Take them all out · don't get caught" : 'Find the assassin and catch him';
     else if (G.murder) { const r = murderRole(p), n = G.fighters.filter(f => !f.dead && !f.murderer).length; zt = `${MURDER_ROLE[r]} · ${r === 'murderer' ? `${n} left to get` : r === 'sheriff' ? 'find the murderer' : 'stay alive'} · ${fmtTime(Math.max(0, (G.murderEnd - G.time) / 1000))}`; }
@@ -14769,6 +14981,7 @@ function drawMinimap() {
         g.lineWidth = 2;
         g.beginPath(); g.arc(n.x * k, n.y * k, Math.max(4, NUKE.radius * k), 0, TAU); g.fill(); g.stroke();
     }
+    if (G.duel) for (const c of G.duel.cues) if (c.kind === 'shot') { g.strokeStyle = '#ff5a5a'; g.lineWidth = 2; g.beginPath(); g.arc(c.x * k, c.y * k, 6, 0, TAU); g.stroke(); }
     // Airdrop markers
     for (const d of G.airdrops) {
         if (!d.landed && !blink) continue;
@@ -14894,7 +15107,8 @@ const MODES = [
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
     { id: 'murder', name: 'MURDER MYSTERY', desc: 'One murderer with a knife, one sheriff with a gun, and everyone else innocent. Nobody knows who\'s who. Find the murderer before everyone is gone.' },
-    { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' }
+    { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
+    { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' }
 ];
 let murderRolePick = 'random', ghostRolePick = 'hunter';
 // After the mode and its settings, you pick how the fight is armed
@@ -14913,7 +15127,7 @@ function setMenuMode(i, dir) {
     const m = MODES[menuMode];
     $('mode-name').textContent = m.name;
     $('mode-desc').textContent = m.desc;
-    $('settings-ffa').classList.toggle('hidden', m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-ffa').classList.toggle('hidden', m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-assassin').classList.toggle('hidden', m.id !== 'assassin');
     $('settings-murder').classList.toggle('hidden', m.id !== 'murder');
@@ -15236,7 +15450,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'murder' || id === 'ghost' ? screens.menu : screens.typesel).classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'murder' || id === 'ghost' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -15255,6 +15469,7 @@ const BRIEF = {
 };
 BRIEF.murder = [['🔪', '<b>Murderer:</b> a knife that kills in one stab. Take everyone out, but anyone who sees the knife out knows it\'s you.'], ['🔫', '<b>Sheriff:</b> a gun that kills in one shot. Shoot the murderer. Shoot an innocent and you die too.'], ['🙂', '<b>Innocent:</b> stay alive for 3 minutes. If the sheriff goes down, grab the gun: you become the sheriff.'], ['❓', 'Nobody knows who\'s who. Pick your role, or let it be random.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
+BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
@@ -15262,6 +15477,7 @@ const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
 function controlsFor(id) {
     const t = TOUCH.enabled, list = (t ? CONTROLS_TOUCH : CONTROLS_KEYS).slice();
+    if (id === 'duel') list.push(['🤫', t ? 'Scoped in, you walk slowly and quietly' : 'Hold <b>Shift</b> or scope in to walk slowly and quietly']);
     if (id === 'survival') list.push(['🍖', t ? 'Tap the meat or water on the left to eat or drink' : '<b>C</b> eat · <b>V</b> drink or fill a bucket at water · <b>B</b> rest']);
     if (id === 'revolution') list.push(['💥', t ? 'At your boss strike pad, the bottom button loads ammo or launches it' : 'At your boss strike pad, <b>F</b> loads ammo or launches it']);
     list.push(['🔭', t ? 'Sniper rifles: tap the <b>8x</b> button for the scope' : 'Sniper rifles: hold <b>right click</b> (or <b>Z</b>) for the 8x scope']);
@@ -15286,11 +15502,11 @@ function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'murder' || id === 'ghost') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'murder' || id === 'ghost' || id === 'duel') openMapSelect(); else openTypeSelect(); }
     else startGame(BRIEF_STAGE.map);
 });
 $('brief-back').addEventListener('click', () => {
@@ -15304,7 +15520,7 @@ function openMapSelect() {
     const id = MODES[menuMode].id, escape = id === 'escape';
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
-        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
+        card.classList.toggle('hidden', (escape && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'assassin' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
         card.disabled = false;
         card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
     }
@@ -15453,19 +15669,20 @@ function startGame(map = lastMap) {
     if (id === 'revolution' && map === 'maze') map = 'ordinary';
     // Escape has no open countryside to cross, and Survival has no maze
     if (id === 'escape' && map === 'ordinary') map = 'city';
-    if (id !== 'assassin' && map === 'wasteland') map = 'ordinary';
-    if (id === 'survival' && map === 'maze') map = 'ordinary';
+    if (id !== 'assassin' && id !== 'duel' && map === 'wasteland') map = 'ordinary';
+    if ((id === 'survival' || id === 'duel') && map === 'maze') map = 'ordinary';
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     lastMap = map;
     const setup = war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
+        : id === 'duel' ? { type: id, count: 1 }
         : id === 'murder' ? { type: id, count: Math.max(2, Math.min(MURDER.maxPlayers - 1, sliderToCount(+slider.value))), role: murderRolePick }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : id === 'assassin' ? { type: id, count: sliderToCount(+slider.value), role: assassinRole }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'murder' || id === 'ghost' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'murder' || id === 'ghost' || id === 'duel' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -15482,13 +15699,14 @@ function startGame(map = lastMap) {
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.murder);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.murder || !!G.duel);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
     hud.cells.water.classList.toggle('hidden', !G.survival);
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
-    if (G.murder) { const r = murderRole(G.player); showBanner(`YOU ARE ${r === 'innocent' ? 'INNOCENT' : 'THE ' + MURDER_ROLE[r]}`, true, r === 'murderer' ? 'Take everyone out. Switch to your knife (slot 2) to stab: one stab kills. Anyone who sees the knife knows it\'s you!' : r === 'sheriff' ? 'One shot kills. Find the murderer and shoot them, but if you shoot an innocent, you die too!' : 'Stay alive for 3 minutes. Watch for anyone with a knife out, and grab the gun if the sheriff goes down.'); }
+    if (G.duel) { /* (each round announces itself) */ }
+    else if (G.murder) { const r = murderRole(G.player); showBanner(`YOU ARE ${r === 'innocent' ? 'INNOCENT' : 'THE ' + MURDER_ROLE[r]}`, true, r === 'murderer' ? 'Take everyone out. Switch to your knife (slot 2) to stab: one stab kills. Anyone who sees the knife knows it\'s you!' : r === 'sheriff' ? 'One shot kills. Find the murderer and shoot them, but if you shoot an innocent, you die too!' : 'Stay alive for 3 minutes. Watch for anyone with a knife out, and grab the gun if the sheriff goes down.'); }
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
