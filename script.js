@@ -5066,7 +5066,7 @@ function duelHit(t, attacker, weapon) {
         Object.assign(G.result, { title: 'DUEL LOST', sub: `The Sniper won ${D.score[1]} - ${D.score[0]} (${how}).` });
         return;
     }
-    if (attacker && attacker.isPlayer) { G.hitMarker = 1; Sound.hit(); attacker.kills++; playerKillFx(t); }
+    if (attacker && attacker.isPlayer) { G.hitMarker = 1; Sound.hit(); attacker.kills++; }
     if (inView(t.x, t.y, 300)) cubeDeath(t);
     t.duelOut = true;
     addKillfeed(t, weapon === 'zone' ? null : attacker, weapon);
@@ -5245,12 +5245,23 @@ const NAVY = {
     },
     ships: {
         battleship: {
-            name: 'Battleship', len: 2000, beam: 440, hp: 42000, speed: 135, accel: 16, turn: 0.11, crew: 100, bow: 400, aft: 600, helm: [232, 0],
-            boxes: [{ x: 40, y: 0, hw: 160, hh: 100, k: 'bridge' }, { x: -235, y: 0, hw: 65, hh: 58, k: 'funnel' }, { x: 276, y: 0, hw: 65, hh: 100, k: 'hangar' }],
+            name: 'Battleship', len: 2000, beam: 440, hp: 42000, speed: 135, accel: 16, turn: 0.11, crew: 100, bow: 400, aft: 600, helm: [120, 0],
+            boxes: [{ x: -235, y: 0, hw: 65, hh: 58, k: 'funnel' }],
+            // The bridge is open: anyone (bots included) can walk straight in off the deck and take the wheel.
+            // The stairs inside it are the only way further down, into the gated, player-only decks below.
+            bridge: { lx: 40, ly: 0, hw: 160, hh: 100 },
+            rooms: { hall: { lx: -320, ly: 0, hw: 450, hh: 100 }, subdeck: { lx: -320, ly: 0, hw: 450, hh: 110 } },
+            links: [
+                { lx: -100, ly: 0, a: null, b: 'hall', toB: 'Take the stairs down to the gun deck', toA: 'Climb back up to the bridge' },
+                { lx: -700, ly: 0, a: 'hall', b: 'subdeck', toB: 'Take the stairs down to the submarine deck', toA: 'Climb back up to the gun deck' }
+            ],
+            medical: { lx: -630, ly: 40, r: 55, room: 'hall' },
             guns: [['main', 680, 0], ['main', 430, 0], ['main', -400, 0], ['main', -600, 0], ['med', 540, -165], ['med', 540, 165], ['med', -60, -165], ['med', -60, 165], ['med', -500, -165], ['med', -500, 165],
                 ['mg', 840, -90], ['mg', 840, 90], ['mg', 300, -180], ['mg', 300, 180], ['mg', -200, -175], ['mg', -200, 175], ['mg', -780, -120], ['mg', -780, 120],
-                ['missile', 245, -60], ['missile', 245, 60]],
-            pad: [-860, 0], hatch: [276, 100], hangar: { lx: 276, ly: 0, hw: 65, hh: 100 }, subbay: [276, 0], supply: [[-715, 0], [880, 0]]
+                ['missile', 70, -40, null, 'hall'], ['missile', 70, 40, null, 'hall'],
+                ['med', -80, -55, null, 'hall'], ['med', -80, 55, null, 'hall'], ['med', -220, -55, null, 'hall'], ['med', -220, 55, null, 'hall'],
+                ['med', -360, -55, null, 'hall'], ['med', -360, 55, null, 'hall'], ['med', -500, -55, null, 'hall'], ['med', -500, 55, null, 'hall']],
+            pad: [-860, 0], subbays: [{ kind: 'sub', lx: -580, ly: 0 }, { kind: 'subsmall', lx: -150, ly: 0 }], supply: [[-715, 120], [880, 0]]
         },
         destroyer: {
             name: 'Destroyer', len: 1120, beam: 260, hp: 14000, speed: 205, accel: 30, turn: 0.2, crew: 20, bow: 224, aft: 336, helm: [132, 0],
@@ -5323,14 +5334,15 @@ function addShip(kind, team, x, y, a) {
     const s = { kind, C, team, x, y, a, ca: Math.cos(a), sa: Math.sin(a), ox: x, oy: y, oca: Math.cos(a), osa: Math.sin(a), speed: C.speed * 0.6, throttle: 0.8, rudder: 0, hp: C.hp, maxHp: C.hp, R2: (C.len / 2 + 30) ** 2, name: NAVY.names[N.nameAt++ % NAVY.names.length], crewN: 1, spots: [], planks: [], guns: [], fireT: 0, nextOrder: 0, want: a, wantThrottle: 0.8, assaultAt: G.time + rand(150000, 300000), heli: null, heliAt: 0 };
     s.helm = { helm: true, ship: s, lx: C.helm[0], ly: C.helm[1], r: 26, crew: null, claim: null };
     s.blocks = C.boxes.map(o => ({ ...o, box: true }));
-    for (const [k, lx, ly, r] of C.guns) {
-        const D = NAVY.guns[k], gun = { gun: true, kind: k, D, ship: s, lx, ly, r: r || D.r, rel: lx < 0 && k === 'main' ? Math.PI : 0, hp: D.hp, crew: null, claim: null, fireAt: G.time + rand(0, 2500), think: 0, indoor: k === 'missile' };
+    for (const [k, lx, ly, r, room] of C.guns) {
+        const D = NAVY.guns[k], gun = { gun: true, kind: k, D, ship: s, lx, ly, r: r || D.r, rel: lx < 0 && k === 'main' ? Math.PI : 0, hp: D.hp, crew: null, claim: null, fireAt: G.time + rand(0, 2500), think: 0, room: room || null };
         s.guns.push(gun);
         if (gun.r >= 44) s.blocks.push({ x: lx, y: ly, r: gun.r });
     }
+    s.subbays = (C.subbays || []).map(b => ({ ...b, car: null, claim: null, at: 0 }));
     N.ships.push(s);
     if (C.pad) navyAddHeli(s);
-    if (C.subbay) navyAddSub(s);
+    for (const bay of s.subbays) navyAddSub(s, bay);
     return s;
 }
 function navyAddHeli(s) {
@@ -5340,12 +5352,12 @@ function navyAddHeli(s) {
     s.heli = c; s.heliClaim = null;
     return c;
 }
-// The submarine bay, down through the hull: launches into the water, not the air
-function navyAddSub(s) {
-    const [lx, ly] = s.C.subbay, T = VTYPES.sub;
-    const c = { type: 'sub', x: navyWx(s, lx, ly), y: navyWy(s, lx, ly), a: s.a, speed: 0, hp: T.hp, color: s.team === 0 ? '#2c4f78' : '#6e2c2c', driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: s.a, onShip: s, lx, ly, la: 0, submerged: false };
+// A submarine bay, down through the bottom of the hull: launches into the water, not the air
+function navyAddSub(s, bay) {
+    const { lx, ly, kind } = bay, T = VTYPES[kind];
+    const c = { type: kind, x: navyWx(s, lx, ly), y: navyWy(s, lx, ly), a: s.a, speed: 0, hp: T.hp, color: s.team === 0 ? '#2c4f78' : '#6e2c2c', driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: s.a, onShip: s, lx, ly, la: 0, submerged: false, homeBay: bay, homeRoom: 'subdeck' };
     G.world.cars.push(c);
-    s.sub = c; s.subClaim = null;
+    bay.car = c; bay.claim = null;
     return c;
 }
 
@@ -5437,7 +5449,7 @@ function navyRelocate(f, s) { const { lx, ly } = navyDeckSpot(s); f.ship = s; f.
 function navyVacant(s, b) {
     const free = st => !st.crew && (!st.claim || st.claim === b || st.claim.dead || st.claim.ship !== s || st.claim.station);
     if (free(s.helm)) return s.helm;
-    for (const g of s.guns) if (g.hp > 0 && !g.indoor && free(g)) return g;
+    for (const g of s.guns) if (g.hp > 0 && !g.room && free(g)) return g;
     const c = s.heli;
     if (c && !c.dead && c.onShip === s && !c.driver && (!s.heliClaim || s.heliClaim === b || s.heliClaim.dead)) return { heli: c, lx: c.lx, ly: c.ly, r: 60 };
     return null;
@@ -5471,20 +5483,39 @@ function navyCapture(s, by) {
     }
     return old;
 }
-// F: take the wheel or a gun, or jump over the side (getting into the helicopter is the usual vehicle key)
+// F: take the wheel or a gun, go up or down a stairway, or jump over the side (vehicles use the usual vehicle key)
 function navyAction(p) {
     if (p.station) return { leave: true, text: p.station.helm ? 'Leave the wheel' : `Leave the ${p.station.D.name.toLowerCase()}` };
     const s = p.ship;
     if (!s || p.car) return null;
-    const lx = navyLx(s, p.x, p.y), ly = navyLy(s, p.x, p.y);
-    const near = st => Math.hypot(lx - st.lx, ly - st.ly) < st.r + 60;
-    if (s.C.hatch && Math.hypot(lx - s.C.hatch[0], ly - s.C.hatch[1]) < 70) return { hatch: true, text: p.belowDeck ? 'Climb up to the deck' : 'Go below deck' };
-    if (p.belowDeck) {
-        if (s.team === p.team) for (const g of s.guns) if (g.hp > 0 && g.indoor && !g.crew && near(g)) return { st: g, text: `Man the ${g.D.name.toLowerCase()}` };
-        return null;
+    const lx = navyLx(s, p.x, p.y), ly = navyLy(s, p.x, p.y), room = p.room || null;
+    // A few interactive points can legitimately sit close together (a gun right by the stairs); always
+    // offer whichever one you're actually closest to, rather than a fixed checking order.
+    let best = null, bd = Infinity;
+    const consider = (d, action) => { if (d < bd) { bd = d; best = action; } };
+    for (const link of s.C.links || []) {
+        if (link.a !== room && link.b !== room) continue;
+        const d = Math.hypot(lx - link.lx, ly - link.ly);
+        if (d < 70) consider(d, { link, to: link.a === room ? link.b : link.a, text: link.a === room ? link.toB : link.toA });
     }
-    if (near(s.helm) && !s.helm.crew) return { st: s.helm, text: s.team === p.team ? 'Take the wheel' : `Take the wheel: capture the ${s.name}` };
-    if (s.team === p.team) for (const g of s.guns) if (g.hp > 0 && !g.indoor && !g.crew && near(g)) return { st: g, text: `Man the ${g.D.name.toLowerCase()}` };
+    if (room) {
+        if (s.team === p.team) for (const g of s.guns) {
+            if (g.hp <= 0 || g.room !== room || g.crew) continue;
+            const d = Math.hypot(lx - g.lx, ly - g.ly);
+            if (d < g.r + 60) consider(d, { st: g, text: `Man the ${g.D.name.toLowerCase()}` });
+        }
+        return best;
+    }
+    if (!s.helm.crew) {
+        const d = Math.hypot(lx - s.helm.lx, ly - s.helm.ly);
+        if (d < s.helm.r + 60) consider(d, { st: s.helm, text: s.team === p.team ? 'Take the wheel' : `Take the wheel: capture the ${s.name}` });
+    }
+    if (s.team === p.team) for (const g of s.guns) {
+        if (g.hp <= 0 || g.room || g.crew) continue;
+        const d = Math.hypot(lx - g.lx, ly - g.ly);
+        if (d < g.r + 60) consider(d, { st: g, text: `Man the ${g.D.name.toLowerCase()}` });
+    }
+    if (best) return best;
     if (nearestCar(p, 90)) return null;
     if (navyHw(s.C, lx) - Math.abs(ly) < 62 || s.C.len / 2 - Math.abs(lx) < 62) return { jump: true, text: 'Jump overboard' };
     return null;
@@ -5494,7 +5525,7 @@ function navyUse(p) {
     const act = navyAction(p);
     if (!act) return false;
     if (act.leave) navyLeave(p);
-    else if (act.hatch) { p.belowDeck = !p.belowDeck; if (p.isPlayer) addFloat(p.x, p.y - 30, p.belowDeck ? 'Below deck' : 'Topside', '#fff7ec'); Sound.tone(p.belowDeck ? 180 : 260, 0.2, 'triangle', 0.08); }
+    else if (act.link) { p.room = act.to; if (p.isPlayer) addFloat(p.x, p.y - 30, act.text, '#fff7ec'); Sound.tone(act.to ? 180 : 260, 0.2, 'triangle', 0.08); }
     else if (act.st) navyMan(p, act.st);
     else if (act.jump) {
         const s = p.ship, lx = navyLx(s, p.x, p.y), ly = navyLy(s, p.x, p.y), side = ly >= 0 ? 1 : -1, hw = navyHw(s.C, lx);
@@ -5526,7 +5557,8 @@ function navyStatus(p) {
     if (p.dead) return 'You\'re gone: your fleet fights on';
     if (p.car) return vt(p.car).torp ? (p.car.submerged ? 'Submerged · torpedoes locked and loaded' : 'Submarine · dive and hunt the enemy fleet') : 'Flying · sink the enemy fleet';
     if (p.station && p.station.helm) { const s = p.station.ship; return `At the wheel of the ${s.name} · throttle ${Math.round(s.throttle * 100)}% · hull ${hull(s)}`; }
-    if (p.station) return `${p.station.D.name}${p.station.indoor ? ' (below deck)' : ''} on the ${p.station.ship.name} · hull ${hull(p.station.ship)}`;
+    if (p.station) return `${p.station.D.name}${p.station.room ? ' (below deck)' : ''} on the ${p.station.ship.name} · hull ${hull(p.station.ship)}`;
+    if (p.room) return `${p.room === 'hall' ? 'On the gun deck' : 'In the submarine bay'}, below decks on the ${p.ship.name} · hull ${hull(p.ship)}`;
     if (p.swim) return `In the water! You\'re drowning: swim to a ship · ${Math.ceil(p.hp)} health`;
     if (p.ship) return p.ship.team === p.team ? `On the ${p.ship.name} · hull ${hull(p.ship)}${p.ship.helm.crew ? '' : ' · NOBODY AT THE WHEEL!'}` : `Aboard the enemy ${p.ship.name}: take the wheel to capture it`;
     return 'Ashore on an island';
@@ -5667,7 +5699,7 @@ function navySink(s, by) {
 }
 function navyOverboard(f, s) {
     if (f.station) { f.station.crew = null; f.station = null; }
-    f.ship = null; f.swim = true; f.noClimb = G.time + 1500; f.belowDeck = false;
+    f.ship = null; f.swim = true; f.noClimb = G.time + 1500; f.room = null;
 }
 
 // Everything that rides on a deck, once per frame, after the ships have moved
@@ -5688,12 +5720,12 @@ function updateNavy(dt) {
         if (c.onShip && c.driver) {
             const s = c.onShip; c.onShip = null;
             if (s.heli === c) { s.heli = null; s.heliClaim = null; s.heliAt = G.time + NAVY.heliBack; }
-            else if (s.sub === c) { s.sub = null; s.subClaim = null; s.subAt = G.time + NAVY.heliBack; c.submerged = true; }
+            else if (c.homeBay) { c.homeBay.car = null; c.homeBay.claim = null; c.homeBay.at = G.time + NAVY.heliBack; c.submerged = true; }
         }
         if (c.onShip) { const s = c.onShip; if (s.sunk) { damageCar(c, 1e6, null); continue; } c.x = navyWx(s, c.lx, c.ly); c.y = navyWy(s, c.lx, c.ly); c.a = s.a + c.la; c.speed = 0; c.turret = c.a; }
         else if (!c.driver) {
             const s = N.ships.find(q => !q.sinkAt && navyInHull(q, navyLx(q, c.x, c.y), navyLy(q, c.x, c.y), -20));
-            if (s) { c.onShip = s; c.lx = navyLx(s, c.x, c.y); c.ly = navyLy(s, c.x, c.y); c.la = c.a - s.a; if (c.type === 'sub') { if (!s.sub) s.sub = c; } else if (!s.heli) s.heli = c; }
+            if (s) { c.onShip = s; c.lx = navyLx(s, c.x, c.y); c.ly = navyLy(s, c.x, c.y); c.la = c.a - s.a; if (c.homeBay) { if (!c.homeBay.car) c.homeBay.car = c; } else if (!s.heli) s.heli = c; }
             else if (navyIsland(c.x, c.y)) c.speed = 0;
             else damageCar(c, 1e6, null);
         }
@@ -5719,13 +5751,14 @@ function updateNavy(dt) {
                 }
             }
             const C = on.C;
-            // Round the guns and the bridge (or, below deck, round the hangar's own walls)
+            // Round the guns and the bridge topside; below deck, you're kept inside whichever room you're in
             if (!f.station) {
-                if (f.belowDeck && C.hangar) {
-                    const hg = C.hangar;
-                    lx = clamp(lx, hg.lx - hg.hw + f.r, hg.lx + hg.hw - f.r);
-                    ly = clamp(ly, hg.ly - hg.hh + f.r, hg.ly + hg.hh - f.r);
+                const room = f.room && C.rooms && C.rooms[f.room];
+                if (room) {
+                    lx = clamp(lx, room.lx - room.hw + f.r, room.lx + room.hw - f.r);
+                    ly = clamp(ly, room.ly - room.hh + f.r, room.ly + room.hh - f.r);
                 } else {
+                    f.room = null;
                     for (const o of on.blocks) {
                         if (o.box) {
                             const nx = clamp(lx, o.x - o.hw, o.x + o.hw), ny = clamp(ly, o.y - o.hh, o.y + o.hh), ddx = lx - nx, ddy = ly - ny, d2 = ddx * ddx + ddy * ddy;
@@ -5744,11 +5777,13 @@ function updateNavy(dt) {
                 }
             }
             f.x = navyWx(on, lx, ly); f.y = navyWy(on, lx, ly); f.swim = false;
-            // The supply stations: patch you up and fill your pockets
-            if (on.team === f.team && C.supply.length && (f.hp < f.maxHp || isHuman(f))) for (const [qx, qy] of C.supply) if ((lx - qx) ** 2 + (ly - qy) ** 2 < 5000) {
+            // The supply stations: patch you up and fill your pockets (only out on the open deck)
+            if (!f.room && on.team === f.team && C.supply.length && (f.hp < f.maxHp || isHuman(f))) for (const [qx, qy] of C.supply) if ((lx - qx) ** 2 + (ly - qy) ** 2 < 5000) {
                 f.hp = Math.min(f.maxHp, f.hp + 12 * dt);
                 if (isHuman(f)) for (const k of f.inv) if (k && WEAPONS[k] && !WEAPONS[k].melee && f.ammo[k] !== Infinity && f.ammo[k] < 300 && G.time - (f.resupplied || -1e9) > 400) { f.ammo[k] = Math.min(300, f.ammo[k] + 30); f.resupplied = G.time; }
             }
+            // The medical room, below deck: heals faster than a supply cross, but no ammo
+            if (C.medical && f.room === C.medical.room && f.hp < f.maxHp && (lx - C.medical.lx) ** 2 + (ly - C.medical.ly) ** 2 < C.medical.r * C.medical.r) f.hp = Math.min(f.maxHp, f.hp + 20 * dt);
         } else {
             // In the water, or ashore on an island
             const land = navyIsland(f.x, f.y, 10);
@@ -5765,7 +5800,7 @@ function updateNavy(dt) {
                 if (q.sinkAt) continue;
                 const dx = f.x - q.x, dy = f.y - q.y;
                 if (dx * dx + dy * dy > q.R2) continue;
-                if (navyInHull(q, dx * q.ca + dy * q.sa, -dx * q.sa + dy * q.ca, 14)) { f.ship = q; f.swim = false; f.belowDeck = false; if (f.isPlayer) { addFloat(f.x, f.y - 34, `Aboard the ${q.name}`, '#fff7ec'); Sound.tone(300, 0.2, 'triangle', 0.08); } break; }
+                if (navyInHull(q, dx * q.ca + dy * q.sa, -dx * q.sa + dy * q.ca, 14)) { f.ship = q; f.swim = false; f.room = null; if (f.isPlayer) { addFloat(f.x, f.y - 34, `Aboard the ${q.name}`, '#fff7ec'); Sound.tone(300, 0.2, 'triangle', 0.08); } break; }
             }
             if (f.swim && !f.ship) {
                 f.hp -= NAVY.drown * dt;
@@ -5791,8 +5826,10 @@ function navyShipTick(s, dt) {
     // A new helicopter is flown out, or a new submarine towed in, to a ship that lost hers
     if (C.pad && !s.heli && !s.sinkAt && G.time >= s.heliAt && s.heliAt) { s.heliAt = 0; navyAddHeli(s); }
     if (s.heli && (s.heli.dead || (s.heli.onShip !== s))) { if (s.heli.dead && !s.heliAt) s.heliAt = G.time + NAVY.heliBack; s.heli = null; }
-    if (C.subbay && !s.sub && !s.sinkAt && G.time >= s.subAt && s.subAt) { s.subAt = 0; navyAddSub(s); }
-    if (s.sub && (s.sub.dead || (s.sub.onShip !== s))) { if (s.sub.dead && !s.subAt) s.subAt = G.time + NAVY.heliBack; s.sub = null; }
+    for (const bay of s.subbays) {
+        if (!bay.car && !s.sinkAt && G.time >= bay.at && bay.at) { bay.at = 0; navyAddSub(s, bay); }
+        if (bay.car && (bay.car.dead || bay.car.onShip !== s)) { if (bay.car.dead && !bay.at) bay.at = G.time + NAVY.heliBack; bay.car = null; }
+    }
     if (s.sinkAt) {
         const age = G.time - s.sinkAt;
         if (age < 7000 && Math.random() < dt * 5) {
@@ -6191,32 +6228,51 @@ function navyArt(kind, team) {
         g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 3; roundRect(g, x - 34, y - 34, 68, 68, 8); g.stroke();
         g.fillStyle = '#fff'; g.fillRect(x - 22, y - 7, 44, 14); g.fillRect(x - 7, y - 22, 14, 44);
     }
-    // The weapons hangar, below deck, with its hatch and (if she carries one) a submarine bay
-    if (C.hangar) {
-        const hg = C.hangar, hx0 = hg.lx - hg.hw, hy0 = hg.ly - hg.hh, hw2 = hg.hw * 2, hh2 = hg.hh * 2;
-        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(hx0 + 8, hy0 + 10, hw2, hh2);
-        g.fillStyle = '#23262b'; g.fillRect(hx0, hy0, hw2, hh2);
-        g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 1;
-        for (let gx = hx0 + 14; gx < hx0 + hw2 - 10; gx += 20) { g.beginPath(); g.moveTo(gx, hy0 + 6); g.lineTo(gx, hy0 + hh2 - 6); g.stroke(); }
-        g.strokeStyle = '#3a3e45'; g.lineWidth = 3; g.strokeRect(hx0, hy0, hw2, hh2);
-        g.save(); g.translate(hg.lx, hy0 - 16); g.rotate(Math.PI / 2); g.fillStyle = 'rgba(255,209,102,0.85)'; g.font = '700 20px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('HANGAR', 0, 0); g.restore();
+    // The bridge: an open pilothouse floor (anyone can walk straight in), with stairs down inside it
+    if (C.bridge) {
+        const br = C.bridge, x0 = br.lx - br.hw, y0 = br.ly - br.hh, w2 = br.hw * 2, h2 = br.hh * 2;
+        g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x0 + 8, y0 + 10, w2, h2);
+        g.fillStyle = '#2b2f36'; roundRect(g, x0, y0, w2, h2, 20); g.fill();
+        g.strokeStyle = 'rgba(255,255,255,0.06)'; g.lineWidth = 1;
+        for (let gx = x0 + 16; gx < x0 + w2 - 10; gx += 22) { g.beginPath(); g.moveTo(gx, y0 + 8); g.lineTo(gx, y0 + h2 - 8); g.stroke(); }
+        g.strokeStyle = col; g.lineWidth = 4; roundRect(g, x0 + 6, y0 + 6, w2 - 12, h2 - 12, 16); g.stroke();
+        g.save(); g.translate(br.lx, y0 - 14); g.rotate(Math.PI / 2); g.fillStyle = 'rgba(255,247,236,0.85)'; g.font = '700 18px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('BRIDGE', 0, 0); g.restore();
     }
-    if (C.hatch) {
-        const [hx, hy] = C.hatch;
-        g.fillStyle = '#15171a'; g.beginPath(); g.arc(hx, hy, 34, 0, TAU); g.fill();
-        g.strokeStyle = '#ffd166'; g.lineWidth = 4; g.beginPath(); g.arc(hx, hy, 28, 0, TAU); g.stroke();
+    // The lower decks: the gun hallway and, further down, the submarine bay — stacked below the same stretch of hull
+    if (C.rooms && C.rooms.hall) {
+        const hall = C.rooms.hall, sub = C.rooms.subdeck || hall;
+        const x0 = hall.lx - hall.hw, hh = Math.max(hall.hh, sub.hh), y0 = hall.ly - hh, w2 = hall.hw * 2, h2 = hh * 2;
+        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(x0 + 8, y0 + 10, w2, h2);
+        g.fillStyle = '#24272d'; g.fillRect(x0, y0, w2, h2);
+        g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1;
+        for (let gx = x0 + 14; gx < x0 + w2 - 10; gx += 24) { g.beginPath(); g.moveTo(gx, y0 + 6); g.lineTo(gx, y0 + h2 - 6); g.stroke(); }
+        g.strokeStyle = '#3a3e45'; g.lineWidth = 3; g.strokeRect(x0, y0, w2, h2);
+        g.save(); g.translate(hall.lx + hall.hw * 0.35, y0 - 14); g.rotate(Math.PI / 2); g.fillStyle = 'rgba(255,209,102,0.85)'; g.font = '700 18px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('GUN DECK', 0, 0); g.restore();
+        if (C.subbays && C.subbays.length) { g.save(); g.translate(C.subbays[0].lx, y0 - 14); g.rotate(Math.PI / 2); g.fillStyle = 'rgba(127,216,255,0.85)'; g.font = '700 18px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('SUBMARINE BAY', 0, 0); g.restore(); }
+        // The medical bay: a white cross on red, below deck
+        if (C.medical) {
+            const { lx: mx, ly: my } = C.medical;
+            g.fillStyle = '#b9343f'; roundRect(g, mx - 34, my - 34, 68, 68, 8); g.fill();
+            g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 3; roundRect(g, mx - 34, my - 34, 68, 68, 8); g.stroke();
+            g.fillStyle = '#fff'; g.fillRect(mx - 22, my - 7, 44, 14); g.fillRect(mx - 7, my - 22, 14, 44);
+        }
+        // Hatches down to the sub bays, in the floor
+        for (const bay of C.subbays || []) {
+            g.fillStyle = '#163b52'; g.beginPath(); g.arc(bay.lx, bay.ly, 55, 0, TAU); g.fill();
+            g.strokeStyle = '#7fd8ff'; g.lineWidth = 4; g.beginPath(); g.arc(bay.lx, bay.ly, 46, 0, TAU); g.stroke();
+        }
+    }
+    // Stairs down, wherever they meet the open deck
+    for (const link of C.links || []) {
+        if (link.a !== null) continue;
+        const sx = link.lx, sy = link.ly;
+        g.fillStyle = '#15171a'; g.beginPath(); g.arc(sx, sy, 34, 0, TAU); g.fill();
+        g.strokeStyle = '#ffd166'; g.lineWidth = 4; g.beginPath(); g.arc(sx, sy, 28, 0, TAU); g.stroke();
         g.strokeStyle = '#ffd166'; g.lineWidth = 3;
-        for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(hx - 20, hy - 9 + i * 6); g.lineTo(hx + 20, hy - 9 + i * 6); g.stroke(); }
+        for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(sx - 20, sy - 9 + i * 6); g.lineTo(sx + 20, sy - 9 + i * 6); g.stroke(); }
     }
-    if (C.subbay) {
-        const [sx, sy] = C.subbay;
-        g.fillStyle = '#163b52'; g.beginPath(); g.arc(sx, sy, 60, 0, TAU); g.fill();
-        g.strokeStyle = '#7fd8ff'; g.lineWidth = 4; g.beginPath(); g.arc(sx, sy, 50, 0, TAU); g.stroke();
-        g.save(); g.translate(sx, sy); g.rotate(Math.PI / 2); g.fillStyle = '#d8f1ff'; g.font = '900 46px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('S', 0, 2); g.restore();
-    }
-    // Bridge, funnel and cabin
+    // Funnel (and, on smaller ships, the bridge/cabin box — the battleship's own bridge is drawn above as a room)
     for (const o of C.boxes) {
-        if (o.k === 'hangar') continue;  // drawn above, as a room, not a topside building
         const x = o.x - o.hw, y = o.y - o.hh, W2 = o.hw * 2, H2 = o.hh * 2;
         g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x + 10, y + 12, W2, H2);
         if (o.k === 'funnel') {
@@ -6363,6 +6419,56 @@ function drawNavy(L, T, R, B, now) {
         ctx.beginPath(); ctx.arc(ex, ey, g.D.blastR, 0, TAU); ctx.stroke();
         ctx.restore();
     }
+}
+// Below deck: only drawn for the ship the viewer is actually inside, replacing her topside view with whichever
+// room they're in. Two decks can't be shown stacked at once, so nobody else's deck renders over yours.
+function drawNavyInterior(L, T, R, B, now) {
+    const p = G.player;
+    if (!p || !p.room || !p.ship || p.ship.sunk) return;
+    const s = p.ship, C = s.C, room = C.rooms && C.rooms[p.room];
+    if (!room) return;
+    if (s.x + C.len / 2 + 80 < L || s.x - C.len / 2 - 80 > R || s.y + C.len / 2 + 80 < T || s.y - C.len / 2 - 80 > B) return;
+    const sink = s.sinkAt ? clamp((G.time - s.sinkAt) / 15000, 0, 1) : 0;
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.a + sink * 0.09);
+    if (sink) { ctx.globalAlpha = clamp(1.25 - sink * 1.3, 0, 1); const k = 1 - sink * 0.14; ctx.scale(k, k); }
+    // A solid floor covering the whole hull: the open deck above isn't what you're looking at any more
+    navyHullPath(ctx, C, 0); ctx.fillStyle = '#14161a'; ctx.fill();
+    const x0 = room.lx - room.hw, y0 = room.ly - room.hh, w2 = room.hw * 2, h2 = room.hh * 2;
+    ctx.fillStyle = '#23262b'; ctx.fillRect(x0, y0, w2, h2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    for (let gx = x0 + 16; gx < x0 + w2 - 10; gx += 26) { ctx.beginPath(); ctx.moveTo(gx, y0 + 6); ctx.lineTo(gx, y0 + h2 - 6); ctx.stroke(); }
+    ctx.strokeStyle = '#3a3e45'; ctx.lineWidth = 3; ctx.strokeRect(x0, y0, w2, h2);
+    ctx.fillStyle = 'rgba(255,209,102,0.7)'; ctx.font = '700 22px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.save(); ctx.translate(room.lx, y0 - 20); ctx.rotate(Math.PI / 2); ctx.fillText(p.room === 'hall' ? 'GUN DECK' : 'SUBMARINE DECK', 0, 0); ctx.restore();
+    for (const g of s.guns) if (g.room === p.room) navyDrawGun(g);
+    if (p.room === 'hall') {
+        ctx.fillStyle = 'rgba(255,209,102,0.6)'; ctx.font = '700 15px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+        ctx.save(); ctx.translate(70, -58); ctx.rotate(Math.PI / 2); ctx.fillText('HANGAR', 0, 0); ctx.restore();
+        if (C.medical) {
+            const m = C.medical;
+            ctx.fillStyle = '#2f9e5b'; roundRect(ctx, m.lx - 34, m.ly - 34, 68, 68, 8); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3; roundRect(ctx, m.lx - 34, m.ly - 34, 68, 68, 8); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.fillRect(m.lx - 22, m.ly - 7, 44, 14); ctx.fillRect(m.lx - 7, m.ly - 22, 14, 44);
+            ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '700 13px Rajdhani, sans-serif'; ctx.fillText('MEDICAL', m.lx, m.ly - 46);
+        }
+    }
+    if (p.room === 'subdeck') for (const bay of s.subbays) {
+        const r = bay.kind === 'sub' ? 85 : 50;
+        ctx.fillStyle = '#163b52'; ctx.beginPath(); ctx.arc(bay.lx, bay.ly, r, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#7fd8ff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(bay.lx, bay.ly, r - 8, 0, TAU); ctx.stroke();
+        ctx.save(); ctx.translate(bay.lx, bay.ly); ctx.rotate(Math.PI / 2); ctx.fillStyle = '#d8f1ff'; ctx.font = `900 ${bay.kind === 'sub' ? 36 : 24}px Rajdhani, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(bay.kind === 'sub' ? 'SUB' : 'MINI', 0, 2); ctx.restore();
+    }
+    for (const link of C.links || []) {
+        if (link.a !== p.room && link.b !== p.room) continue;
+        const sx = link.lx, sy = link.ly;
+        ctx.fillStyle = '#15171a'; ctx.beginPath(); ctx.arc(sx, sy, 34, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(sx, sy, 28, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3;
+        for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(sx - 20, sy - 9 + i * 6); ctx.lineTo(sx + 20, sy - 9 + i * 6); ctx.stroke(); }
+    }
+    ctx.restore();
 }
 // Names and hull bars, on top of everything
 function drawNavyLabels() {
@@ -8188,7 +8294,6 @@ function killFighter(t, killer, weapon) {
     if (G.mode !== 'demo') { if (G.murder) addKillfeed(t, killer && killer.isPlayer ? killer : null, killer && killer.isPlayer ? weapon : weapon === 'Shot an innocent' ? 'shot an innocent' : 'murdered'); else addKillfeed(t, killer, weapon); }
     if (G.murder) murderDeath(t, killer);
 
-    if (killer && killer.isPlayer && killer !== t) playerKillFx(t);
     if (G.war) { warDeath(t, killer, weapon); return; }
     if (t.isPlayer && G.result) return;
     if (t.isPlayer && t.assassin) return;  // (Assassin: caught or taken down, it's reported as a catch)
@@ -8316,28 +8421,6 @@ function warDeath(t, killer, weapon) {
         G.overAt = G.time + 2200;
         startVictory();
     }
-}
-
-const STREAKS = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'QUAD KILL', 'RAMPAGE', 'UNSTOPPABLE'];
-
-function playerKillFx(t) {
-    G.streak = G.time < G.streakUntil ? G.streak + 1 : 1;
-    G.streakUntil = G.time + 5000;
-    // Brief slow-mo, camera punch and a gold flash
-    G.timeScale = 0.3;
-    G.zoomKick = 0.07;
-    G.flash = 0.28;
-    G.flashColor = '255,209,102';
-    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 110, color: '#ffd166' });
-    G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 70, color: '#fff7ec' });
-    burst(t.x, t.y, 34, '#ffd166', 420, 'glow');
-    G.particles.push({ type: 'skull', x: t.x, y: t.y - 10, vx: 0, vy: -70, life: 1.3, max: 1.3, size: 16 });
-    Sound.kill(G.streak);
-    const k = G.player.kills;
-    showBanner(`ELIMINATED ${t.name.toUpperCase()}`, false, G.streak > 1 ? STREAKS[Math.min(G.streak, STREAKS.length - 1)] : `${k} KILL${k === 1 ? '' : 'S'}`);
-    hud.kills.classList.remove('pop');
-    void hud.kills.offsetWidth;
-    hud.kills.classList.add('pop');
 }
 
 function startVictory(sub) {
@@ -12272,7 +12355,8 @@ const VTYPES = {
     quad: { name: 'Quad Bike', len: 56, wid: 34, accel: 700, brake: 1000, max: 600, reverse: 200, turn: 3.2, hp: 220, ram: 0.1, share: 0.8, offroad: true },
     heli: { name: 'Helicopter', len: 110, wid: 60, accel: 420, brake: 700, max: 720, reverse: 300, turn: 2.2, hp: 500, ram: 0, share: 0.3, fly: true },
     boat: { name: 'Speedboat', len: 70, wid: 30, accel: 600, brake: 800, max: 700, reverse: 200, turn: 2.6, hp: 300, ram: 0.1, share: 0.6, water: true },
-    sub: { name: 'Submarine', len: 150, wid: 34, accel: 200, brake: 480, max: 260, reverse: 110, turn: 1.3, hp: 1800, ram: 0, share: 0, water: true, torp: true },
+    sub: { name: 'Submarine', len: 180, wid: 40, accel: 190, brake: 460, max: 240, reverse: 100, turn: 1.1, hp: 2400, ram: 0, share: 0, water: true, torp: true, torpTubes: 2, seats: 9 },
+    subsmall: { name: 'Midget Submarine', len: 100, wid: 26, accel: 240, brake: 520, max: 300, reverse: 130, turn: 1.6, hp: 1100, ram: 0, share: 0, water: true, torp: true, torpTubes: 1, seats: 4 },
     dozer: { name: 'Bulldozer', len: 96, wid: 60, accel: 220, brake: 600, max: 230, reverse: 120, turn: 1.5, hp: 1500, ram: 0.3, share: 0.15, crush: true, walls: true },
     supercar: { name: 'Supercar', len: 88, wid: 40, accel: 950, brake: 1300, max: 1020, reverse: 260, turn: 2.9, hp: 260, ram: 0.16, share: 0.3 },
     icecream: { name: 'Ice-Cream Truck', len: 96, wid: 48, accel: 380, brake: 800, max: 430, reverse: 180, turn: 2.0, hp: 520, ram: 0.15, share: 0.25, music: true },
@@ -12342,6 +12426,9 @@ function nearestCar(p, range, landOnly = false) {
     let best = null, bd = range;
     for (const c of G.world.cars || []) {
         if (c.dead || c.driver || (landOnly && vt(c).water)) continue;
+        // Below decks, rooms share the open deck's coordinates: don't let a topside spawn point coincide
+        // with a car moored on a different level and make it look reachable through the floor.
+        if (G.navy && (c.homeRoom || null) !== (p.room || null)) continue;
         const d = Math.hypot(c.x - p.x, c.y - p.y) - (vt(c).round ? vt(c).len / 2 + 70 : vt(c).len * 0.3);  // (a big round tower: anywhere round its edge)
         if (d < bd) { bd = d; best = c; }
     }
@@ -12550,9 +12637,12 @@ function vehicleFire(c, p) {
     const T = vt(c), a = c.turret, mx = c.x + Math.cos(a) * (T.len * 0.55), my = c.y + Math.sin(a) * (T.len * 0.55);
     c.firedAt = G.time;
     if (T.torp) {
-        const D = NAVY.guns.torp;
+        const D = NAVY.guns.torp, n = T.torpTubes || 1;
         c.fireAt = G.time + D.rate;
-        G.bullets.push({ x: mx, y: my, vx: Math.cos(a) * D.speed, vy: Math.sin(a) * D.speed, dmg: D.dmg, owner: p, left: D.range, weapon: 'Torpedo', heavy: true, rocket: true, torpedo: true, blastR: D.blastR, blastDmg: D.dmg });
+        for (let i = 0; i < n; i++) {
+            const off = (i - (n - 1) / 2) * 16, ox = -Math.sin(a) * off, oy = Math.cos(a) * off;
+            G.bullets.push({ x: mx + ox, y: my + oy, vx: Math.cos(a) * D.speed, vy: Math.sin(a) * D.speed, dmg: D.dmg, owner: p, left: D.range, weapon: 'Torpedo', heavy: true, rocket: true, torpedo: true, blastR: D.blastR, blastDmg: D.dmg });
+        }
         Sound.tone(160, 0.4, 'triangle', 0.1 * Sound.volAt(c.x, c.y), 70);
         return;
     }
@@ -12947,7 +13037,7 @@ function drawVehicleBody(c) {
             ctx.fillStyle = 'rgba(20,24,34,0.6)'; ctx.fillRect(-20, -Wd / 2, 40, Wd);
             techTrim(L * 0.5, Wd, now);
             break;
-        case 'sub':
+        case 'sub': case 'subsmall':
             ctx.fillStyle = shade(c.color, -0.25); ctx.beginPath(); ctx.ellipse(0, 0, L / 2, Wd / 2, 0, 0, TAU); ctx.fill();
             ctx.fillStyle = c.color; ctx.beginPath(); ctx.ellipse(0, 0, L / 2 - 6, Wd / 2 - 4, 0, 0, TAU); ctx.fill();
             ctx.fillStyle = 'rgba(20,24,30,0.9)'; roundRect(ctx, -L * 0.08, -Wd * 0.22, L * 0.22, Wd * 0.44, 6); ctx.fill();
@@ -12990,6 +13080,8 @@ function drawCars(only) {
     const now = G.time / 1000;
     for (const c of only ? [only] : G.world.cars || []) {
         if (c.dead || !inView(c.x, c.y, 300) || (!only && c.type === 'bigtower' && c.tower && !c.tower.fallen)) continue;
+        // A submarine still in her bay is below deck: she isn't drawn on the open deck unless you're down there too
+        if (c.onShip && c.homeRoom && (!G.player || (G.player.room || null) !== c.homeRoom)) continue;
         const T = vt(c), L = T.len, Wd = T.wid;
         if (T.fly && c.driver) {
             // Flying: a shadow on the ground, the helicopter drawn higher up
@@ -13006,13 +13098,13 @@ function drawCars(only) {
         if (T.animal) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(5, 7, L * 0.48, Wd * 0.55, 0, 0, TAU); ctx.fill(); }  // a soft shadow, not a car's box
         else if (!T.round) ctx.fillRect(-L / 2 + 5, -Wd / 2 + 7, L, Wd);
         drawVehicleBody(c);
-        if (!['heli', 'boat', 'sub', 'tank', 'dozer', 'mech', 'gunship', 'hovertank', 'horse', 'wagon'].includes(c.type)) {
+        if (!['heli', 'boat', 'sub', 'subsmall', 'tank', 'dozer', 'mech', 'gunship', 'hovertank', 'horse', 'wagon'].includes(c.type)) {
             ctx.fillStyle = c.driver ? '#fff6c2' : '#d8d2b0';
             ctx.fillRect(L / 2 - 4, -Wd / 2 + 4, 4, 6); ctx.fillRect(L / 2 - 4, Wd / 2 - 10, 4, 6);
             ctx.fillStyle = c.braking ? '#ff3030' : '#8a1a1a';
             ctx.fillRect(-L / 2, -Wd / 2 + 4, 3, 6); ctx.fillRect(-L / 2, Wd / 2 - 10, 3, 6);
         }
-        if (c.driver && c.type !== 'heli' && c.type !== 'gunship' && c.type !== 'sub' && !(c.type === 'stealth' && c.driver.hidden)) {
+        if (c.driver && c.type !== 'heli' && c.type !== 'gunship' && c.type !== 'sub' && c.type !== 'subsmall' && !(c.type === 'stealth' && c.driver.hidden)) {
             ctx.fillStyle = c.driver.color;
             const rxg = c.type === 'horse' ? -L * 0.04 : c.type === 'wagon' ? -L / 2 + (L - 60) - 14 : c.type === 'bike' || c.type === 'quad' ? -4 : 2;
             if (c.driver === G.player) playerGlow(rxg, c.type === 'bike' || c.type === 'quad' || c.type === 'horse' || c.type === 'wagon' ? 0 : -Wd * 0.18, 12);
@@ -14309,6 +14401,7 @@ function render() {
     if (G.extract) drawExtraction(now);
 
     if (G.navy) drawNavy(L, T, R, B, now);
+    if (G.navy) drawNavyInterior(L, T, R, B, now);
     // Fighters
     const visible = [];
     for (const f of G.fighters) if (!f.car && !f.up && f.x > L - 80 && f.x < R + 80 && f.y > T - 80 && f.y < B + 80) visible.push(f);
@@ -16765,7 +16858,7 @@ const BRIEF = {
 };
 BRIEF.murder = [['🔪', '<b>Murderer:</b> a knife that kills in one stab. Take everyone out, but anyone who sees the knife out knows it\'s you.'], ['🔫', '<b>Sheriff:</b> a gun that kills in one shot. Shoot the murderer. Shoot an innocent and you die too.'], ['🙂', '<b>Innocent:</b> stay alive for 3 minutes. If the sheriff goes down, grab the gun: you become the sheriff.'], ['❓', 'Nobody knows who\'s who. Pick your role, or let it be random.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> someone has to stand at the wheel. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Guns:</b> walk up to a cannon, deck gun or torpedo tube and man it. Big shells hurt the hull and the crew, and can knock out enemy guns.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🎯', '<b>Below deck:</b> every battleship has a hatch down to a weapons hangar. The missile battery there locks on and chases down enemy ships and helicopters.'], ['🌊', '<b>Submarine:</b> also launched from the hangar, out through the bottom of the hull. She dives the moment you take her out, safe from gunfire while submerged, and fires torpedoes.'], ['🪜', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull to climb up.'], ['➕', 'The green cross on deck heals you and refills your ammo.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. A battleship holds up to 100 people, and each one brings a destroyer and a gunboat.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Guns:</b> walk up to a cannon, deck gun or torpedo tube and man it. Big shells hurt the hull and the crew, and can knock out enemy guns.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Below deck:</b> stairs inside the bridge lead down to a long gun deck, lined with more cannons, a missile battery that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Submarine deck:</b> further stairs down lead to two submarine bays — a 10-person sub with two torpedo tubes, and a 5-person midget sub with one. Either dives the moment you launch it, safe from gunfire while submerged.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
