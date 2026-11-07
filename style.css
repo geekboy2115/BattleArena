@@ -123,6 +123,7 @@ body.playing #game { cursor: none; }
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    overflow-wrap: break-word;
 }
 
 .card-title.lose {
@@ -662,7 +663,7 @@ kbd {
 }
 
 #gameover.win .card-title {
-    font-size: 56px;
+    font-size: 46px;
     background: linear-gradient(100deg, #ff8a3d 0%, #ffd166 30%, #fffbe6 50%, #ffd166 70%, #ff8a3d 100%);
     background-size: 200% 100%;
     -webkit-background-clip: text;

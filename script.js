@@ -5239,7 +5239,7 @@ const NAVY = {
     guns: {
         main: { name: 'Main Cannon', rate: 5000, speed: 1500, range: 4200, dmg: 16, blastR: 125, hull: 100, hp: 2200, r: 78, turn: 0.9, zoom: 0.3 },
         med: { name: 'Deck Cannon', rate: 2400, speed: 1500, range: 3000, dmg: 22, blastR: 85, hull: 45, hp: 800, r: 30, turn: 1.8, zoom: 0.42 },
-        mg: { name: 'Deck Gun', rate: 110, speed: 1900, range: 1300, dmg: 9, hp: 400, r: 20, turn: 4, zoom: 0.65 },
+        mg: { name: 'Deck Gun', rate: 45, speed: 2100, range: 1500, dmg: 20, hp: 400, r: 20, turn: 4, zoom: 0.65 },
         torp: { name: 'Torpedo Tube', rate: 12000, speed: 520, range: 5200, dmg: 70, blastR: 140, hull: 1500, hp: 500, r: 26, turn: 1.2, zoom: 0.3 },
         missile: { name: 'Missile Battery', rate: 9000, speed: 820, range: 6000, dmg: 55, blastR: 170, hull: 260, hp: 700, r: 32, turn: 2.2, zoom: 0.35 }
     },
@@ -5275,15 +5275,25 @@ function generateSea() {
     for (let i = 0, tries = 0; i < 6 && tries < 200; tries++) {
         const r = rand(260, 480), x = rand(1800, W - 1800), y = rand(4700, W - 4700);
         if (islands.some(q => Math.hypot(q.x - x, q.y - y) < q.r + r + 1400)) continue;
-        islands.push({ x, y, r, seed: randInt(1, 1e6) });
+        const rnd = seededRand(randInt(1, 1e6)), edge = [];
+        for (let e = 0; e < 28; e++) edge.push(0.82 + rnd() * 0.3);  // a jagged coastline, not a perfect circle
+        const a0 = rand(0, TAU), supply = [{ x: x + Math.cos(a0) * r * 0.4, y: y + Math.sin(a0) * r * 0.4 }];
+        islands.push({ x, y, r, seed: randInt(1, 1e6), edge, supply });
         i++;
     }
     for (const q of islands) {
-        for (let k = 0; k < q.r / 26; k++) {
+        for (let k = 0; k < q.r / 22; k++) {
             const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (q.r - 70), x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d;
-            if (blockedAt(grid, x, y, 60)) continue;
+            if (blockedAt(grid, x, y, 60) || q.supply.some(p => Math.hypot(p.x - x, p.y - y) < 90)) continue;
             const o = { type: 'tree', x, y, r: 0, canopy: rand(70, 110), spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999, seed: randInt(1, 1e9) };
             o.r = o.canopy * 0.27;
+            obstacles.push(o); grid.insert(o);
+        }
+        // Rocks and driftwood along the shoreline
+        for (let k = 0; k < 5; k++) {
+            const a = rand(0, TAU), d = rand(q.r * 0.6, q.r * 0.95), x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d;
+            if (blockedAt(grid, x, y, 40)) continue;
+            const o = { type: 'rock', x, y, r: rand(22, 48), spr: randInt(0, 5), rot: rand(0, TAU) };
             obstacles.push(o); grid.insert(o);
         }
     }
@@ -5743,6 +5753,14 @@ function updateNavy(dt) {
             // In the water, or ashore on an island
             const land = navyIsland(f.x, f.y, 10);
             f.swim = !land;
+            if (land) for (const isl of N.islands) {
+                if ((f.x - isl.x) ** 2 + (f.y - isl.y) ** 2 > isl.r * isl.r) continue;
+                for (const sp of isl.supply) if ((f.x - sp.x) ** 2 + (f.y - sp.y) ** 2 < 6000) {
+                    f.hp = Math.min(f.maxHp, f.hp + 12 * dt);
+                    if (isHuman(f)) for (const k of f.inv) if (k && WEAPONS[k] && !WEAPONS[k].melee && f.ammo[k] !== Infinity && f.ammo[k] < 300 && G.time - (f.resupplied || -1e9) > 400) { f.ammo[k] = Math.min(300, f.ammo[k] + 30); f.resupplied = G.time; }
+                }
+                break;
+            }
             if (G.time >= (f.noClimb || 0)) for (const q of N.ships) {
                 if (q.sinkAt) continue;
                 const dx = f.x - q.x, dy = f.y - q.y;
@@ -5932,10 +5950,10 @@ function navyBullet(b) {
             const inside = o.box ? Math.abs(lx - o.x) < o.hw && Math.abs(ly - o.y) < o.hh : (lx - o.x) ** 2 + (ly - o.y) ** 2 < o.r * o.r;
             if (!inside) continue;
             if (inView(b.x, b.y, 40)) burst(b.x, b.y, 4, '#ffe08a', 220, 'glow');
-            if (b.mounted && !friendly) navyHurt(s, b.dmg * 0.25, b.owner);
+            if (b.mounted && !friendly) navyHurt(s, b.dmg * 0.05, b.owner);
             return true;
         }
-        if (b.mounted && !friendly && !b.chip) { b.chip = true; navyHurt(s, b.dmg * 0.25, b.owner); }
+        if (b.mounted && !friendly && !b.chip) { b.chip = true; navyHurt(s, b.dmg * 0.03, b.owner); }
     }
     return false;
 }
@@ -6280,12 +6298,29 @@ function drawSea(L, T, R, B, now) {
     }
     for (const q of G.navy.islands) {
         if (q.x + q.r + 80 < L || q.x - q.r - 80 > R || q.y + q.r + 80 < T || q.y - q.r - 80 > B) continue;
-        ctx.fillStyle = 'rgba(214,240,246,0.32)'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + 52 + Math.sin(now + q.seed) * 8, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#5bb6c9'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + 30, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#e4cf97'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r + 4, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#5c9a48'; ctx.beginPath(); ctx.arc(q.x, q.y, q.r - 42, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(214,240,246,0.32)'; navyIslandShape(ctx, q, q.r + 52 + Math.sin(now + q.seed) * 8); ctx.fill();
+        ctx.fillStyle = '#5bb6c9'; navyIslandShape(ctx, q, q.r + 30); ctx.fill();
+        ctx.fillStyle = '#e4cf97'; navyIslandShape(ctx, q, q.r + 4); ctx.fill();
+        ctx.fillStyle = '#5c9a48'; navyIslandShape(ctx, q, q.r - 42); ctx.fill();
         ctx.fillStyle = '#4c8a3c'; ctx.beginPath(); ctx.arc(q.x - q.r * 0.2, q.y + q.r * 0.15, q.r * 0.55, 0, TAU); ctx.fill();
+        // A supply point ashore: a green cross, same as the one on every deck
+        for (const sp of q.supply) {
+            ctx.fillStyle = '#2f9e5b'; roundRect(ctx, sp.x - 30, sp.y - 30, 60, 60, 8); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3; roundRect(ctx, sp.x - 30, sp.y - 30, 60, 60, 8); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.fillRect(sp.x - 19, sp.y - 6, 38, 12); ctx.fillRect(sp.x - 6, sp.y - 19, 12, 38);
+        }
     }
+}
+// An island's coastline: a closed, slightly jagged ring at the given radius, instead of a perfect circle
+function navyIslandShape(g, q, baseR) {
+    g.beginPath();
+    const n = q.edge.length;
+    for (let i = 0; i <= n; i++) {
+        const a = (i / n) * TAU, rr = Math.max(4, baseR * q.edge[i % n]);
+        const x = q.x + Math.cos(a) * rr, y = q.y + Math.sin(a) * rr;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.closePath();
 }
 function drawNavy(L, T, R, B, now) {
     for (const s of G.navy.ships) {
