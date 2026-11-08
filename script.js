@@ -5017,7 +5017,25 @@ function generateTemple() {
     // Secret walls: cracked ones that slide open
     const secrets = [];
     const inner = [...Object.values(walls.e), ...Object.values(walls.s)].filter(o => { const [i, j] = o.cell; return !inCenter(i, j) && !(o.cell[2] === 'e' ? inCenter(i + 1, j) : inCenter(i, j + 1)); });
-    for (const o of shuffle(inner).slice(0, 40)) { o.secret = true; o.open = false; secrets.push(o); }
+    const pool = shuffle(inner);
+    // Cracked walls (F opens them), some of them hidden behind vines
+    for (const o of pool.splice(0, 55)) { o.secret = true; o.open = false; o.vines = Math.random() < 0.5; secrets.push(o); }
+    // Hidden walls with no crack at all: only a symbol switch somewhere close by opens them
+    const switched = pool.splice(0, 16);
+    for (const o of switched) { o.secret = true; o.hiddenSecret = true; o.open = false; o.vines = Math.random() < 0.4; secrets.push(o); }
+    // Moving walls: some stand now and will slide away, others are gaps now that a wall will slide across
+    const movers = [];
+    for (const o of pool.splice(0, 22)) { o.mover = true; o.up = true; movers.push(o); }
+    const gaps = [];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        if (i < n - 1 && !east[i][j] && !inCenter(i, j) && !inCenter(i + 1, j) && j !== m) gaps.push([i, j, 'e']);
+        if (j < n - 1 && !south[i][j] && !inCenter(i, j) && !inCenter(i, j + 1) && i !== m) gaps.push([i, j, 's']);
+    }
+    for (const [i, j, d] of shuffle(gaps).slice(0, 24)) {
+        const o = d === 'e' ? { type: 'wall', x: ox + (i + 1) * cs, y: oy + (j + 0.5) * cs, hw: T / 2, hh: cs / 2 + T / 2 } : { type: 'wall', x: ox + (i + 0.5) * cs, y: oy + (j + 1) * cs, hw: cs / 2 + T / 2, hh: T / 2 };
+        Object.assign(o, { color: stone(), temple: true, cell: [i, j, d], mover: true, up: false });
+        movers.push(o);
+    }
     // What's in each cell
     const used = new Set(), key = (i, j) => i + ',' + j;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (inCenter(i, j) || i === m || j === m && (i === 0 || i === n - 1)) used.add(key(i, j));
@@ -5116,24 +5134,42 @@ function generateTemple() {
         }
     }
     for (let i = 0; i < 8; i++) { const q = onPath(); if (!blockedAt(grid, q.x, q.y, 30) && !nearCamp(q.x, q.y, 400)) spots.push({ x: q.x + rand(-40, 40), y: q.y + rand(-40, 40), key: null, every: 30000 }); }
+    // Symbol switches: a carved symbol on the floor near each hidden wall; press F on it and the wall slides open
+    const switches = switched.map(o => {
+        const [i, j, d] = o.cell, c = d === 'e' ? cellC(Math.random() < 0.5 ? i : i + 1, j) : cellC(i, Math.random() < 0.5 ? j : j + 1);
+        return { x: c.x + rand(-55, 55), y: c.y + rand(-55, 55), wall: o, glyph: randInt(0, 6), rot: rand(0, TAU) };
+    });
+    // Carved symbols all over the temple floor (the tunnels and switches hide among them)
+    const glyphs = [];
+    for (let k = 0; k < 420; k++) glyphs.push({ x: ox + rand(30, size - 30), y: oy + rand(30, size - 30), glyph: randInt(0, 6), rot: rand(0, TAU), s: rand(14, 22) });
+    for (const ps of passages) for (const h of [ps.a, ps.b]) { h.glyph = randInt(0, 6); h.rot = rand(0, TAU); }
+    // Vines: hanging down the temple walls, creeping across the floor, and all through the jungle
+    const vines = [];
+    for (const o of obstacles) if (o.temple && (o.vines || Math.random() < 0.35)) {
+        const long = o.hw > o.hh, L2 = (long ? o.hw : o.hh) * 2, nV = Math.max(1, Math.round(L2 / 90));
+        for (let k = 0; k < nV; k++) { const t = (k + 0.5) / nV - 0.5; vines.push({ x: long ? o.x + t * L2 : o.x + rand(-6, 6), y: long ? o.y + rand(-6, 6) : o.y + t * L2, a: long ? Math.PI / 2 + rand(-0.4, 0.4) : rand(-0.4, 0.4) + (Math.random() < 0.5 ? 0 : Math.PI), len: rand(40, o.vines ? 110 : 80), seed: Math.random() * 100, thick: o.vines ? 1 : 0.7 }); }
+    }
+    for (const o of secrets) if (o.vines) for (let k = 0; k < 5; k++) vines.push({ x: o.x + rand(-o.hw, o.hw), y: o.y + rand(-o.hh, o.hh), a: rand(0, TAU), len: rand(50, 90), seed: Math.random() * 100, thick: 1.2 });
+    for (let k = 0; k < 260; k++) vines.push({ x: ox + rand(0, size), y: oy + rand(0, size), a: rand(0, TAU), len: rand(60, 160), seed: Math.random() * 100, thick: 0.8 });
+    for (let k = 0; k < 520; k++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (!inTemple(x, y, 40)) vines.push({ x, y, a: rand(0, TAU), len: rand(80, 200), seed: Math.random() * 100, thick: 1 }); }
     // The map picture
     const [mm, g] = makeCanvas(200, 200), k2 = 200 / W;
     g.fillStyle = '#2f5a28'; g.fillRect(0, 0, 200, 200);
     g.strokeStyle = '#8a6a44'; g.lineWidth = 2; for (const pts of paths) { g.beginPath(); for (const p of pts) g.lineTo(p.x * k2, p.y * k2); g.stroke(); }
     for (const o of obstacles) if (o.type === 'tree') { g.fillStyle = '#1f4019'; g.beginPath(); g.arc(o.x * k2, o.y * k2, Math.max(0.8, o.canopy * 0.45 * k2), 0, TAU); g.fill(); }
     g.fillStyle = '#b8a27a'; g.fillRect(ox * k2, oy * k2, size * k2, size * k2);
-    g.fillStyle = '#5a4a32'; for (const o of obstacles) if (o.temple && !o.secret) g.fillRect((o.x - o.hw) * k2, (o.y - o.hh) * k2, Math.max(1, o.hw * 2 * k2), Math.max(1, o.hh * 2 * k2));
+    g.fillStyle = '#5a4a32'; for (const o of obstacles) if (o.temple && !o.secret && !o.mover) g.fillRect((o.x - o.hw) * k2, (o.y - o.hh) * k2, Math.max(1, o.hw * 2 * k2), Math.max(1, o.hh * 2 * k2));
     g.fillStyle = '#ffd166'; g.beginPath(); g.arc(W / 2 * k2, W / 2 * k2, 3, 0, TAU); g.fill();
     for (const [c, col] of [[camps[0], TEMPLE.blue], [camps[1], TEMPLE.red]]) { g.fillStyle = col; g.beginPath(); g.arc(c.x * k2, c.y * k2, 5, 0, TAU); g.fill(); }
     const decorGrid = new Grid(512, 900);
     for (const d of decor) decorGrid.insert(d);
     return { obstacles, grid, decorGrid, buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'temple',
-        temple: { ox, oy, size, n, cs, east, south, secrets, traps, passages, spots, camps, ents, paths, chests, altar: { x: W / 2, y: W / 2 } } };
+        temple: { ox, oy, size, n, cs, east, south, secrets, traps, passages, spots, camps, ents, paths, chests, switches, glyphs, vines, movers, altar: { x: W / 2, y: W / 2 } } };
 }
 function setupTemple(setup) {
     const Wt = G.world.temple, T2 = G.temple = {
         score: [0, 0], endAt: TEMPLE.time, queue: [], idol: { x: Wt.altar.x, y: Wt.altar.y, carrier: null, dropAt: 0, home: true },
-        spots: Wt.spots.map(s => ({ ...s, loot: null, next: 0 })), boulders: [], overtime: false
+        spots: Wt.spots.map(s => ({ ...s, loot: null, next: 0 })), boulders: [], overtime: false, shiftAt: 40000, next: null
     };
     const all = G.fighters.slice(), p = G.player, others = all.filter(f => f !== p).sort(() => Math.random() - 0.5);
     const mySide = setup.side === 'red' ? 1 : 0, half = Math.ceil(all.length / 2), blues = new Set();
@@ -5194,14 +5230,75 @@ function closeSecret(o) {
     if (d === 'e') Wt.east[i][j] = true; else Wt.south[i][j] = true;
     for (const f of G.fighters) f.mzKey = null;
 }
-const nearSecret = (f, r = 70) => G.world.temple.secrets.find(o => !o.open && Math.abs(f.x - o.x) < o.hw + r && Math.abs(f.y - o.y) < o.hh + r && Math.hypot(f.x - o.x, f.y - o.y) < Math.max(o.hw, o.hh) + r);
+// The maze moves: every so often some walls slide away and others slide across, with a rumble just before.
+// It can wall you into a dead end; there's always a secret (a cracked wall, a symbol switch or a tunnel) to get out by
+function templeShift(warnOnly) {
+    const Wt = G.world.temple, T2 = G.temple;
+    if (warnOnly) { T2.next = Wt.movers.filter(() => Math.random() < 0.5); return; }
+    for (const o of T2.next || []) setMover(o, !o.up);
+    T2.next = null;
+    templeKeepReachable();
+    for (const f of G.fighters) { f.mzKey = null; f.path = null; }
+    G.shake = Math.max(G.shake, 5);
+    Sound.tone(55, 1.4, 'sawtooth', 0.1, 35);
+}
+function setMover(o, up) {
+    const Wt = G.world.temple, [i, j, d] = o.cell;
+    if (o.up === up) return;
+    o.up = up;
+    if (up) {
+        G.world.grid.insertBox(o);
+        // anyone standing where the wall slides in gets shoved out to one side
+        for (const f of G.fighters) if (!f.dead && Math.abs(f.x - o.x) < o.hw + f.r && Math.abs(f.y - o.y) < o.hh + f.r) {
+            if (o.hw < o.hh) f.x = o.x + Math.sign(f.x - o.x || (Math.random() - 0.5)) * (o.hw + f.r + 2);
+            else f.y = o.y + Math.sign(f.y - o.y || (Math.random() - 0.5)) * (o.hh + f.r + 2);
+        }
+    } else G.world.grid.removeBox(o);
+    if (d === 'e') Wt.east[i][j] = up; else Wt.south[i][j] = up;
+    if (inView(o.x, o.y, 120)) burst(o.x, o.y, 16, '#c9b48a', 180, 'smoke');
+}
+// (no part of the maze is ever cut off for good: counting secrets as ways through, every cell can still be reached)
+function templeKeepReachable() {
+    const Wt = G.world.temple, { n } = Wt, wallAt = new Map();
+    for (const o of Wt.secrets) wallAt.set(o.cell.join(), 'secret');
+    const passable = (i, j, d) => !(d === 'e' ? Wt.east[i][j] : Wt.south[i][j]) || wallAt.get([i, j, d].join()) === 'secret';
+    for (let tries = 0; tries < 30; tries++) {
+        const seen = new Uint8Array(n * n), q = [];
+        const m = (n - 1) / 2;
+        for (const [i, j] of [[0, m], [n - 1, m], [m, 0], [m, n - 1]]) { seen[i + j * n] = 1; q.push(i + j * n); }
+        const tunnels = Wt.passages.filter(p => !p.jungle).map(p => [p.a, p.b].map(h => Math.floor((h.x - Wt.ox) / Wt.cs) + Math.floor((h.y - Wt.oy) / Wt.cs) * n));
+        while (q.length) {
+            const c = q.shift(), i = c % n, j = (c - i) / n;
+            const nb = [];
+            if (i < n - 1 && passable(i, j, 'e')) nb.push(c + 1);
+            if (i > 0 && passable(i - 1, j, 'e')) nb.push(c - 1);
+            if (j < n - 1 && passable(i, j, 's')) nb.push(c + n);
+            if (j > 0 && passable(i, j - 1, 's')) nb.push(c - n);
+            for (const [a, b] of tunnels) { if (a === c) nb.push(b); if (b === c) nb.push(a); }
+            for (const d of nb) if (d >= 0 && d < n * n && !seen[d]) { seen[d] = 1; q.push(d); }
+        }
+        // a moving wall between a reachable cell and a cut-off one slides back open
+        const fix = Wt.movers.filter(o => { if (!o.up) return false; const [i, j, d] = o.cell, a = i + j * n, b = d === 'e' ? a + 1 : a + n; return seen[a] !== seen[b]; });
+        if (!fix.length) return;
+        setMover(fix[0], false);
+    }
+}
+const nearSecret = (f, r = 70) => G.world.temple.secrets.find(o => !o.open && !o.hiddenSecret && Math.abs(f.x - o.x) < o.hw + r && Math.abs(f.y - o.y) < o.hh + r && Math.hypot(f.x - o.x, f.y - o.y) < Math.max(o.hw, o.hh) + r);
 const nearPassage = f => { for (const p of G.world.temple.passages) { if (Math.hypot(f.x - p.a.x, f.y - p.a.y) < 46) return { p, to: p.b }; if (Math.hypot(f.x - p.b.x, f.y - p.b.y) < 46) return { p, to: p.a }; } return null; };
+const nearSwitch = f => G.world.temple.switches.find(w => Math.hypot(f.x - w.x, f.y - w.y) < 36);
 const nearChest = f => G.world.temple.chests.find(c => c.full && Math.hypot(f.x - c.x, f.y - c.y) < 55);
 // F (or the use button): open a cracked wall, drop through a hidden tunnel, or dig up a chest
 function templeUse(f) {
     if (!G.temple || f.dead) return false;
     const s = nearSecret(f);
     if (s) { openSecret(s); return true; }
+    const sw = nearSwitch(f);
+    if (sw && !sw.wall.open) {
+        openSecret(sw.wall);
+        if (inView(sw.x, sw.y, 60)) G.particles.push({ type: 'ring', x: sw.x, y: sw.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 40, color: '#ffd166' });
+        if (f.isPlayer) addFloat(f.x, f.y - 34, 'SOMETHING MOVED...', '#ffd166');
+        return true;
+    }
     const ps = nearPassage(f);
     if (ps) {
         f.x = ps.to.x + rand(-10, 10); f.y = ps.to.y + rand(-10, 10); f.vx = f.vy = 0; f.mzKey = null; f.path = null;
@@ -5222,6 +5319,7 @@ function templeUse(f) {
 }
 function templeUseLabel(f) {
     if (nearSecret(f)) return 'OPEN CRACKED WALL';
+    const sw = nearSwitch(f); if (sw && !sw.wall.open) return 'PRESS THE SYMBOL';
     if (nearPassage(f)) return 'DROP INTO TUNNEL';
     if (nearChest(f)) return 'DIG UP CHEST';
     return '';
@@ -5261,6 +5359,9 @@ function updateTemple(dt) {
     }
     for (const c of Wt.chests) if (!c.full && now >= c.at) c.full = true;
     for (const o of Wt.secrets) if (o.open && now >= o.closeAt) closeSecret(o);
+    if (now >= T2.shiftAt - 3000 && !T2.next && now < T2.shiftAt) { templeShift(true); if (G.mode === 'playing') showBanner('THE TEMPLE RUMBLES...', true, 'The walls are about to move!'); Sound.tone(45, 2.5, 'sawtooth', 0.07, 30); }
+    if (now >= T2.shiftAt) { templeShift(false); T2.shiftAt = now + 40000; }
+    if (T2.next && Math.random() < 0.5) G.shake = Math.max(G.shake, 1.5);
     // Traps that tick on their own, and the ones that go off when stepped on
     for (const t of Wt.traps) {
         if (t.kind === 'pit') {
@@ -5379,6 +5480,13 @@ function templeBotPlan(b) {
     const T2 = G.temple, I = T2.idol;
     // (sometimes a bot spots a cracked wall it's next to and opens it, or takes a tunnel that helps)
     if (Math.random() < 0.04) { const s = nearSecret(b, 40); if (s) openSecret(s); }
+    if (Math.random() < 0.05) { const sw = nearSwitch(b); if (sw && !sw.wall.open) openSecret(sw.wall); }
+    // Walled in with no way through: feel along the walls for a secret (it takes a while)
+    if (b.mzKey && b.mzNext === null && Math.random() < 0.06) {
+        let best = null, bd = 600;
+        for (const o of G.world.temple.secrets) { if (o.open) continue; const d = Math.hypot(o.x - b.x, o.y - b.y); if (d < bd) { bd = d; best = o; } }
+        if (best) openSecret(best);
+    }
     if (I.carrier === b) { const c = templeCamp(b.team); b.mode = 'zone'; b.goal = { x: c.x, y: c.y }; templeBotTunnel(b, c); return true; }
     if (b.inv.filter(Boolean).length < 3) {
         const l = nearestLoot(b.x, b.y, 350, q => WEAPONS[q.key] && !b.inv.includes(q.key) && !claimedByOther(q, b));
@@ -5447,6 +5555,33 @@ function templeRoute(b, gx, gy) {
     const off = Math.abs((b.x - here.x) * ay - (b.y - here.y) * ax) / al;
     return off > cs * 0.2 ? here : nx2;
 }
+// A carved symbol: spiral, eye, sun, snake, triangle, hand or moon
+function drawGlyph(x, y, kind, rot, s, col) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+    ctx.strokeStyle = col; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+    ctx.beginPath();
+    switch (kind) {
+        case 0: for (let t = 0; t < 12; t++) { const a = t * 0.6, r = t * s / 12; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } break;
+        case 1: ctx.ellipse(0, 0, s, s * 0.5, 0, 0, TAU); ctx.moveTo(s * 0.3, 0); ctx.arc(0, 0, s * 0.3, 0, TAU); break;
+        case 2: ctx.arc(0, 0, s * 0.45, 0, TAU); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.moveTo(Math.cos(a) * s * 0.6, Math.sin(a) * s * 0.6); ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); } break;
+        case 3: ctx.moveTo(-s, 0); for (let k = 0; k <= 8; k++) ctx.lineTo(-s + k * s / 4, Math.sin(k * 1.4) * s * 0.4); break;
+        case 4: ctx.moveTo(0, -s); ctx.lineTo(s * 0.9, s * 0.7); ctx.lineTo(-s * 0.9, s * 0.7); ctx.closePath(); ctx.moveTo(0, -s * 0.2); ctx.arc(0, 0, s * 0.2, -Math.PI / 2, Math.PI * 1.5); break;
+        case 5: ctx.moveTo(-s * 0.5, s); ctx.lineTo(-s * 0.5, -s * 0.2); for (let k = 0; k < 4; k++) { ctx.moveTo(-s * 0.5 + k * s * 0.33, -s * 0.2); ctx.lineTo(-s * 0.5 + k * s * 0.33, -s); } ctx.moveTo(-s * 0.5, s); ctx.lineTo(s * 0.5, s); ctx.lineTo(s * 0.5, -s * 0.2); break;
+        default: ctx.arc(0, 0, s * 0.8, 0.6, TAU - 0.6); ctx.arc(s * 0.35, 0, s * 0.55, TAU - 0.9, 0.9, true); break;
+    }
+    ctx.stroke(); ctx.restore();
+}
+// A vine: a wavy green stem with leaves
+function drawVine(v) {
+    const n2 = Math.max(4, Math.round(v.len / 14)), ux = Math.cos(v.a), uy = Math.sin(v.a);
+    ctx.strokeStyle = `rgba(48,92,34,${0.55 + v.thick * 0.3})`; ctx.lineWidth = 2.5 * v.thick + 1; ctx.lineCap = 'round';
+    ctx.beginPath();
+    const pts = [];
+    for (let k = 0; k <= n2; k++) { const t = k / n2, w = Math.sin(t * 6 + v.seed) * 7; const x = v.x + ux * v.len * t - uy * w, y = v.y + uy * v.len * t + ux * w; pts.push([x, y]); ctx.lineTo(x, y); }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(70,128,46,0.85)';
+    for (let k = 1; k < pts.length; k += 2) { const [x, y] = pts[k], a = v.a + (k % 4 ? 1.2 : -1.2); ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * 5, y + Math.sin(a) * 5, 5, 2.6, a, 0, TAU); ctx.fill(); }
+}
 // Drawing: the jungle floor, the temple's stone floor, and every trap and secret
 function drawTempleGround(L, T, R, B) {
     const Wt = G.world.temple, W = TEMPLE.W, now = performance.now() / 1000;
@@ -5469,6 +5604,11 @@ function drawTempleGround(L, T, R, B) {
     const m = (Wt.n - 1) / 2, cx0 = ox + (m - 1) * cs, cy0 = oy + (m - 1) * cs;
     ctx.fillStyle = 'rgba(220,180,80,0.25)'; ctx.fillRect(cx0, cy0, cs * 3, cs * 3);
     ctx.strokeStyle = 'rgba(255,209,102,0.35)'; ctx.lineWidth = 6; ctx.strokeRect(cx0 + 30, cy0 + 30, cs * 3 - 60, cs * 3 - 60);
+    for (const g2 of Wt.glyphs) if (g2.x > L - 30 && g2.x < R + 30 && g2.y > T - 30 && g2.y < B + 30) drawGlyph(g2.x, g2.y, g2.glyph, g2.rot, g2.s, 'rgba(58,44,26,0.45)');
+    // switches look like every other symbol, until you're standing right by one
+    const pl = G.player;
+    for (const w of Wt.switches) if (inView(w.x, w.y, 40)) { const close = pl && Math.hypot(pl.x - w.x, pl.y - w.y) < 60 && !w.wall.open; drawGlyph(w.x, w.y, w.glyph, w.rot, 18, close ? `rgba(255,209,102,${0.6 + Math.sin(now * 6) * 0.3})` : 'rgba(58,44,26,0.5)'); }
+    for (const v of Wt.vines) if (v.x > ox && v.x < ox + size && v.y > oy && v.y < oy + size && v.x > L - 200 && v.x < R + 200 && v.y > T - 200 && v.y < B + 200 && v.thick < 0.9) drawVine(v);
     // camps
     for (const t of [0, 1]) {
         const c = Wt.camps[t], col = t ? '255,75,75' : '61,139,255';
@@ -5536,12 +5676,13 @@ function drawTempleGround(L, T, R, B) {
             }
         }
     }
-    // Hidden tunnels: a carved stone hatch
+    // Hidden tunnels: inside the temple just another carved symbol; out in the jungle a mossy flat stone
     for (const ps of Wt.passages) for (const h of [ps.a, ps.b]) {
         if (!inView(h.x, h.y, 60)) continue;
-        ctx.fillStyle = '#6a5a40'; ctx.beginPath(); ctx.arc(h.x, h.y, 30, 0, TAU); ctx.fill();
-        ctx.strokeStyle = '#4a3c28'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(h.x, h.y, 22, 0, TAU); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(h.x - 10, h.y - 10); ctx.lineTo(h.x + 10, h.y + 10); ctx.moveTo(h.x + 10, h.y - 10); ctx.lineTo(h.x - 10, h.y + 10); ctx.stroke();
+        const close = pl && Math.hypot(pl.x - h.x, pl.y - h.y) < 60;
+        const inT = h.x > ox && h.x < ox + size && h.y > oy && h.y < oy + size;
+        if (!inT) { ctx.fillStyle = '#6f6a58'; ctx.beginPath(); ctx.ellipse(h.x, h.y, 30, 24, 0.3, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(70,110,50,0.7)'; ctx.beginPath(); ctx.ellipse(h.x - 8, h.y - 4, 16, 10, 0.5, 0, TAU); ctx.fill(); }
+        drawGlyph(h.x, h.y, h.glyph || 0, h.rot || 0, 16, close ? `rgba(126,249,255,${0.5 + Math.sin(now * 5) * 0.3})` : inT ? 'rgba(58,44,26,0.5)' : 'rgba(50,46,36,0.5)');
     }
     // Buried chests: a faint X in the dirt
     for (const c of Wt.chests) {
@@ -5556,9 +5697,11 @@ function drawTempleGround(L, T, R, B) {
 function drawTempleProps(now) {
     const Wt = G.world.temple, T2 = G.temple, p = G.player;
     for (const o of Wt.secrets) {
-        if (o.open || !inView(o.x, o.y, 160)) continue;
-        const near = p && Math.hypot(p.x - o.x, p.y - o.y) < 200;
-        ctx.strokeStyle = near ? 'rgba(40,28,14,0.85)' : 'rgba(60,45,25,0.35)'; ctx.lineWidth = near ? 2.5 : 1.5;
+        if (o.open || o.hiddenSecret || !inView(o.x, o.y, 160)) continue;
+        const dd = p ? Math.hypot(p.x - o.x, p.y - o.y) - Math.max(o.hw, o.hh) : 1e9, see = o.vines ? 40 : 110;
+        if (dd > see) continue;
+        const near = dd < see * 0.5;
+        ctx.strokeStyle = `rgba(40,28,14,${near ? 0.8 : 0.4})`; ctx.lineWidth = near ? 2.2 : 1.4;
         const long = o.hw > o.hh, L2 = long ? o.hw : o.hh;
         ctx.beginPath();
         for (let k = -1; k <= 1; k++) {
@@ -5567,7 +5710,16 @@ function drawTempleProps(now) {
             ctx.moveTo(x - 6, y - 10); ctx.lineTo(x + 3, y - 2); ctx.lineTo(x - 2, y + 4); ctx.lineTo(x + 6, y + 11);
         }
         ctx.stroke();
-        if (near) { ctx.fillStyle = `rgba(255,209,102,${0.25 + Math.sin(now * 4) * 0.15})`; ctx.fillRect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2); }
+    }
+    // Vines on the walls and through the jungle (over the walls, under the people)
+    const camL = G.cam.x - viewW / 2 / G.zoom - 200, camR = G.cam.x + viewW / 2 / G.zoom + 200, camT = G.cam.y - viewH / 2 / G.zoom - 200, camB = G.cam.y + viewH / 2 / G.zoom + 200;
+    for (const v of Wt.vines) if (v.thick >= 0.9 && v.x > camL && v.x < camR && v.y > camT && v.y < camB) drawVine(v);
+    // Walls about to move: dust trickling off them and a dark red edge
+    if (T2 && T2.next) for (const o of T2.next) {
+        if (!inView(o.x, o.y, 120)) continue;
+        if (o.up) { ctx.strokeStyle = `rgba(140,30,20,${0.5 + Math.sin(now * 12) * 0.3})`; ctx.lineWidth = 3; ctx.strokeRect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2); }
+        else { ctx.fillStyle = `rgba(140,30,20,${0.18 + Math.sin(now * 12) * 0.1})`; ctx.fillRect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2); }
+        if (Math.random() < 0.3) G.particles.push({ type: 'smoke', x: o.x + rand(-o.hw, o.hw), y: o.y + rand(-o.hh, o.hh), vx: 0, vy: 0, life: 0.6, max: 0.6, size: rand(4, 8), color: '190,170,130' });
     }
     for (const t of Wt.traps) {
         if (t.kind !== 'axe' || !inView(t.x, t.y, 200)) continue;
@@ -12297,7 +12449,7 @@ function updateCountdown() {
     if (left !== G.lastCount && left > 0) { G.lastCount = left; if (left <= 3) Sound.tone(660, 0.15, 'square', 0.12); else Sound.tone(440, 0.08, 'square', 0.06); }
     if (G.time >= G.startAt) {
         G.frozen = false;
-        showBanner('GO!', true, 'May the odds be ever in your favor');
+        showBanner('GO!', true, G.survival ? 'Everyone can move now. Good luck!' : 'Good luck!');
         Sound.tone(990, 0.5, 'square', 0.14, 1320);
     }
 }
@@ -15127,7 +15279,8 @@ function update(dt) {
     if (G.ghostMode) updateGhost(dt);
     if (G.temple) updateTemple(dt);
     if (G.duel) updateDuel(dt);
-    if (G.survival) { if (!G.frozen && !G.world.floor) updateAnimals(dt); updateCountdown(); }
+    if (G.survival && !G.frozen && !G.world.floor) updateAnimals(dt);
+    if (!G.duel) updateCountdown();
     updateDayCycle();
     if (G.escape && !G.world.floor && G.time >= G.nextSquads) updateSquads();
     if (!G.world.floor) updateWreckage(dt);
@@ -15482,7 +15635,7 @@ function render() {
     // Night falls over the world (but not over the damage numbers)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawLighting(camX, camY, zoom);
-    if (G.survival || (G.duel && !G.duel.nextRoundAt && !G.duel.over)) drawCountdown();
+    if (!G.duel || (!G.duel.nextRoundAt && !G.duel.over)) drawCountdown();
     if (G.world.terrain === 'mountain') drawSnowfall(now);
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, Math.round(-camX * dpr * zoom), Math.round(-camY * dpr * zoom));
     drawFloats();
@@ -17859,30 +18012,30 @@ for (const card of document.querySelectorAll('#mapsel .map-card')) {
 
 // ---------- Briefing: what this game is about, in a few lines, before it starts ----------
 const BRIEF = {
-    ffa: [['🎯', '<b>Goal:</b> be the last one alive.'], ['📦', 'Everyone starts with nothing: grab guns, armor and medkits from boxes and the ground.'], ['🔴', 'The red zone shrinks over time. Stay inside the circle or you take damage.'], ['🚗', 'Hop in cars, tanks and helicopters.']],
-    war: [['🎯', '<b>Goal:</b> wipe out every other team.'], ['📦', 'Your team starts at its base. Grab guns from the supply crates nearby.'], ['🩹', 'When you go down, a teammate can revive you before you bleed out.'], ['🔴', 'The zone shrinks, so the fight keeps moving.']],
-    zombies: [['🎯', '<b>Goal:</b> survive. Survivors win when every zombie is dead; the horde wins when everyone is turned.'], ['🌑', 'It is pitch dark. Only your flashlight lights the way, and zombies show glowing green eyes.'], ['🧟', 'If a zombie gets you, you turn into one, and then you hunt the survivors.'], ['💉', 'Cures can turn zombies back into survivors.']],
-    survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat, and drink at ponds.'], ['😴', 'Rest when you are tired.'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
-    revolution: [['🎯', '<b>Goal:</b> wipe out the other side or bring down their castle.'], ['🏰', 'Each side has a castle with healing rooms, an armory, guard towers and cannons on the walls.'], ['💥', 'Load ammo into your boss strike pad and launch it at the enemy castle.'], ['☠️', 'No revives: when you die, you stay dead.']],
-    boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
+    ffa: [['🎯', '<b>Last one alive wins.</b> Everyone starts with nothing: grab guns, armor and medkits from boxes and the ground.'], ['🔴', 'The red zone shrinks, so keep inside the circle. Hop into cars, tanks and helicopters to get around.']],
+    war: [['🎯', '<b>Wipe out every other team.</b> Your team starts at its base with supply crates full of guns nearby.'], ['🩹', 'When you go down, a teammate can revive you before you bleed out. The zone shrinks, so the fight keeps moving.']],
+    zombies: [['🎯', '<b>Survive the horde.</b> Survivors win when every zombie is dead; the horde wins when everyone is turned. Get caught and you become one.'], ['🌑', 'It is pitch dark: your flashlight is all you have, and zombies show glowing eyes. Cures turn zombies back.']],
+    survival: [['🎯', '<b>Last one alive wins.</b> Hunt deer, rabbits and boars for meat, drink at ponds, and rest when you are tired.'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
+    revolution: [['🎯', '<b>Wipe out the other side or bring down their castle.</b> Each castle has healing rooms, an armory, towers and wall cannons.'], ['💥', 'Load ammo into your boss strike pad and launch it at the enemy castle. No respawns.']],
+    boss: [['🎯', '<b>Your whole team against one giant boss.</b> He sprays a minigun and fires rockets, and stomps anyone who gets too close.'], ['🪖', 'At half health he calls in soldiers and gets faster. Everyone starts armed, with ammo and medkits around the arena.']]
 };
-BRIEF.temple = [['🗿', '<b>5 against 5.</b> Grab the golden idol from the altar in the middle of the temple maze and carry it back to your camp. First team to bring it home 3 times wins. Whoever carries it is slower.'], ['⚠️', 'Watch out for spikes, rolling boulders, collapsing floors, swinging axes, dart walls, spider webs, quicksand and snakes. Press <b>F</b> at a cracked wall to open a secret shortcut, at a stone hatch to use a hidden tunnel, or at an X to dig up a chest.']];
-BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
-BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
+BRIEF.temple = [['🗿', '<b>5 against 5.</b> Grab the golden idol from the middle of the temple maze and carry it back to your camp. First to bring it home 3 times wins.'], ['⚠️', 'The jungle and the maze are full of traps, and the maze walls move. Press <b>F</b> at a cracked wall, a carved hatch or a dug-up X to find secrets and shortcuts.']];
+BRIEF.ghost = [['👻', '<b>One invisible ghost hunts the hunters.</b> It only shows for a moment when it shoots or gets hit, but it leaves glowing footprints.'], ['🔦', 'Pitch dark: every hunter has a flashlight and a gun. Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
+BRIEF.navy = [['🚢', '<b>Sink or capture every enemy ship.</b> Take the wheel, man the cannons and deck guns, fly a helicopter or launch a submarine from the decks below.'], ['🪵', 'When hulls touch, planks go across so you can board: take an enemy\'s wheel and the ship is yours. In the water you slowly drown, so swim to a hull.']];
+BRIEF.duel = [['🎯', '<b>You against one sniper: first to win 3 rounds.</b> One hit kills, for both of you. Use the scope to see far.'], ['👣', 'Footsteps carry and a scope glints when it\'s aimed at you. Move after every shot. After 1:30 the circle starts closing.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { temple: 'Jungle Temple', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
-const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
-const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
+const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot · <b>1–5</b> or <b>scroll</b> switch guns · <b>right click</b> scope'], ['🎒', '<b>F</b> pick up, swap a gun, use, or get in a vehicle · <b>Q</b> bandage · <b>E</b> medkit · <b>T</b> grenade · <b>Esc</b> pause']];
+const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot · tap a slot to switch guns'], ['🎒', 'The <b>button at the bottom</b> picks up, uses or gets in a vehicle · tap the bandage, medkit or grenade to use them']];
 function controlsFor(id) {
-    const t = TOUCH.enabled, list = (t ? CONTROLS_TOUCH : CONTROLS_KEYS).slice();
-    if (id === 'navy') list.push(['🧭', t ? 'The <b>bottom button</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: stick up and down for speed, left and right to steer' : '<b>F</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: <b>W S</b> speed, <b>A D</b> steer']);
-    if (id === 'duel') list.push(['🤫', t ? 'Scoped in, you walk slowly and quietly' : 'Hold <b>Shift</b> or scope in to walk slowly and quietly']);
-    if (id === 'survival') list.push(['🍖', t ? 'Tap the meat or water on the left to eat or drink' : '<b>C</b> eat · <b>V</b> drink or fill a bucket at water · <b>B</b> rest']);
-    if (id === 'revolution') list.push(['💥', t ? 'At your boss strike pad, the bottom button loads ammo or launches it' : 'At your boss strike pad, <b>F</b> loads ammo or launches it']);
-    list.push(['🔭', t ? 'Sniper rifles: tap the <b>8x</b> button for the scope' : 'Sniper rifles: hold <b>right click</b> (or <b>Z</b>) for the 8x scope']);
-    list.push(['☢️', 'Doomsday Nuke: press <b>USE NUKE</b> and pick the target on the map']);
+    const t = TOUCH.enabled, list = (t ? CONTROLS_TOUCH : CONTROLS_KEYS).map(q => q.slice());
+    // (anything special this mode adds goes on the end of the second line)
+    const extra = id === 'navy' ? (t ? 'At the wheel the stick steers' : 'At the wheel <b>W S</b> speed, <b>A D</b> steer')
+        : id === 'survival' ? (t ? 'Tap the meat or water to eat or drink' : '<b>C</b> eat · <b>V</b> drink · <b>B</b> rest')
+        : id === 'duel' ? (t ? 'Scoped in you walk quietly' : '<b>Shift</b> walks quietly')
+        : id === 'revolution' ? (t ? 'The bottom button works your strike pad' : '<b>F</b> loads or launches your strike pad') : '';
+    if (extra) list[1][1] += ' · ' + extra;
     return list;
 }
 const BRIEF_STAGE = { stage: null, map: null };
@@ -18094,6 +18247,8 @@ function startGame(map = lastMap) {
     setup.warfare = id === 'ghost' || id === 'temple' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
+    // Every game starts with a countdown while everyone gets ready (Survival and Sniper Duel have their own)
+    if (!G.survival && !G.duel) { G.frozen = true; G.startAt = G.time + 3000; G.lastCount = 0; }
     screens.mapsel.classList.add('hidden');
     hud.cache = {};
     hud.killfeed.innerHTML = '';
