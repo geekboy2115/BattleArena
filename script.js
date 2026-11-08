@@ -7104,7 +7104,7 @@ function updateTeamCenters() {
 // dodge the soldier boats), crosses the ocean, and finds land with a giant airship waiting to fly them out.
 // It's meant to be a long game (on a world three times the size, with day and night): the squad has 500 health each, the soldiers 45.
 const CHASE = {
-    people: 20, hp: 500, soldierHp: 45, armor: 100, scale: 3, dayDark: 0.3, nightDark: 0.58,
+    people: 20, hp: 500, soldierHp: 45, armor: 100, scale: 3, dayDark: 0, nightDark: 0.87,
     oceanY: 3400, mountY: 7500, river: 340, bank: 430,
     fac: { x0: 600, y0: 9300, x1: 3300, y1: 11500 },
     island: { x: 10350, y: 1500, r: 1250 },
@@ -11237,7 +11237,7 @@ function darkness() {
     if ((G.zombies || G.ghostMode) && G.mode !== 'demo') return ZOMBIE_DARK;
     if (G.world.terrain === 'cavern') return CAVERN.dark;
     if (G.chase) {
-        // Chase is always a bit dark: dim by day, darker at night, never pitch black
+        // Chase: bright sunshine by day; at night very dark, but you can still make out the shapes of things
         const t = dayT(), n = t < 0.45 ? 0 : t < 0.55 ? (t - 0.45) / 0.1 : t < 0.9 ? 1 : (1 - t) / 0.1;
         return CHASE.dayDark + n * (CHASE.nightDark - CHASE.dayDark);
     }
@@ -11272,6 +11272,36 @@ function updateDayCycle() {
 }
 
 let lightCv = null, lightG = null;
+// Everything burning or exploding nearby: [x, y, radius, strength]. It lights up the dark around it.
+function hotLights(camX, camY, zoom) {
+    const out = [], R = Math.max(viewW, viewH) / zoom;
+    const near = (x, y, r) => Math.abs(x - G.cam.x) < R + r && Math.abs(y - G.cam.y) < R + r;
+    for (const q of G.particles) {
+        if (q.type === 'boom') { const k = q.max ? clamp(q.life / q.max, 0, 1) : 1; if (near(q.x, q.y, q.size * 4)) out.push([q.x, q.y, q.size * (2.4 + 1.6 * k), 0.6 + 0.4 * k]); }
+        else if (q.type === 'flash' && near(q.x, q.y, 220)) out.push([q.x, q.y, 220, 0.9]);
+    }
+    if (G.fires) for (const f of G.fires) if (near(f.x, f.y, 400)) out.push([f.x, f.y, (f.r || 60) * 4 * (0.92 + Math.sin(G.time / 90 + f.x) * 0.08), 0.9]);
+    // burning wrecks, and the fires on a damaged ship
+    G.world.grid.query(G.cam.x, G.cam.y, R, o => { if (o.burnUntil > G.time) out.push([o.x, o.y, 230 * (0.9 + Math.sin(G.time / 110 + o.x) * 0.1), 0.85]); });
+    if (G.navy) for (const s of G.navy.ships) {
+        if (s.sunk || !near(s.x, s.y, s.C.len)) continue;
+        for (const q of s.spots) out.push([navyWx(s, q.lx, q.ly), navyWy(s, q.lx, q.ly), q.r * 4.5 * (0.9 + Math.sin(G.time / 100 + q.ph) * 0.1), 0.85]);
+    }
+    return out;
+}
+// The warm orange glow those fires and explosions throw on everything around them
+function drawHotGlow(hot, camX, camY, zoom, dark) {
+    if (!hot.length || dark < 0.15) return;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const [x, y, r, a] of hot) {
+        const sx = (x - camX) * zoom, sy = (y - camY) * zoom, sr = r * zoom * 0.9;
+        if (sx < -sr || sy < -sr || sx > viewW + sr || sy > viewH + sr) continue;
+        const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+        g.addColorStop(0, `rgba(255,150,60,${0.32 * a * dark})`); g.addColorStop(0.45, `rgba(255,110,40,${0.14 * a * dark})`); g.addColorStop(1, 'rgba(255,90,30,0)');
+        ctx.fillStyle = g; ctx.fillRect(sx - sr, sy - sr, sr * 2, sr * 2);
+    }
+    ctx.restore();
+}
 function drawLighting(camX, camY, zoom) {
     const dark = darkness(), dusk = duskGlow();
     if (dusk > 0.01) { ctx.fillStyle = `rgba(255,120,40,${dusk * 0.12})`; ctx.fillRect(0, 0, viewW, viewH); }
@@ -11293,7 +11323,8 @@ function drawLighting(camX, camY, zoom) {
         g.fillRect(sx - sr, sy - sr, sr * 2, sr * 2);
     };
     const p = G.player && !G.player.dead ? G.player : null;
-    const pitch = pitchDark();
+    const pitch = pitchDark(), hot = hotLights(camX, camY, zoom);
+    for (const [x, y, r, a] of hot) light(x, y, r, a);
     if (p) {
         // (pitch dark: just enough glow to see yourself, then only the flashlight)
         light(p.x, p.y, pitch ? 75 : 260, pitch ? 0.75 : 0.9);
@@ -11330,6 +11361,7 @@ function drawLighting(camX, camY, zoom) {
             light(x, y, q.r * 6 * fl, q.wisp ? 0.45 : 0.7);
         }
         ctx.drawImage(lightCv, 0, 0, viewW, viewH);
+        drawHotGlow(hot, camX, camY, zoom, dark);
         if (G.ghostMode) drawGhostSteps(camX, camY, zoom);
         if (G.zombies) drawZombieEyes(camX, camY, zoom);
         return;
@@ -11337,13 +11369,11 @@ function drawLighting(camX, camY, zoom) {
     if (G.world.lampGrid) G.world.lampGrid.query(G.cam.x, G.cam.y, viewW / zoom, l => light(l.x, l.y, 240, 0.85));
     if (G.world.glows) for (const q of G.world.glows) light(q.x, q.y, q.lava ? q.r * 3.2 : q.r * 6, q.lava ? 0.9 : 0.75);
     for (const q of G.particles) {
-        if (q.type === 'flash') light(q.x, q.y, 170, 0.9);
-        else if (q.type === 'boom') light(q.x, q.y, q.size * 2.2, 1);
-        else if (q.type === 'glow' && q.size > 5) light(q.x, q.y, q.size * 5, 0.5);
+        if (q.type === 'glow' && q.size > 5) light(q.x, q.y, q.size * 5, 0.5);
         else if (q.type === 'cube') light(q.x, q.y - q.z, q.size * 5, 0.5 * (1 - q.fade));
     }
-    if (G.fires) for (const f of G.fires) light(f.x, f.y, (f.r || 60) * 3, 0.9);
     ctx.drawImage(lightCv, 0, 0, viewW, viewH);
+    drawHotGlow(hot, camX, camY, zoom, dark);
     if (G.zombies && dark > 0.9) drawZombieEyes(camX, camY, zoom);
 }
 // In the dark, the zombies close by give themselves away: two glowing eyes
