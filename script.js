@@ -20647,6 +20647,8 @@ function drawStick(el, st, v) {
 }
 // Each frame: the aim stick points the crosshair (and fires) for you, or for your view on a friend's game
 function touchFrame() {
+    // (the controls are hidden, e.g. a menu is up: nobody can be holding a stick, so let go of both)
+    if ((TOUCH.aim.on || TOUCH.move.on) && TOUCH.releaseAll && !$('touch').getClientRects().length) TOUCH.releaseAll();
     const a = TOUCH.aim, firing = a.on && a.mag > TOUCH.fireAt;
     if (NET.viewing) {
         if (a.on) netSend({ t: 'm', x: 0.5 + a.x * 220 / Math.max(320, window.innerWidth), y: 0.5 + a.y * 220 / Math.max(240, window.innerHeight), n: 1 });
@@ -20712,6 +20714,23 @@ function touchFrame() {
     };
     layer.addEventListener('pointerup', end);
     layer.addEventListener('pointercancel', end);
+    // Safety nets, so a stick can never get stuck held down (and keep firing): the finger lifting anywhere,
+    // the layer losing hold of it (a menu or the death screen popping up over it), and no fingers left on the screen at all
+    layer.addEventListener('lostpointercapture', end);
+    window.addEventListener('pointerup', end, true);
+    window.addEventListener('pointercancel', end, true);
+    const releaseAll = () => {
+        for (const [st, el, isMove] of [[TOUCH.move, moveEl, true], [TOUCH.aim, aimEl, false]]) {
+            if (!st.on) continue;
+            st.on = false; st.id = null;
+            if (isMove) { st.x = st.y = 0; stickKeys(0, 0); } else { st.lastMag = st.mag; st.mag = 0; }
+            drawStick(el, st, { x: 0, y: 0 });
+        }
+    };
+    TOUCH.releaseAll = releaseAll;
+    for (const ev of ['touchend', 'touchcancel']) window.addEventListener(ev, e => { if (!e.touches || e.touches.length === 0) releaseAll(); }, true);
+    window.addEventListener('blur', releaseAll);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
     // Tap the grenade to switch to the next kind you're carrying
     $('grenade-panel').addEventListener('pointerdown', e => { if (!TOUCH.enabled) return; e.preventDefault(); e.stopPropagation(); touchKey('KeyT', true); touchKey('KeyT', false); });
     // Tap the bandages, medkit, meat or water to use them
