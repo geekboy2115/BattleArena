@@ -153,7 +153,16 @@ const TEAMS = [
     { name: 'Blue', color: '#3d8bff' },
     { name: 'Red', color: '#ff4b4b' },
     { name: 'Green', color: '#3ecf6e' },
-    { name: 'Gold', color: '#ffc23d' }
+    { name: 'Gold', color: '#ffc23d' },
+    // (more for the ship free-for-all, where every squad is its own side)
+    { name: 'Purple', color: '#a66bff' },
+    { name: 'Orange', color: '#ff8a2b' },
+    { name: 'Teal', color: '#2fd0c4' },
+    { name: 'Pink', color: '#ff5fb4' },
+    { name: 'White', color: '#e8eef2' },
+    { name: 'Lime', color: '#b6e43c' },
+    { name: 'Brown', color: '#b07a4a' },
+    { name: 'Navy', color: '#3a52b8' }
 ];
 // Red is the strong team in every war game: its bots aim better, hit harder and take less damage,
 // so left alone Red usually wins and it's up to you to turn the fight
@@ -5263,7 +5272,7 @@ function addShip(kind, team, x, y, a) {
 }
 function navyAddHeli(s) {
     const [lx, ly] = s.C.pad, T = VTYPES.gunship;
-    const c = { type: 'gunship', x: navyWx(s, lx, ly), y: navyWy(s, lx, ly), a: s.a, speed: 0, hp: T.hp, color: s.team === 0 ? '#2c4f78' : '#6e2c2c', driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: s.a, onShip: s, lx, ly, la: 0 };
+    const c = { type: 'gunship', x: navyWx(s, lx, ly), y: navyWy(s, lx, ly), a: s.a, speed: 0, hp: T.hp, color: shade(TEAMS[s.team].color, -0.45), driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: s.a, onShip: s, lx, ly, la: 0 };
     G.world.cars.push(c);
     s.heli = c; s.heliClaim = null;
     return c;
@@ -5289,7 +5298,7 @@ function navyLanding(c) {
 // A submarine bay, down through the bottom of the hull: launches into the water, not the air
 function navyAddSub(s, bay) {
     const { lx, ly, kind } = bay, T = VTYPES[kind];
-    const c = { type: kind, x: navyWx(s, lx, ly), y: navyWy(s, lx, ly), a: s.a, speed: 0, hp: T.hp, color: s.team === 0 ? '#2c4f78' : '#6e2c2c', driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: s.a, onShip: s, lx, ly, la: 0, submerged: false, homeBay: bay, homeRoom: 'subdeck' };
+    const c = { type: kind, x: navyWx(s, lx, ly), y: navyWy(s, lx, ly), a: s.a, speed: 0, hp: T.hp, color: shade(TEAMS[s.team].color, -0.45), driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: s.a, onShip: s, lx, ly, la: 0, submerged: false, homeBay: bay, homeRoom: 'subdeck' };
     G.world.cars.push(c);
     bay.car = c; bay.claim = null;
     return c;
@@ -5339,11 +5348,31 @@ function navyCrewman(s, name, isPlayerToo) {
 function setupNavy(setup) {
     const W = CONFIG.WORLD_SIZE, C = W / 2, demo = G.mode === 'demo';
     const n = setup.ships || 1, crew = setup.crew || 20;
-    G.navy = { ships: [], wrecks: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n, crew, wake: 0, mini: setup.fleet === 'mini', huge: setup.fleet === 'huge' };
+    G.navy = { ships: [], wrecks: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n, crew, wake: 0, mini: setup.fleet === 'mini' || setup.fleet === 'ffa', huge: setup.fleet === 'huge', ffa: setup.fleet === 'ffa', out: [] };
     G.world.cars = [];
     let name = 0;
     const firstPlayer = G.mode === 'playing';
     let flagship = null;
+    if (setup.fleet === 'ffa' && !demo) {
+        // Ship free-for-all: every squad has its own mini ship, spread round a big ring, all against all
+        const k = setup.teams, R = Math.min(4300, 1100 + k * 330);
+        for (let t = 0; t < k; t++) {
+            const a = -Math.PI / 2 + (t / k) * TAU, s = addShip('mini', t, C + Math.cos(a) * R, C + Math.sin(a) * R, a + Math.PI / 2);
+            s.hp = s.maxHp = s.C.hp * NAVY_FFA.hull;
+            if (t === 0) flagship = s;
+            for (let i = 0; i < crew; i++) {
+                const mine = firstPlayer && t === 0 && i === 0, f = navyCrewman(s, botName(name++), mine);
+                if (mine) continue;
+                const st = navyVacant(s, f);
+                if (st && st.sub) { f.room = 'subdeck'; enterCar(f, st.sub); continue; }
+                if (st) navyMan(f, st);
+            }
+        }
+        for (const s of G.navy.ships) s.crewN = 1;
+        if (firstPlayer) navyPlaceRole(flagship, setup.role); else G.cam.x = G.cam.y = C;
+        Sound.tone(70, 1.6, 'sawtooth', 0.08);
+        return;
+    }
     for (let t = 0; t < 2; t++) {
         const dir = t === 0 ? 1 : -1, head = t === 0 ? -Math.PI / 2 : Math.PI / 2, D = demo ? 1000 : 3900;
         const row = (kind, count, d, gap) => {
@@ -5931,13 +5960,14 @@ function navyCheck() {
     for (const s of N.ships) s.crewN = 0;
     for (const f of G.fighters) if (!f.dead && f.ship) f.ship.crewN++;
     if (N.over) return;
-    const left = [0, 0];
+    const left = new Array(G.war ? G.war.teams : 2).fill(0);
     for (const s of N.ships) if (!s.sinkAt && s.crewN > 0) left[s.team]++;
     N.left = left;
     // Ships sinking doesn't end it on its own: crew can still be swimming, ashore on an island,
     // flying a helicopter, or standing aboard a ship they've boarded. Only a wholly dead team ends it.
     if (G.mode === 'demo') { if (!G.teamAlive[0] || !G.teamAlive[1]) N.over = true; return; }
     if (G.result) return;
+    if (N.ffa) { navyCheckFfa(left); return; }
     // A fleet with no ship left has a minute to capture one, or it's beaten; with both fleets sunk, whoever has
     // more people left wins after 45 seconds (so a few survivors on an island can't keep it going forever)
     let loser = G.teamAlive[0] === 0 ? 0 : G.teamAlive[1] === 0 ? 1 : -1;
@@ -5965,6 +5995,37 @@ function navyCheck() {
     else canvas.classList.add('dead');
 }
 
+// Ship free-for-all: a squad is out when it's all dead, or it's been a minute without a ship of its own.
+// The last squad still in wins.
+// (the mini ships are a lot tougher here: with every ship's subs out at once they'd all be gone in a minute)
+const NAVY_FFA = { min: 2, max: 12, crew: 15, hull: 6 };
+function navyCheckFfa(left) {
+    const N = G.navy, p = G.player, k = G.war.teams;
+    N.strandedAt = N.strandedAt || new Array(k).fill(0);
+    for (let t = 0; t < k; t++) {
+        if (N.out[t]) continue;
+        let gone = G.teamAlive[t] === 0;
+        if (left[t] > 0) N.strandedAt[t] = 0;
+        else if (!N.strandedAt[t]) { N.strandedAt[t] = G.time; if (p && t === p.team && !gone) showBanner('YOUR SHIP IS SUNK!', true, 'Board and capture another ship within a minute, or your squad is out'); }
+        else if (G.time - N.strandedAt[t] > 60000) gone = true;
+        if (!gone) continue;
+        N.out[t] = G.time;
+        const still = k - N.out.filter(Boolean).length;
+        // (anyone still swimming from a squad that's out is lost at sea)
+        for (const f of G.fighters) if (!f.dead && f.team === t && !f.ship) killFighter(f, null, 'Lost at sea');
+        if (p && t !== p.team && still > 1) showBanner(`${TEAMS[t].name.toUpperCase()} SQUAD IS OUT`, false, `${still} squads left`);
+    }
+    const inGame = [];
+    for (let t = 0; t < k; t++) if (!N.out[t]) inGame.push(t);
+    const mineOut = p && N.out[p.team];
+    if (inGame.length > 1 && !mineOut) return;
+    N.over = true;
+    const won = !mineOut && inGame[0] === p.team, place = won ? 1 : inGame.length + 1;
+    G.result = won ? { won: true, place: 1, title: 'LAST SHIP AFLOAT', sub: `Your squad beat all ${k - 1} others.${p.dead ? ' You went down, but your squad finished it.' : ''}` }
+        : { won: false, place, title: 'YOUR SQUAD IS OUT', sub: `Your squad finished #${place} of ${k}.` };
+    G.overAt = G.time + 2200;
+    if (won) startVictory('Your squad is the last one at sea'); else canvas.classList.add('dead');
+}
 // ----- Guns -----
 function navyAimGun(g, want, dt) {
     const s = g.ship, cur = s.a + g.rel, err = angleDiff(cur, want);
@@ -16360,7 +16421,8 @@ function updateHUD() {
         setHTML(hud.teamScore, 'teams', [0, 1].map(t => `<div class="ts${t === p.team ? ' mine' : ''}${revoLeft(t) === 0 ? ' out' : ''}"><i style="background:${REVO.sides[t].flag}"></i><b>${G.teamAlive[t]}</b><span>${revoName(t)} · ${Rv.bases[t].fallen ? 'base fallen' : `base ${Math.round(baseHealth(Rv.bases[t]) * 100)}% · strike ${Math.floor(Rv.bases[t].strike.ammo / 100) / 10}k/${REVO.strike.cost / 1000}k`}</span></div>`).join('<em>vs</em>'));
     } else if (G.navy) {
         const left = G.navy.left || [0, 0], chip = t => `<div class="ts${t === p.team ? ' mine' : ''}${left[t] === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${left[t]}</b><span>${t === p.team ? 'Your ships' : 'Enemy ships'} · ${G.teamAlive[t]} people</span></div>`;
-        setHTML(hud.teamScore, 'teams', chip(0) + '<em>vs</em>' + chip(1));
+        if (G.navy.ffa) { const k = G.war.teams, still = k - G.navy.out.filter(Boolean).length; setHTML(hud.teamScore, 'teams', chip(p.team).replace('Your ships', 'Your ship') + '<em>vs</em>' + `<div class="ts"><i style="background:#fff7ec"></i><b>${Math.max(0, still - 1)}</b><span>Other squads left</span></div>`); }
+        else setHTML(hud.teamScore, 'teams', chip(0) + '<em>vs</em>' + chip(1));
     } else if (G.war) {
         setHTML(hud.teamScore, 'teams', G.teamAlive.map((n, t) =>
             `<div class="ts${t === p.team ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${n}</b><span>${t === p.team ? 'Your team' : TEAMS[t].name}</span></div>`).join('<em>vs</em>'));
@@ -17032,6 +17094,8 @@ $('start-btn').addEventListener('click', openDescription);
 // Battleships: how many a side, and how many people aboard each (the whole game holds 800)
 let navyFleet = 'big';
 const NAVY_MINI = { max: 30, crew: 12 };
+
+const navyFfaCount = () => clamp(+$('navy-ffa').value, NAVY_FFA.min, NAVY_FFA.max);
 const navyHugeCrew = () => clamp(+$('navy-huge').value, 20, NAVY.ships.mega.crew);
 const navyShipCount = () => navyFleet === 'huge' ? 1 : navyFleet === 'mini' ? clamp(+$('navy-mini').value, 1, NAVY_MINI.max) : clamp(+$('navy-ships').value, 1, 8);
 const navyCrewMax = () => Math.min(NAVY.ships.battleship.crew, Math.floor(NAVY.maxPeople / (2 * navyShipCount())) - NAVY.escortCrew);
@@ -17048,8 +17112,11 @@ function showNavy() {
     $('navy-huge-value').textContent = navyHugeCrew();
     $('navy-mini-opts').classList.toggle('hidden', navyFleet !== 'mini');
     $('navy-mini-value').textContent = clamp(+$('navy-mini').value, 1, NAVY_MINI.max);
-    document.querySelector('#navy-role [data-r="pilot"]').classList.toggle('hidden', navyFleet === 'mini');
-    if (navyFleet === 'mini' && navyRolePick === 'pilot') document.querySelector('#navy-role [data-r="captain"]').click();
+    $('navy-ffa-opts').classList.toggle('hidden', navyFleet !== 'ffa');
+    $('navy-ffa-value').textContent = navyFfaCount();
+    document.querySelector('#navy-role [data-r="pilot"]').classList.toggle('hidden', navyFleet === 'mini' || navyFleet === 'ffa');
+    if ((navyFleet === 'mini' || navyFleet === 'ffa') && navyRolePick === 'pilot') document.querySelector('#navy-role [data-r="captain"]').click();
+    if (navyFleet === 'ffa') { $('navy-total').textContent = `${navyFfaCount()} squads of ${NAVY_FFA.crew}, one mini ship each · ${navyFfaCount() * NAVY_FFA.crew} people in all`; return; }
     if (navyFleet === 'huge') { $('navy-total').textContent = `1 huge ship a side · ${2 * navyHugeCrew()} people in all`; return; }
     if (navyFleet === 'mini') { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); $('navy-total').textContent = `${n} mini ship${n === 1 ? '' : 's'} a side · ${c} aboard each · ${2 * n * c} people in all`; return; }
     $('navy-total').textContent = `${navyShipCount() * 3} ships a side · ${2 * navyShipCount() * (navyCrewCount() + NAVY.escortCrew)} people in all`;
@@ -17057,6 +17124,7 @@ function showNavy() {
 $('navy-ships').addEventListener('input', showNavy);
 $('navy-mini').addEventListener('input', showNavy);
 $('navy-huge').addEventListener('input', showNavy);
+$('navy-ffa').addEventListener('input', showNavy);
 for (const btn of document.querySelectorAll('#navy-fleet button')) btn.addEventListener('click', () => {
     navyFleet = btn.dataset.f;
     for (const o of document.querySelectorAll('#navy-fleet button')) o.classList.toggle('on', o === btn);
@@ -17119,7 +17187,7 @@ const BRIEF = {
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
@@ -17337,7 +17405,7 @@ function startGame(map = lastMap) {
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
     lastMap = map;
-    const setup = id === 'navy' ? (navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
+    const setup = id === 'navy' ? (navyFleet === 'ffa' ? { type: id, teams: navyFfaCount(), size: NAVY_FFA.crew, ships: 1, crew: NAVY_FFA.crew, role: navyRolePick, fleet: 'ffa' } : navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
@@ -17367,7 +17435,8 @@ function startGame(map = lastMap) {
     hud.energyBar.classList.toggle('hidden', !G.survival);
     hud.cells.water.classList.toggle('hidden', !G.survival);
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
-    if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
+    if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
+    else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);

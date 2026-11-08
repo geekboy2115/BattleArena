@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261107s">
+    <link rel="stylesheet" href="style.css?v=20261107t">
 </head>
 
 <body>
@@ -148,7 +148,7 @@
             <div class="cpu-select hidden" id="settings-navy">
                 <div class="cpu-row"><span>Fleet</span>
                     <div class="seg" id="navy-fleet">
-                        <button data-f="big" class="on">Normal</button><button data-f="huge">Huge ship</button><button data-f="mini">Mini ships</button>
+                        <button data-f="big" class="on">Normal</button><button data-f="huge">Huge ship</button><button data-f="mini">Mini ships</button><button data-f="ffa">Free for all</button>
                     </div>
                 </div>
                 <div class="cpu-row"><span>Play as</span>
@@ -173,6 +173,11 @@
                 <div class="cpu-row"><span>Mini ships a side</span><strong id="navy-mini-value">30</strong></div>
                 <input type="range" id="navy-mini" min="1" max="30" step="1" value="30">
                 <div class="cpu-scale"><span>1</span><span>30</span></div>
+                </div>
+                <div id="navy-ffa-opts" class="hidden">
+                <div class="cpu-row"><span>Squads of 15</span><strong id="navy-ffa-value">6</strong></div>
+                <input type="range" id="navy-ffa" min="2" max="12" step="1" value="6">
+                <div class="cpu-scale"><span>2</span><span>12</span></div>
                 </div>
                 <div class="navy-total" id="navy-total"></div>
             </div>
@@ -383,7 +388,7 @@
         </div>
     </div>
 
-    <script src="script.js?v=20261107s"></script>
+    <script src="script.js?v=20261107t"></script>
 </body>
 
 </html>
