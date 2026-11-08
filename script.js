@@ -18563,17 +18563,28 @@ function drawBullets(L, T, R, B) {
             continue;
         }
         if (b.bolt) {
-            // A crackling streak of electricity: a jagged line that flickers into a new shape every frame
-            const sp0 = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / sp0, uy = b.vy / sp0, len = 60, n = 7;
+            // A bullet with electricity trailing behind it: the round in front, a crackling jagged tail that flickers every frame
+            const sp0 = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / sp0, uy = b.vy / sp0, len = 78, n = 8;
             const pts = [];
-            for (let k = 0; k <= n; k++) { const t = k / n, j = k === 0 || k === n ? 0 : rand(-7, 7); pts.push([b.x - ux * len * t - uy * j, b.y - uy * len * t + ux * j]); }
-            ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineJoin = 'miter';
-            for (const [wd, col] of [[9, 'rgba(40,110,255,0.45)'], [4, 'rgba(120,220,255,0.95)'], [1.8, '#ffffff']]) {
-                ctx.strokeStyle = col; ctx.lineWidth = wd; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts) ctx.lineTo(q[0], q[1]); ctx.stroke();
+            for (let k = 0; k <= n; k++) { const t = k / n, j = k === 0 ? 0 : rand(-6, 6) * (0.4 + t); pts.push([b.x - ux * (16 + len * t) - uy * j, b.y - uy * (16 + len * t) + ux * j]); }
+            ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineJoin = 'miter'; ctx.lineCap = 'round';
+            for (const [wd, a0] of [[7, 0.35], [3, 0.85], [1.3, 1]]) {
+                // (fading out toward the end of the tail)
+                for (let k = 0; k < n; k++) {
+                    const f = 1 - k / n;
+                    ctx.strokeStyle = wd === 1.3 ? `rgba(255,255,255,${a0 * f})` : wd === 3 ? `rgba(120,220,255,${a0 * f})` : `rgba(40,110,255,${a0 * f})`;
+                    ctx.lineWidth = wd * (0.5 + f * 0.5);
+                    ctx.beginPath(); ctx.moveTo(pts[k][0], pts[k][1]); ctx.lineTo(pts[k + 1][0], pts[k + 1][1]); ctx.stroke();
+                }
             }
-            // a little fork off the side now and then
-            if (Math.random() < 0.5) { const q = pts[randInt(1, n - 1)], a = Math.atan2(uy, ux) + (Math.random() < 0.5 ? 1 : -1) * rand(0.6, 1.2); ctx.strokeStyle = 'rgba(150,230,255,0.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(q[0] - Math.cos(a) * 12, q[1] - Math.sin(a) * 12); ctx.stroke(); }
+            if (Math.random() < 0.6) { const q = pts[randInt(1, n - 2)], a = Math.atan2(uy, ux) + Math.PI + (Math.random() < 0.5 ? 1 : -1) * rand(0.5, 1.1); ctx.strokeStyle = 'rgba(150,230,255,0.75)'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(q[0] + Math.cos(a) * rand(8, 14), q[1] + Math.sin(a) * rand(8, 14)); ctx.stroke(); }
             ctx.restore();
+            // the bullet itself: the same bright tracer as any other round
+            const hx = b.x - ux * 30, hy = b.y - uy * 30, grad = ctx.createLinearGradient(hx, hy, b.x, b.y);
+            grad.addColorStop(0, 'rgba(255,209,102,0)'); grad.addColorStop(1, 'rgba(255,247,200,1)');
+            ctx.strokeStyle = 'rgba(40,30,20,0.35)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(b.x - ux * 14, b.y - uy * 14); ctx.lineTo(b.x, b.y); ctx.stroke();
+            ctx.strokeStyle = grad; ctx.lineWidth = Math.max(3, 1.5 / G.zoom); ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(b.x, b.y); ctx.stroke();
+            ctx.fillStyle = '#fff7d6'; ctx.beginPath(); ctx.arc(b.x, b.y, 2.4, 0, TAU); ctx.fill();
             continue;
         }
         if (WEAPONS[b.weapon] && WEAPONS[b.weapon].string) {
