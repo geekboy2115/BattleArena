@@ -6537,7 +6537,7 @@ function navyArt(kind, team) {
     g.fillRect(-C.aft * 1.05, -C.beam / 2, Math.max(24, C.len * 0.018), C.beam);
     g.globalAlpha = 1;
     // Steel plates round the turrets
-    for (const [k, lx, ly, r] of C.guns) { const rr = (r || NAVY.guns[k].r) + 12; g.fillStyle = 'rgba(70,74,80,0.65)'; g.beginPath(); g.arc(lx, ly, rr, 0, TAU); g.fill(); }
+    for (const [k, lx, ly, r, room] of C.guns) { if (room) continue; const rr = (r || NAVY.guns[k].r) + 12; g.fillStyle = 'rgba(70,74,80,0.65)'; g.beginPath(); g.arc(lx, ly, rr, 0, TAU); g.fill(); }
     g.restore();
     // Rail posts
     g.fillStyle = '#d7dde2';
@@ -6868,7 +6868,7 @@ function drawNavyPreview(g, W, H, now) {
         const art = navyArt(kind, team);
         g.save(); g.translate(x, y); g.rotate(a); g.scale(k, k); g.drawImage(art, -art.width / 2, -art.height / 2);
         const C = NAVY.ships[kind];
-        for (const [gk, lx, ly, r] of C.guns) if (gk !== 'mg') { const rr = r || NAVY.guns[gk].r; g.fillStyle = '#3c4249'; g.fillRect(lx, ly - 18, rr * 2.4, 36); g.fillStyle = '#5d6670'; g.beginPath(); g.arc(lx, ly, rr, 0, TAU); g.fill(); }
+        for (const [gk, lx, ly, r, room] of C.guns) if (gk !== 'mg' && !room) { const rr = r || NAVY.guns[gk].r; g.fillStyle = '#3c4249'; g.fillRect(lx, ly - 18, rr * 2.4, 36); g.fillStyle = '#5d6670'; g.beginPath(); g.arc(lx, ly, rr, 0, TAU); g.fill(); }
         g.restore();
     };
     draw('battleship', 0, W * 0.42, H * 0.68, -0.08, 0.24);
