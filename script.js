@@ -581,6 +581,7 @@ function playerAction(p, code) {
     if (code === 'KeyF') {
         // F: launch the boss strike, get out of the car, pick up what's at your feet, or get into a car nearby
         // (up on the castle walkway, the only thing to get into is a corner gun)
+        if (G.prop && p.prop) { propChange(p); return; }
         if (G.navy && navyUse(p)) return;
         if (tryLaunchStrike(p)) return;
         if (nearOwnPad(p)) { if (p.remote) loadAllAmmo(p); else openStrikeLoad(p); return; }
@@ -4646,7 +4647,7 @@ function newState(mode, setup) {
     const zombies = setup.type === 'zombies', chase = setup.type === 'chase', escape = setup.type === 'escape' || chase, survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', bossFight = setup.type === 'boss';
-    const ghostMode = setup.type === 'ghost', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
+    const ghostMode = setup.type === 'ghost', propHunt = setup.type === 'prop', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution || navy ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4656,7 +4657,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, prop: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && (setup.type === 'survival' || setup.type === 'chase'), dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4708,7 +4709,7 @@ function newState(mode, setup) {
     // (no red zone at all in Survival)
     if (G.noZone || revolution || survival || navy) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Ghost is played in one fixed circle in the middle of the map
-    const arena = ghostMode ? GHOST.arena : 0;
+    const arena = ghostMode ? GHOST.arena : propHunt ? PROP.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
     // (the haunted house has its iron fence instead)
     if (G.world.terrain === 'haunted') Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
@@ -4716,7 +4717,7 @@ function newState(mode, setup) {
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
-    const noLoot = duel || navy;
+    const noLoot = duel || navy || propHunt;
     if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
@@ -4742,7 +4743,7 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !duel && !navy && !chase) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !propHunt && !duel && !navy && !chase) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (navy) setupNavy(setup);
     else if (war) {
@@ -4772,6 +4773,7 @@ function newState(mode, setup) {
     if (bossFight) setupBossFight();
     if (duel) setupDuel();
     if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
+    if (propHunt) setupProp(setup);
     G.alive = G.fighters.length;
 }
 
@@ -4907,6 +4909,337 @@ function drawGhostSteps(camX, camY, zoom) {
         ctx.restore();
     }
     ctx.restore();
+}
+
+// ---------- Prop Hunt ----------
+// The hiders turn into barrels, crates, bushes and the like, hidden among hundreds of real ones. The seekers wait blindfolded
+// while the props hide, then have three minutes to find them. Every shot at a real prop costs a seeker health, and a hit on
+// a hider gives some back. A hider who's found joins the seekers. Every so often each hider lets out a little whistle.
+const PROP = { arena: 1700, hide: 30000, seek: 180000, decoys: 380, miss: 4, change: 160, taunt: [18000, 26000], maxPlayers: 60, color: '#ff8a3d' };
+const PROP_KINDS = {
+    barrel: { name: 'Barrel', r: 17 }, crate: { name: 'Crate', r: 19 }, bush: { name: 'Bush', r: 21 }, rock: { name: 'Rock', r: 19 },
+    bin: { name: 'Trash Can', r: 16 }, cone: { name: 'Traffic Cone', r: 14 }, tires: { name: 'Tire Stack', r: 18 }, pot: { name: 'Plant Pot', r: 15 },
+    hay: { name: 'Hay Bale', r: 20 }, tv: { name: 'Old TV', r: 16 }
+};
+const PROP_LIST = Object.keys(PROP_KINDS);
+let propRolePick = 'hider';
+const propKindOf = o => o.prop || o.kind;
+function setPropKind(f, kind, v, a) { f.prop = kind; f.propVar = v; f.propA = a; f.r = PROP_KINDS[kind].r; }
+function makeSeeker(f) {
+    f.prop = null; f.seeker = true; f.team = 1; f.r = CONFIG.RADIUS;
+    f.color = PROP.color; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
+    f.inv = [null, null]; f.slot = 0;
+    applyLoot(f, pick(['Assault Rifle', 'Mac10', 'Machine Gun']), -1);
+    f.hp = f.maxHp = CONFIG.MAX_HEALTH; f.armor = 0;
+    f.checked = new Map(); f.mode = 'wander'; f.target = null; f.goal = null;
+}
+// Fill the circle with real props, in little clumps of one or two kinds (that's where a hider blends in best)
+function propPlaceDecoys() {
+    const P = G.prop, c = CONFIG.WORLD_SIZE / 2, R = PROP.arena - 140;
+    const crowded = (x, y, r) => { let hit = false; P.dgrid.query(x, y, 60, d => { if (!hit && Math.hypot(d.x - x, d.y - y) < d.r + r + 6) hit = true; }); return hit; };
+    for (let k = 0; k < 3000 && P.decoys.length < PROP.decoys; k++) {
+        const a = rand(0, TAU), dd = Math.sqrt(Math.random()) * R, cx = c + Math.cos(a) * dd, cy = c + Math.sin(a) * dd;
+        const kinds = [pick(PROP_LIST)]; if (Math.random() < 0.5) kinds.push(pick(PROP_LIST));
+        const m = randInt(1, 5);
+        for (let i = 0; i < m; i++) {
+            const x = cx + rand(-120, 120), y = cy + rand(-120, 120), kind = pick(kinds), r = PROP_KINDS[kind].r;
+            if (Math.hypot(x - c, y - c) > R || blockedAt(G.world.grid, x, y, r + 4) || crowded(x, y, r)) continue;
+            const d = { x, y, kind, r, v: Math.random(), a: rand(0, TAU), dead: false };
+            P.decoys.push(d); P.dgrid.insert(d);
+        }
+    }
+}
+// A free spot right beside a prop, to hide next to it looking just like it
+function propSpotBy(d) {
+    for (let t = 0; t < 12; t++) {
+        const a = rand(0, TAU), k = rand(d.r * 2 + 6, d.r * 2 + 40), x = d.x + Math.cos(a) * k, y = d.y + Math.sin(a) * k;
+        if (!blockedAt(G.world.grid, x, y, 24) && Math.hypot(x - CONFIG.WORLD_SIZE / 2, y - CONFIG.WORLD_SIZE / 2) < PROP.arena - 120) return { x, y };
+    }
+    return null;
+}
+function setupProp(setup) {
+    const W = CONFIG.WORLD_SIZE, c = W / 2;
+    G.prop = { phase: G.mode === 'playing' ? 'hide' : 'seek', seekAt: G.mode === 'playing' ? PROP.hide : 0, decoys: [], dgrid: new Grid(128, 0) };
+    propPlaceDecoys();
+    placeInArena(PROP.arena, 300);
+    const all = G.fighters.slice(), p = G.player;
+    const nSeek = clamp(Math.round(all.length * 0.25), 1, Math.max(1, all.length - 1));
+    const others = all.filter(f => f !== p).sort(() => Math.random() - 0.5);
+    const seekers = p && setup.role === 'seeker' ? [p, ...others.slice(0, nSeek - 1)] : others.slice(0, nSeek);
+    for (const f of all) {
+        if (seekers.includes(f)) {
+            makeSeeker(f);
+            // (the seekers start together in the middle)
+            for (let t = 0; t < 30; t++) { const x = c + rand(-140, 140), y = c + rand(-140, 140); if (!blockedAt(G.world.grid, x, y, 26)) { f.x = x; f.y = y; break; } }
+        } else {
+            f.team = 0; f.seeker = false; f.inv = [null, null];
+            const d = pick(G.prop.decoys);
+            if (d) setPropKind(f, d.kind, d.v, rand(0, TAU)); else setPropKind(f, pick(PROP_LIST), Math.random(), rand(0, TAU));
+            // (hiders start well away from the seekers)
+            if (Math.hypot(f.x - c, f.y - c) < 500) { const a = rand(0, TAU), k = rand(600, PROP.arena - 200); const x = c + Math.cos(a) * k, y = c + Math.sin(a) * k; if (!blockedAt(G.world.grid, x, y, 26)) { f.x = x; f.y = y; } }
+            f.nextTaunt = G.prop.seekAt + rand(...PROP.taunt);
+        }
+    }
+    if (p) { G.cam.x = p.x; G.cam.y = p.y; }
+}
+// Change into the closest prop you're next to (or, with none close, the next kind of prop)
+function propChange(f) {
+    if (!f.prop) return;
+    const best = propNear(f);
+    if (best) setPropKind(f, best.kind, best.v, rand(0, TAU));
+    else { const i = PROP_LIST.indexOf(f.prop); setPropKind(f, PROP_LIST[(i + 1) % PROP_LIST.length], Math.random(), rand(0, TAU)); }
+    if (inView(f.x, f.y, 60)) burst(f.x, f.y, 10, '#fff7ec', 120, 'smoke');
+    Sound.tone(660, 0.08, 'sine', 0.05 * Sound.volAt(f.x, f.y), 990);
+}
+function propNear(f) {
+    let best = null, bd = PROP.change;
+    G.prop.dgrid.query(f.x, f.y, PROP.change, d => {
+        if (d.dead || (d.kind === f.prop && d.v === f.propVar)) return;
+        const k = dist(f, d); if (k < bd) { bd = k; best = d; }
+    });
+    return best;
+}
+// A shot that hits a real prop knocks bits off it, and costs the seeker who fired it
+function propBulletHit(b) {
+    let hit = null;
+    G.prop.dgrid.query(b.x, b.y, 30, d => { if (!hit && !d.dead && (b.x - d.x) ** 2 + (b.y - d.y) ** 2 < (d.r + 2) ** 2) hit = d; });
+    if (!hit) return false;
+    // (real props can't be shot to bits: they just chip)
+    if (inView(hit.x, hit.y, 60)) burst(b.x, b.y, 5, '#d9c7a3', 150);
+    const o = b.owner;
+    if (o && o.seeker && !o.dead && G.prop.phase === 'seek') {
+        // (at most a few health a second, however fast the gun fires)
+        if (G.time - (o.missAt || -1e9) > 300) { o.missAt = G.time; damage(o, PROP.miss, null, 'wrong prop'); if (o.isPlayer) addFloat(o.x, o.y - 34, `WRONG PROP -${PROP.miss}`, '#ff4f6d'); }
+    }
+    return true;
+}
+// A hider's been found: they come out and join the seekers
+function propFound(t, killer) {
+    if (killer && killer !== t) killer.kills++;
+    if (inView(t.x, t.y, 100)) { burst(t.x, t.y, 24, '#ffd166', 240, 'glow'); G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 60, color: '#ffd166' }); }
+    if (G.mode !== 'demo') addKillfeed(t, killer, 'found');
+    t.wasHider = true;
+    makeSeeker(t);
+    t.protectUntil = G.time + 1500;
+    if (t.isPlayer && G.mode === 'playing') { showBanner('FOUND!', true, "You're a seeker now. Help find the rest of the props!"); G.flash = 0.4; G.flashColor = '255,209,102'; Sound.death(); }
+}
+function updateProp(dt) {
+    const P = G.prop, p = G.player;
+    if (P.phase === 'hide' && G.time >= P.seekAt) {
+        P.phase = 'seek';
+        if (G.mode === 'playing') { showBanner('READY OR NOT!', true, p && p.prop ? 'The seekers are coming. Stay still!' : 'Find the props. Watch for anything that moves!'); Sound.tone(520, 0.5, 'square', 0.08, 260); }
+    }
+    for (const f of G.fighters) {
+        if (f.dead) continue;
+        if (f.seeker) { const w = held(f); if (f.ammo[w] !== undefined) f.ammo[w] = 9999; }
+        else if (f.prop && P.phase === 'seek' && G.time >= f.nextTaunt) {
+            // The whistle: you can hear roughly where it came from
+            f.nextTaunt = G.time + rand(...PROP.taunt);
+            Sound.tone(rand(900, 1400), 0.28, 'sine', 0.1 * Sound.volAt(f.x, f.y), rand(600, 1800));
+            if (inView(f.x, f.y, 100)) addFloat(f.x + rand(-60, 60), f.y - 30 + rand(-40, 40), '♪', '#fff7ec');
+            G.fgrid.query(f.x, f.y, 900, s => { if (s.seeker && !s.dead && !s.isPlayer) s.heard = { x: f.x + rand(-130, 130), y: f.y + rand(-130, 130), t: G.time }; });
+        }
+    }
+    const hiders = G.fighters.filter(f => !f.dead && f.prop).length, seekers = G.fighters.filter(f => !f.dead && f.seeker).length;
+    if (G.mode === 'demo') {
+        // (the title screen's game starts over once everyone's found)
+        if (!hiders || G.time > P.seekAt + PROP.seek) { P.seekAt = G.time; for (const f of G.fighters) if (!f.dead && Math.random() < 0.7) { const d = pick(P.decoys.filter(q => !q.dead)); if (d) { const s = propSpotBy(d); if (s) { f.x = s.x; f.y = s.y; } f.seeker = false; f.team = 0; setPropKind(f, d.kind, d.v, rand(0, TAU)); f.mode = 'rest'; } } }
+        return;
+    }
+    if (G.mode !== 'playing' || G.result || !p) return;
+    let won = null, title, sub;
+    if (!hiders) { won = !!p.seeker && !p.wasHider; title = won ? 'ALL PROPS FOUND!' : 'EVERY PROP WAS FOUND'; sub = p.wasHider ? 'You were found, and so was everyone else.' : 'Not one prop got away.'; }
+    else if (!seekers) { won = !!p.prop; title = 'THE PROPS WIN'; sub = 'Every seeker shot too many wrong props.'; }
+    else if (G.time >= P.seekAt + PROP.seek) { won = !!p.prop; title = won ? 'YOU STAYED HIDDEN!' : 'THE PROPS WIN'; sub = `${hiders} prop${hiders === 1 ? '' : 's'} never got found.`; }
+    if (won === null) return;
+    if (!won && p.dead) return;
+    G.result = { won, place: won ? 1 : 2, title, sub };
+    G.overAt = G.time + 2400;
+    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
+}
+function propBot(b) {
+    if (b.seeker) propSeekerBot(b);
+    else if (b.prop) propHiderBot(b);
+    else { b.nextThink = G.time + 500; b.mode = 'rest'; }
+}
+// Hiders: go and stand beside a prop looking just like it, and keep still. Get shot (or shot at) and run for another spot.
+function propHiderBot(b) {
+    const P = G.prop;
+    b.nextThink = G.time + rand(200, 350);
+    if (b.hideAt && b.mode === 'zone') {
+        if (dist(b, b.goal) < 18) { setPropKind(b, b.hideAt.kind, b.hideAt.v, rand(0, TAU)); b.hideAt = null; b.mode = 'rest'; }
+        return;
+    }
+    let panic = G.time - b.lastHurt < 1500, threat = null, td = 1e9;
+    G.fgrid.query(b.x, b.y, 450, s => {
+        if (s.dead || !s.seeker) return;
+        const d = dist(b, s); if (d < td) { td = d; threat = s; }
+        if (s.target === b && s.mode === 'fight') panic = true;
+    });
+    const first = !b.hidSpot;
+    if (!panic && !first) { b.mode = 'rest'; return; }
+    // A new place: beside a real prop, away from whoever's after me
+    let best = null, bs = -Infinity;
+    for (let i = 0; i < 14; i++) {
+        const d = pick(P.decoys); if (!d || d.dead) continue;
+        const k = dist(b, d); if (k > (first ? 2500 : 900) || k < 100) continue;
+        const score = (threat ? Math.min(700, dist(d, threat)) : 0) - k * 0.3 + rand(0, 200);
+        if (score > bs) { bs = score; best = d; }
+    }
+    const s = best && propSpotBy(best);
+    if (!s) { b.mode = 'rest'; return; }
+    b.hidSpot = true; b.hideAt = best; b.mode = 'zone'; b.goal = s;
+}
+// Seekers: hunt down anything seen moving, follow the whistles, and test-fire at props that look out of place
+function propSeekerBot(b) {
+    const P = G.prop;
+    b.nextThink = G.time + rand(180, 320);
+    if (!b.checked) b.checked = new Map();
+    if (P.phase === 'hide') { b.mode = 'rest'; return; }
+    const t = b.target && !b.target.dead && b.target.prop ? b.target : null;
+    if (t) {
+        const d = dist(b, t), los = d < 750 && lineOfSight(b, t);
+        if (los) { b.lastSeen = G.time; b.lastSpot = { x: t.x, y: t.y }; }
+        if (los || G.time - b.lastSeen < 2500) { b.mode = 'fight'; b.hasLOS = los; return; }
+    }
+    b.target = null;
+    // A prop that moves is no prop
+    let mover = null, md = 650;
+    G.fgrid.query(b.x, b.y, 650, f => {
+        if (f.dead || !f.prop || Math.hypot(f.vx, f.vy) < 25) return;
+        const d = dist(b, f); if (d < md && Math.random() < 0.75 && lineOfSight(b, f)) { md = d; mover = f; }
+    });
+    if (mover) { b.target = mover; b.mode = 'fight'; b.hasLOS = true; b.lastSeen = G.time; b.engageAt = G.time + rand(200, 420); return; }
+    if (b.mode === 'propshoot' && b.goal && !b.goal.dead && !b.goal.seeker && G.time < b.shootUntil) return;
+    // Test a prop close by: the odd one out (no others like it round it) is the most suspicious
+    if (b.hp > 55 || Math.random() < 0.08) {
+        const cands = [];
+        const add = c => {
+            if (dist(b, c) > 320 || (b.checked.get(c) || -1e9) > G.time - 60000) return;
+            const kind = propKindOf(c); let same = 0;
+            P.dgrid.query(c.x, c.y, 220, d => { if (d !== c && !d.dead && d.kind === kind) same++; });
+            cands.push([c, same ? 1 : 3]);
+        };
+        P.dgrid.query(b.x, b.y, 320, d => { if (!d.dead) add(d); });
+        G.fgrid.query(b.x, b.y, 320, f => { if (!f.dead && f.prop) add(f); });
+        if (cands.length && Math.random() < 0.2) {
+            let sum = 0; for (const c of cands) sum += c[1];
+            let r = Math.random() * sum, c = cands[0][0];
+            for (const q of cands) { r -= q[1]; if (r <= 0) { c = q[0]; break; } }
+            b.checked.set(c, G.time);
+            if (lineOfSight(b, c)) { b.mode = 'propshoot'; b.goal = c; b.shootUntil = G.time + rand(300, 600); return; }
+        }
+    }
+    if (b.heard && G.time - b.heard.t < 8000 && dist(b, b.heard) > 120) { b.mode = 'zone'; b.goal = { x: b.heard.x, y: b.heard.y }; return; }
+    strollArena(b);
+}
+// The props, drawn the same whether they're real or someone hiding
+function drawPropShape(g, x, y, kind, v, a, me) {
+    const r = PROP_KINDS[kind].r;
+    g.save(); g.translate(x, y);
+    if (!lowDetail) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(3, 5, r, r * 0.85, 0, 0, TAU); g.fill(); }
+    g.rotate(a);
+    const circ = (rr, col, ox = 0, oy = 0) => { g.fillStyle = col; g.beginPath(); g.arc(ox, oy, rr, 0, TAU); g.fill(); };
+    switch (kind) {
+        case 'barrel': {
+            const col = ['#b8342c', '#2f6fb3', '#3f8a45', '#c98a1e'][Math.floor(v * 4)];
+            circ(r, shade(col, -0.35)); circ(r - 2.5, col);
+            g.strokeStyle = shade(col, -0.3); g.lineWidth = 2; g.beginPath(); g.arc(0, 0, r * 0.62, 0, TAU); g.stroke();
+            circ(2.5, shade(col, -0.5), r * 0.35, -r * 0.2); circ(r * 0.3, 'rgba(255,255,255,0.18)', -r * 0.35, -r * 0.35);
+            break;
+        }
+        case 'crate': {
+            const s = r * 0.92;
+            g.fillStyle = '#7a5230'; g.fillRect(-s, -s, 2 * s, 2 * s);
+            g.fillStyle = v < 0.5 ? '#c48a4e' : '#b37a40'; g.fillRect(-s + 2.5, -s + 2.5, 2 * s - 5, 2 * s - 5);
+            g.strokeStyle = '#7a5230'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(-s + 3, -s + 3); g.lineTo(s - 3, s - 3); g.moveTo(s - 3, -s + 3); g.lineTo(-s + 3, s - 3); g.stroke();
+            break;
+        }
+        case 'bush': {
+            const col = v < 0.5 ? '#3f7d3a' : '#4d8f3f';
+            circ(r, shade(col, -0.3));
+            for (let i = 0; i < 6; i++) { const q = i / 6 * TAU + v * 3; circ(r * 0.45, col, Math.cos(q) * r * 0.48, Math.sin(q) * r * 0.48); }
+            circ(r * 0.5, shade(col, 0.12)); circ(r * 0.22, 'rgba(255,255,255,0.12)', -r * 0.25, -r * 0.25);
+            break;
+        }
+        case 'rock': {
+            const col = v < 0.5 ? '#8d939c' : '#7d8189';
+            g.fillStyle = shade(col, -0.3); g.beginPath();
+            for (let i = 0; i < 8; i++) { const q = i / 8 * TAU, k = r * (0.82 + 0.18 * Math.sin(i * 2.7 + v * 20)); g.lineTo(Math.cos(q) * k, Math.sin(q) * k); }
+            g.closePath(); g.fill();
+            g.fillStyle = col; g.beginPath();
+            for (let i = 0; i < 8; i++) { const q = i / 8 * TAU, k = r * (0.82 + 0.18 * Math.sin(i * 2.7 + v * 20)) - 3; g.lineTo(Math.cos(q) * k, Math.sin(q) * k); }
+            g.closePath(); g.fill();
+            circ(r * 0.3, 'rgba(255,255,255,0.16)', -r * 0.25, -r * 0.3);
+            break;
+        }
+        case 'bin': {
+            const col = v < 0.5 ? '#3b5d45' : '#55606b';
+            circ(r, shade(col, -0.35)); circ(r - 2.5, col);
+            g.strokeStyle = shade(col, -0.4); g.lineWidth = 1.5;
+            for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(0, 0, r * (0.25 + i * 0.17), 0, TAU); g.stroke(); }
+            g.fillStyle = shade(col, -0.5); g.fillRect(-r * 0.45, -2, r * 0.9, 4);
+            break;
+        }
+        case 'cone': {
+            g.fillStyle = '#2b2b2b'; g.fillRect(-r, -r, 2 * r, 2 * r);
+            circ(r * 0.85, '#ff7a1a'); circ(r * 0.6, '#f4f1ea'); circ(r * 0.42, '#ff7a1a'); circ(r * 0.16, '#ffb070');
+            break;
+        }
+        case 'tires': {
+            for (const [ox, oy] of [[-3, 3], [2, -2]]) { circ(r - 2, '#1c1c1f', ox, oy); circ(r - 6, '#2c2c31', ox, oy); circ(r * 0.42, '#0e0e10', ox, oy); }
+            break;
+        }
+        case 'pot': {
+            circ(r, '#8e4a2a'); circ(r - 3, '#b9653a'); circ(r - 5, '#4a3424');
+            g.fillStyle = v < 0.5 ? '#5aa04a' : '#7bbf4e';
+            for (let i = 0; i < 5; i++) { const q = i / 5 * TAU + v * 6; g.beginPath(); g.ellipse(Math.cos(q) * r * 0.45, Math.sin(q) * r * 0.45, r * 0.5, r * 0.2, q, 0, TAU); g.fill(); }
+            break;
+        }
+        case 'hay': {
+            const w = r * 1.15, h = r * 0.8;
+            g.fillStyle = '#a8862e'; roundRect(g, -w, -h, 2 * w, 2 * h, 6); g.fill();
+            g.fillStyle = v < 0.5 ? '#e0bf55' : '#d6b048'; roundRect(g, -w + 2.5, -h + 2.5, 2 * w - 5, 2 * h - 5, 5); g.fill();
+            g.strokeStyle = '#a8862e'; g.lineWidth = 1.2;
+            for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(-w + 4, i * h * 0.3); g.lineTo(w - 4, i * h * 0.3 + 1); g.stroke(); }
+            g.strokeStyle = '#7a5a1e'; g.lineWidth = 2; g.beginPath(); g.moveTo(-w * 0.4, -h); g.lineTo(-w * 0.4, h); g.moveTo(w * 0.4, -h); g.lineTo(w * 0.4, h); g.stroke();
+            break;
+        }
+        case 'tv': {
+            const s = r * 0.95;
+            g.fillStyle = v < 0.5 ? '#4b4038' : '#3a3d44'; roundRect(g, -s, -s * 0.85, 2 * s, 1.7 * s, 4); g.fill();
+            g.fillStyle = '#1a2a38'; roundRect(g, -s * 0.75, -s * 0.62, s * 1.2, s * 1.24, 3); g.fill();
+            g.fillStyle = 'rgba(160,210,255,0.18)'; g.fillRect(-s * 0.68, -s * 0.55, s * 0.4, s * 0.3);
+            circ(2.2, '#c9b38a', s * 0.72, -s * 0.3); circ(2.2, '#c9b38a', s * 0.72, s * 0.2);
+            break;
+        }
+    }
+    g.restore();
+    if (me) {
+        // (so you can tell which one is you)
+        g.save(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2; g.setLineDash([5, 5]);
+        g.beginPath(); g.arc(x, y, r + 8, 0, TAU); g.stroke(); g.restore();
+    }
+}
+function drawPropDecoys(L, T, R, B) {
+    for (const d of G.prop.decoys) if (!d.dead && d.x > L - 40 && d.x < R + 40 && d.y > T - 40 && d.y < B + 40) drawPropShape(ctx, d.x, d.y, d.kind, d.v, d.a, false);
+}
+// Seekers can't see a thing while the props hide
+function drawPropBlindfold() {
+    const P = G.prop, p = G.player;
+    if (!P || P.phase !== 'hide' || !p || !p.seeker || G.mode !== 'playing') return;
+    ctx.fillStyle = 'rgba(8,6,14,0.97)'; ctx.fillRect(0, 0, viewW, viewH);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd166'; ctx.font = '900 34px "Black Ops One", sans-serif';
+    ctx.fillText('THE PROPS ARE HIDING', viewW / 2, viewH / 2 - 30);
+    ctx.fillStyle = '#fff7ec'; ctx.font = '800 56px Rajdhani, sans-serif';
+    ctx.fillText(String(Math.max(0, Math.ceil((P.seekAt - G.time) / 1000))), viewW / 2, viewH / 2 + 30);
+}
+function propStatus(p) {
+    const P = G.prop, n = G.fighters.filter(f => !f.dead && f.prop).length;
+    if (P.phase === 'hide') return p.seeker ? 'Blindfolded while the props hide' : `Hide! Seekers come out in ${Math.max(0, Math.ceil((P.seekAt - G.time) / 1000))}s`;
+    const left = fmtTime(Math.max(0, (P.seekAt + PROP.seek - G.time) / 1000));
+    return p.prop ? `Stay hidden · ${left} left · ${n} prop${n === 1 ? '' : 's'} left` : `Find the props · ${left} · ${n} left · wrong shots hurt you`;
 }
 
 // ---------- Sniper Duel ----------
@@ -8753,6 +9086,12 @@ function newDemo() {
         G.cam.x = G.bossF.x; G.cam.y = G.bossF.y;
         return;
     }
+    if (id === 'prop') {
+        newState('demo', { type: 'prop', count: 24, map: 'ordinary' });
+        G.alive = G.fighters.length;
+        G.cam.x = c; G.cam.y = c;
+        return;
+    }
     if (id === 'escape' || id === 'chase') {
         // A small breakout: the people in the middle, soldiers around them, pads at the arena edge
         newState('demo', { type: 'escape', count: 0 });
@@ -9107,7 +9446,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.ghostMode || G.duel || G.navy) return;
+    if (G.ghostMode || G.prop || G.duel || G.navy) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -9345,6 +9684,7 @@ function canShoot(f) {
 
 function tryAttack(f) {
     if (f.downed) return;
+    if (G.prop && (f.prop || (f.seeker && G.prop.phase === 'hide'))) return;  // (props can't shoot; seekers wait)
     if (f.cook || stunned(f) || f.car) return;
     const name = held(f), w = WEAPONS[name];
     if (G.time - f.lastShot < w.rate) return;
@@ -9871,6 +10211,8 @@ function damage(t, amount, attacker, weapon) {
         dmg -= absorb;
     }
     t.hp -= dmg;
+    // (Prop Hunt: a hit on a real hider gives the seeker some health back, and the hider runs)
+    if (G.prop && t.prop) { if (attacker && attacker.seeker) attacker.hp = Math.min(attacker.maxHp, attacker.hp + dmg * 0.3); t.nextThink = G.time; }
     t.hitFlash = 1;
     t.resting = false;
     t.lastHurt = G.time;
@@ -9885,7 +10227,7 @@ function damage(t, amount, attacker, weapon) {
         Sound.hurt();
     }
     // Bots fight back against whoever hit them
-    if (!t.isPlayer && attacker && attacker !== t && !attacker.dead) {
+    if (!t.isPlayer && attacker && attacker !== t && !attacker.dead && !t.prop) {
         if (t.target !== attacker) t.engageAt = G.time + (t.boss ? rand(30, 80) : rand(150, 350));
         t.target = attacker;
         t.mode = 'fight';
@@ -9918,6 +10260,7 @@ function killFighter(t, killer, weapon) {
         }
         return;
     }
+    if (G.prop && t.prop) { propFound(t, killer); return; }
     if (t.decoy) { t.dead = true; burst(t.x, t.y, 20, '#ffd166', 220, 'glow'); if (killer && killer.isPlayer === false) killer.target = null; return; }
     // Team modes: you go down first, and a teammate has a chance to get you back up
     if (G.war && !G.revolution && !G.navy && !t.downed && !t.finishing && !t.vaporized && weapon !== 'zone' && weapon !== 'Collapse' && G.fighters.some(f => f !== t && !f.dead && !f.downed && f.team === t.team)) { goDown(t, killer, weapon); return; }
@@ -9950,7 +10293,7 @@ function killFighter(t, killer, weapon) {
         G.flashColor = '255,40,70';
         canvas.classList.add('dead');
         Sound.death();
-    } else if (G.player && !G.player.dead && G.alive === 1 && !G.noZone) {
+    } else if (G.player && !G.player.dead && G.alive === 1 && !G.noZone && !G.prop) {
         G.result = { won: true, place: 1 };
         G.overAt = G.time + 2200;
         startVictory();
@@ -10278,6 +10621,7 @@ function updatePlayer(p, dt) {
     if (I === LOCAL_INPUT && TOUCH.move.on) { mx = TOUCH.move.x; my = TOUCH.move.y; len = 1; }
     // Driving: the car handles the controls (see updateCars)
     if (p.car) return;
+    if (G.prop && p.seeker && G.prop.phase === 'hide') { p.vx = p.vy = 0; return; }
     if (G.navy && navyPlayer(p, I, mx, my, dt)) return;
     autoPickup(p);
     // Survival: frozen on the platform until the countdown ends; resting until you move
@@ -10401,6 +10745,7 @@ function botThink(b) {
     if (b.zombie) { zombieThink(b); return; }
     if (G.duel && b.duel) { duelThink(b); return; }
     if (G.ghostMode && b.ghost) { ghostBot(b); return; }
+    if (G.prop) { propBot(b); return; }
     const K = AIK();
     b.nextThink = G.time + (b.boss ? rand(90, 160) : rand(220, 480) * K.think);
     // Escape: the group follows you (or, on the title screen, whoever's in front)
@@ -10839,6 +11184,19 @@ function updateBot(b, dt) {
             const inRange = d < w.range + (w.melee ? t.r : 0);
             const unseen = t.ghost && !ghostSeen(t) && d > 60;  // (the ghost vanished again: hold fire)
             if (b.hasLOS && !unseen && G.time > b.engageAt && inRange && Math.abs(angleDiff(b.angle, want)) < 0.3) tryAttack(b);
+            break;
+        }
+        case 'propshoot': {
+            // Prop Hunt: test-firing at a prop that might be someone
+            const o = b.goal;
+            if (!o || o.dead || o.seeker || G.time > b.shootUntil) { b.mode = 'wander'; b.nextThink = G.time; break; }
+            const d = dist(b, o);
+            if (d > 230) { const wp = routeTo(b, o.x, o.y); dx = wp.x - b.x; dy = wp.y - b.y; b.shootUntil += dt * 1000; }
+            const want = Math.atan2(o.y - b.y, o.x - b.x);
+            b.angle += angleDiff(b.angle, want) * Math.min(1, dt * 10);
+            faceMove = false;
+            if (d < 320 && Math.abs(angleDiff(b.angle, want)) < 0.15) tryAttack(b);
+            if (o.prop && G.time - o.lastHurt < 250) { b.mode = 'fight'; b.target = o; b.hasLOS = true; b.lastSeen = G.time; }
             break;
         }
         case 'box': {
@@ -15827,6 +16185,7 @@ function updateBullets(dt) {
                 const rr = f.r + 3;
                 if ((b.x - f.x) ** 2 + (b.y - f.y) ** 2 < rr * rr) hit = f;
             });
+            if (!hit && G.prop && propBulletHit(b)) { b.dead = true; break; }
             if (!hit && G.traffic.length && !G.world.floor && bulletHitsCar(b)) { b.dead = true; break; }
             if (!hit && G.world.cars && !b.torpedo && bulletHitsDrivenCar(b)) { b.dead = true; break; }
             if (!hit && G.drones && G.drones.length && bulletHitsDrone(b)) { b.dead = true; break; }
@@ -15892,6 +16251,7 @@ function update(dt) {
     if (G.war && G.time >= G.war.nextCenter) updateTeamCenters();
     if (G.noZone) updateOutbreak(dt);
     if (G.ghostMode) updateGhost(dt);
+    if (G.prop) updateProp(dt);
     if (G.duel) updateDuel(dt);
     if (G.world.maze && G.escape && G.mode === 'playing') updateMazeFog();
     if (G.survival) { if (!G.frozen && !G.world.floor) updateAnimals(dt); updateCountdown(); }
@@ -16163,6 +16523,7 @@ function render() {
     if (G.navy) drawNavy(L, T, R, B, now);
     if (G.navy) drawNavyInterior(L, T, R, B, now);
     if (G.chase) { drawChaseLights(); drawChaseScans(now); }
+    if (G.prop) drawPropDecoys(L, T, R, B);
     // Fighters
     const visible = [];
     const deckOf = f => (f && f.room && f.ship ? f.ship : null), myDeck = G.player ? G.player.room || null : null, myShip = deckOf(G.player);
@@ -16266,6 +16627,7 @@ function render() {
         const a = Math.min(1, G.hurt * 0.8 + low);
         if (a > 0.01) { ctx.globalAlpha = a; ctx.drawImage(hurtVignette, 0, 0, viewW, viewH); ctx.globalAlpha = 1; }
     }
+    if (G.prop) drawPropBlindfold();
     if (G.whiteout > 0.01) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, G.whiteout * 1.6)})`; ctx.fillRect(0, 0, viewW, viewH); }
     if (G.flash > 0.01) {
         ctx.fillStyle = `rgba(${G.flashColor},${G.flash * 0.6})`;
@@ -17308,6 +17670,7 @@ function playerGlow(x, y, r) {
 
 function drawFighter(f) {
     if (f.duelOut) return;
+    if (f.prop) { drawPropShape(ctx, f.x, f.y, f.prop, f.propVar, f.propA, f === G.player); return; }
     if (f.downed) { drawDowned(f); return; }
     // (the boss is drawn as a normal fighter blown up to giant size, gun and all)
     const gk = f.giant ? f.r / CONFIG.RADIUS : 1, r = f.giant ? CONFIG.RADIUS : f.r;
@@ -17488,6 +17851,7 @@ function drawOverhead(f) {
     const p = G.player;
     if (f.duelOut) return;
     if (f.ghost && f !== p && !ghostSeen(f)) return;
+    if (f.prop) return;
     if (f.hidden && p && !p.dead && f !== p && foe(p, f) && dist(f, p) > CONFIG.HIDDEN_SIGHT) return;
     if (f.healing) {
         const t = (G.time - f.healing.start) / (f.healing.end - f.healing.start);
@@ -17879,6 +18243,10 @@ function updateHUD() {
     } else if (G.war) {
         setHTML(hud.teamScore, 'teams', G.teamAlive.map((n, t) =>
             `<div class="ts${t === p.team ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${n}</b><span>${t === p.team ? 'Your team' : TEAMS[t].name}</span></div>`).join('<em>vs</em>'));
+    } else if (G.prop) {
+        const h = G.fighters.filter(f => !f.dead && f.prop).length, sk = G.fighters.filter(f => !f.dead && f.seeker).length;
+        const chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
+        setHTML(hud.teamScore, 'teams', chip(h, '#d9a066', 'Props', !!p.prop) + '<em>vs</em>' + chip(sk, PROP.color, 'Seekers', !!p.seeker));
     } else if (G.noZone) {
         const { a, b } = G.sides;
         const chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
@@ -17893,6 +18261,7 @@ function updateHUD() {
     let zt;
     if (G.chase) zt = chaseStatus(p);
     else if (G.navy) zt = navyStatus(p);
+    else if (G.prop) zt = propStatus(p);
     else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
@@ -18234,6 +18603,7 @@ const MODES = [
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
+    { id: 'prop', name: 'PROP HUNT', desc: 'The hiders turn into barrels, crates, bushes and more, hidden among hundreds of real ones. The seekers have three minutes to find them, but every shot at a real prop hurts the seeker. Anyone found joins the seekers.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
     { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
     { id: 'chase', name: 'CHASE', desc: 'Your squad of 20 breaks out of an army facility, crosses a desert of ruins while helicopters hunt for you, takes a boat down a river through the mountains, crosses the ocean and reaches a giant airship. A long game, by day and by night: you have 500 health, the soldiers 45.' },
@@ -18261,7 +18631,8 @@ function setMenuMode(i, dir) {
     $('settings-ffa').classList.toggle('hidden', m.id === 'navy' || m.id === 'chase' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
-    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : 'Opponents';
+    $('settings-prop').classList.toggle('hidden', m.id !== 'prop');
+    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : m.id === 'prop' ? `Other players (up to ${PROP.maxPlayers - 1})` : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
     // Revolution is always two sides
     $('team-count').closest('.cpu-row').classList.toggle('hidden', m.id === 'revolution');
@@ -18527,7 +18898,7 @@ function sliderToCount(v) {
 }
 
 // (Ghost only takes so many players)
-const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'ghost' ? GHOST.maxPlayers - 1 : Infinity; };
+const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'ghost' ? GHOST.maxPlayers - 1 : id === 'prop' ? PROP.maxPlayers - 1 : Infinity; };
 const showCpuValue = () => { $('cpu-value').textContent = Math.min(cpuCap(), sliderToCount(+slider.value)); };
 slider.addEventListener('input', showCpuValue);
 showCpuValue();
@@ -18625,7 +18996,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'prop' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -18641,6 +19012,7 @@ const BRIEF = {
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
+BRIEF.prop = [['📦', '<b>Props:</b> you look like a barrel, crate, bush, rock, cone or the like, with hundreds of real ones all round. Stand beside ones that look like you, and keep still: a prop that moves is no prop.'], ['🔄', '<b>F</b> (or the button) turns you into the closest prop you\'re next to.'], ['🙈', 'The seekers wait blindfolded for 30 seconds while you hide, then have 3 minutes to find everyone.'], ['🔫', '<b>Seekers:</b> shoot anything that looks wrong. Every shot at a real prop costs you health; a hit on a hider gives some back.'], ['🎵', 'Every so often each prop whistles: listen for it.'], ['🎯', 'A prop who\'s found joins the seekers. Props win if anyone is still hidden when the time runs out.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.chase = [['🏃', '<b>Goal:</b> get your squad of 20 all the way to the giant airship at the far end of the world. It\'s a long journey across a huge world, through day and night: you each have <b>500 health</b>, and every soldier has 45. You never run out of ammo, and everyone carries an electric <b>Shock Pistol</b> whose bolts jump to nearby enemies.'],
@@ -18659,6 +19031,7 @@ const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b
 function controlsFor(id) {
     const t = TOUCH.enabled, list = (t ? CONTROLS_TOUCH : CONTROLS_KEYS).slice();
     if (id === 'navy') list.push(['🧭', t ? 'The <b>bottom button</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: stick up and down for speed, left and right to steer' : '<b>F</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: <b>W S</b> speed, <b>A D</b> steer']);
+    if (id === 'prop') list.push(['🔄', t ? 'As a prop, the <b>bottom button</b> turns you into the prop you\'re next to' : 'As a prop, <b>F</b> turns you into the prop you\'re next to']);
     if (id === 'duel') list.push(['🤫', t ? 'Scoped in, you walk slowly and quietly' : 'Hold <b>Shift</b> or scope in to walk slowly and quietly']);
     if (id === 'survival') list.push(['🍖', t ? 'Tap the meat or water on the left to eat or drink' : '<b>C</b> eat · <b>V</b> drink or fill a bucket at water · <b>B</b> rest']);
     if (id === 'revolution') list.push(['💥', t ? 'At your boss strike pad, the bottom button loads ammo or launches it' : 'At your boss strike pad, <b>F</b> loads ammo or launches it']);
@@ -18678,17 +19051,17 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'prop' ? `You: ${propRolePick === 'seeker' ? 'Seeker' : 'Prop'}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'chase' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'prop' || m.id === 'chase' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'duel' || id === 'navy' || id === 'chase') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'prop' || id === 'duel' || id === 'navy' || id === 'chase') openMapSelect(); else openTypeSelect(); }
     else { const map = BRIEF_STAGE.map; quickMatch(() => startGame(map)); }
 });
 $('brief-back').addEventListener('click', () => {
@@ -18696,7 +19069,7 @@ $('brief-back').addEventListener('click', () => {
     // (a mode with only one map never showed the map screen: back to whatever came before it)
     if (BRIEF_STAGE.stage === 'desc') screens.menu.classList.remove('hidden');
     else if (!soloMap(MODES[menuMode].id)) screens.mapsel.classList.remove('hidden');
-    else if (['ghost', 'navy', 'chase'].includes(MODES[menuMode].id)) openDescription();
+    else if (['ghost', 'prop', 'navy', 'chase'].includes(MODES[menuMode].id)) openDescription();
     else openTypeSelect();
 });
 
@@ -18705,6 +19078,7 @@ let lastMap = 'ordinary';
 function mapAllowed(id, m) {
     if (id === 'navy') return m === 'sea';
     if (id === 'chase') return m === 'chase';
+    if (id === 'prop') return m === 'ordinary' || m === 'city' || m === 'rusty';
     return !(m === 'sea' || m === 'chase' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
 // The one map a mode can be played on, if there's only one: then there's nothing to choose
@@ -18839,7 +19213,7 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
-for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }]])
+for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#prop-role', v => { propRolePick = v; }]])
     for (const b of document.querySelectorAll(sel + ' button')) b.addEventListener('click', () => {
         set(b.dataset.r);
         for (const o of document.querySelectorAll(sel + ' button')) o.classList.toggle('on', o === b);
@@ -18868,16 +19242,18 @@ function startGame(map = lastMap) {
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
     if (id === 'chase') map = 'chase'; else if (map === 'chase') map = 'ordinary';
+    if (id === 'prop' && !mapAllowed('prop', map)) map = 'ordinary';
     lastMap = map;
     const setup = id === 'navy' ? (navyFleet === 'ffa' ? { type: id, teams: navyFfaCount(), size: NAVY_FFA.crew, ships: 1, crew: NAVY_FFA.crew, role: navyRolePick, fleet: 'ffa' } : navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
         : id === 'chase' ? { type: id, count: 0 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
+        : id === 'prop' ? { type: id, count: Math.max(1, Math.min(PROP.maxPlayers - 1, sliderToCount(+slider.value))), role: propRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'ghost' || id === 'duel' || id === 'navy' || id === 'chase' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'ghost' || id === 'prop' || id === 'duel' || id === 'navy' || id === 'chase' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -18890,11 +19266,11 @@ function startGame(map = lastMap) {
     document.body.classList.add('playing');
     canvas.classList.remove('dead');
     mouse.down = false;
-    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy);
+    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.prop);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.prop);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
@@ -18904,6 +19280,7 @@ function startGame(map = lastMap) {
     else if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
     else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
+    else if (G.prop) showBanner('PROP HUNT', true, G.player.prop ? 'You\'re a prop! Hide next to props that look like you (F or the button changes you), then keep still.' : `You're a seeker. Wait while the props hide, then find them. Wrong shots hurt you!`);
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
@@ -19667,6 +20044,7 @@ function touchFrame() {
         if (NET.viewing) return 'USE';
         const p = G && G.player;
         if (!p || G.mode !== 'playing' || p.dead || p.zombie) return '';
+        if (G.prop && p.prop) { const d = propNear(p); return d ? `BECOME ${PROP_KINDS[d.kind].name.toUpperCase()}` : 'CHANGE PROP'; }
         if (p.car) return `GET OUT`;
         if (G.navy && navyLabel(p)) return navyLabel(p).toUpperCase();
         if (G.revolution && nearOwnPad(p)) return 'BOSS STRIKE';
