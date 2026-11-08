@@ -4913,9 +4913,9 @@ function drawGhostSteps(camX, camY, zoom) {
 
 // ---------- Prop Hunt ----------
 // The hiders turn into barrels, crates, bushes and the like, hidden among hundreds of real ones. The seekers wait blindfolded
-// while the props hide, then have three minutes to find them. Every shot at a real prop costs a seeker health, and a hit on
-// a hider gives some back. A hider who's found joins the seekers. Every so often each hider lets out a little whistle.
-const PROP = { arena: 1700, hide: 30000, seek: 180000, decoys: 380, miss: 4, change: 160, taunt: [18000, 26000], maxPlayers: 60, color: '#ff8a3d' };
+// while the props hide, then have three minutes to find them. A hit on a hider gives the seeker some health back.
+// A hider who's found joins the seekers. Every so often each hider lets out a little whistle.
+const PROP = { arena: 1700, hide: 30000, seek: 180000, decoys: 380, change: 160, taunt: [18000, 26000], maxPlayers: 60, color: '#ff8a3d' };
 const PROP_KINDS = {
     barrel: { name: 'Barrel', r: 17 }, crate: { name: 'Crate', r: 19 }, bush: { name: 'Bush', r: 21 }, rock: { name: 'Rock', r: 19 },
     bin: { name: 'Trash Can', r: 16 }, cone: { name: 'Traffic Cone', r: 14 }, tires: { name: 'Tire Stack', r: 18 }, pot: { name: 'Plant Pot', r: 15 },
@@ -4999,18 +4999,13 @@ function propNear(f) {
     });
     return best;
 }
-// A shot that hits a real prop knocks bits off it, and costs the seeker who fired it
+// A shot that hits a real prop just knocks bits off it
 function propBulletHit(b) {
     let hit = null;
     G.prop.dgrid.query(b.x, b.y, 30, d => { if (!hit && !d.dead && (b.x - d.x) ** 2 + (b.y - d.y) ** 2 < (d.r + 2) ** 2) hit = d; });
     if (!hit) return false;
     // (real props can't be shot to bits: they just chip)
     if (inView(hit.x, hit.y, 60)) burst(b.x, b.y, 5, '#d9c7a3', 150);
-    const o = b.owner;
-    if (o && o.seeker && !o.dead && G.prop.phase === 'seek') {
-        // (at most a few health a second, however fast the gun fires)
-        if (G.time - (o.missAt || -1e9) > 300) { o.missAt = G.time; damage(o, PROP.miss, null, 'wrong prop'); if (o.isPlayer) addFloat(o.x, o.y - 34, `WRONG PROP -${PROP.miss}`, '#ff4f6d'); }
-    }
     return true;
 }
 // A hider's been found: they come out and join the seekers
@@ -5049,7 +5044,7 @@ function updateProp(dt) {
     if (G.mode !== 'playing' || G.result || !p) return;
     let won = null, title, sub;
     if (!hiders) { won = !!p.seeker && !p.wasHider; title = won ? 'ALL PROPS FOUND!' : 'EVERY PROP WAS FOUND'; sub = p.wasHider ? 'You were found, and so was everyone else.' : 'Not one prop got away.'; }
-    else if (!seekers) { won = !!p.prop; title = 'THE PROPS WIN'; sub = 'Every seeker shot too many wrong props.'; }
+    else if (!seekers) { won = !!p.prop; title = 'THE PROPS WIN'; sub = 'No seekers are left.'; }
     else if (G.time >= P.seekAt + PROP.seek) { won = !!p.prop; title = won ? 'YOU STAYED HIDDEN!' : 'THE PROPS WIN'; sub = `${hiders} prop${hiders === 1 ? '' : 's'} never got found.`; }
     if (won === null) return;
     if (!won && p.dead) return;
@@ -5112,17 +5107,17 @@ function propSeekerBot(b) {
     if (mover) { b.target = mover; b.mode = 'fight'; b.hasLOS = true; b.lastSeen = G.time; b.engageAt = G.time + rand(200, 420); return; }
     if (b.mode === 'propshoot' && b.goal && !b.goal.dead && !b.goal.seeker && G.time < b.shootUntil) return;
     // Test a prop close by: the odd one out (no others like it round it) is the most suspicious
-    if (b.hp > 55 || Math.random() < 0.08) {
+    {
         const cands = [];
         const add = c => {
-            if (dist(b, c) > 320 || (b.checked.get(c) || -1e9) > G.time - 60000) return;
+            if (dist(b, c) > 320 || (b.checked.get(c) || -1e9) > G.time - 90000) return;
             const kind = propKindOf(c); let same = 0;
             P.dgrid.query(c.x, c.y, 220, d => { if (d !== c && !d.dead && d.kind === kind) same++; });
             cands.push([c, same ? 1 : 3]);
         };
         P.dgrid.query(b.x, b.y, 320, d => { if (!d.dead) add(d); });
         G.fgrid.query(b.x, b.y, 320, f => { if (!f.dead && f.prop) add(f); });
-        if (cands.length && Math.random() < 0.2) {
+        if (cands.length && Math.random() < 0.035) {
             let sum = 0; for (const c of cands) sum += c[1];
             let r = Math.random() * sum, c = cands[0][0];
             for (const q of cands) { r -= q[1]; if (r <= 0) { c = q[0]; break; } }
@@ -5239,7 +5234,7 @@ function propStatus(p) {
     const P = G.prop, n = G.fighters.filter(f => !f.dead && f.prop).length;
     if (P.phase === 'hide') return p.seeker ? 'Blindfolded while the props hide' : `Hide! Seekers come out in ${Math.max(0, Math.ceil((P.seekAt - G.time) / 1000))}s`;
     const left = fmtTime(Math.max(0, (P.seekAt + PROP.seek - G.time) / 1000));
-    return p.prop ? `Stay hidden · ${left} left · ${n} prop${n === 1 ? '' : 's'} left` : `Find the props · ${left} · ${n} left · wrong shots hurt you`;
+    return p.prop ? `Stay hidden · ${left} left · ${n} prop${n === 1 ? '' : 's'} left` : `Find the props · ${left} · ${n} left`;
 }
 
 // ---------- Sniper Duel ----------
@@ -18603,7 +18598,7 @@ const MODES = [
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
-    { id: 'prop', name: 'PROP HUNT', desc: 'The hiders turn into barrels, crates, bushes and more, hidden among hundreds of real ones. The seekers have three minutes to find them, but every shot at a real prop hurts the seeker. Anyone found joins the seekers.' },
+    { id: 'prop', name: 'PROP HUNT', desc: 'The hiders turn into barrels, crates, bushes and more, hidden among hundreds of real ones. The seekers have three minutes to find them. Anyone found joins the seekers.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
     { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
     { id: 'chase', name: 'CHASE', desc: 'Your squad of 20 breaks out of an army facility, crosses a desert of ruins while helicopters hunt for you, takes a boat down a river through the mountains, crosses the ocean and reaches a giant airship. A long game, by day and by night: you have 500 health, the soldiers 45.' },
@@ -19012,7 +19007,7 @@ const BRIEF = {
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
-BRIEF.prop = [['📦', '<b>Props:</b> you look like a barrel, crate, bush, rock, cone or the like, with hundreds of real ones all round. Stand beside ones that look like you, and keep still: a prop that moves is no prop.'], ['🔄', '<b>F</b> (or the button) turns you into the closest prop you\'re next to.'], ['🙈', 'The seekers wait blindfolded for 30 seconds while you hide, then have 3 minutes to find everyone.'], ['🔫', '<b>Seekers:</b> shoot anything that looks wrong. Every shot at a real prop costs you health; a hit on a hider gives some back.'], ['🎵', 'Every so often each prop whistles: listen for it.'], ['🎯', 'A prop who\'s found joins the seekers. Props win if anyone is still hidden when the time runs out.']];
+BRIEF.prop = [['📦', '<b>Props:</b> you look like a barrel, crate, bush, rock, cone or the like, with hundreds of real ones all round. Stand beside ones that look like you, and keep still: a prop that moves is no prop.'], ['🔄', '<b>F</b> (or the button) turns you into the closest prop you\'re next to.'], ['🙈', 'The seekers wait blindfolded for 30 seconds while you hide, then have 3 minutes to find everyone.'], ['🔫', '<b>Seekers:</b> shoot anything that looks wrong. Watch for props that move, or that don\'t match the ones round them.'], ['🎵', 'Every so often each prop whistles: listen for it.'], ['🎯', 'A prop who\'s found joins the seekers. Props win if anyone is still hidden when the time runs out.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.chase = [['🏃', '<b>Goal:</b> get your squad of 20 all the way to the giant airship at the far end of the world. It\'s a long journey across a huge world, through day and night: you each have <b>500 health</b>, and every soldier has 45. You never run out of ammo, and everyone carries an electric <b>Shock Pistol</b> whose bolts jump to nearby enemies.'],
@@ -19280,7 +19275,7 @@ function startGame(map = lastMap) {
     else if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
     else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
-    else if (G.prop) showBanner('PROP HUNT', true, G.player.prop ? 'You\'re a prop! Hide next to props that look like you (F or the button changes you), then keep still.' : `You're a seeker. Wait while the props hide, then find them. Wrong shots hurt you!`);
+    else if (G.prop) showBanner('PROP HUNT', true, G.player.prop ? 'You\'re a prop! Hide next to props that look like you (F or the button changes you), then keep still.' : `You're a seeker. Wait while the props hide, then find them. Watch for anything that moves!`);
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
@@ -19354,7 +19349,8 @@ function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     // (playing on a friend's game: their computer runs it and you watch their picture of your view)
-    if (NET.viewing) { requestAnimationFrame(frame); return; }
+    // (the aim stick still has to send where you're aiming and when you fire: that's what touchFrame does while you watch)
+    if (NET.viewing) { if (TOUCH.enabled) touchFrame(); requestAnimationFrame(frame); return; }
     if (TOUCH.enabled) touchFrame();
     if (G && G.mode !== 'paused') {
         // Slow-mo eases back to normal speed (slower recovery during the victory moment)
@@ -19487,13 +19483,19 @@ function onGuestMsg(g, m) {
         // (their screen's shape, kept to a size the host can draw and send every frame)
         const w = Math.max(320, +m.w || 1280), h = Math.max(240, +m.h || 720), k = Math.min(1, Math.sqrt(NET.maxPixels / (w * h)));
         g.w = Math.round(w * k); g.h = Math.round(h * k);
+        // (drawn sharper for a phone's or iPad's dense screen, as far as the pixel budget allows)
+        g.s = clamp(Math.min(+m.dpr || 1, 2, Math.sqrt(NET.maxPixels / (g.w * g.h))), 1, 2);
+        g.touch = !!m.touch;
         return;
     }
     if (m.t === 'k') {
         const code = String(m.code || '').slice(0, 24);
         if (m.down) { if (!I.keys.has(code) && g.f) onKeyPress(code, false, g.f); I.keys.add(code); }
         else { I.keys.delete(code); if (code === 'KeyG' && g.f) playerRelease(g.f); }
-    } else if (m.t === 'm') { I.mouse.x = +m.x || 0; I.mouse.y = +m.y || 0; }
+    } else if (m.t === 'm') {
+        // (where they're pointing, as a fraction of their screen: the video can arrive at any size)
+        if (m.n) { I.mouse.x = clamp(+m.x || 0, -1, 2) * (g.w || 1280); I.mouse.y = clamp(+m.y || 0, -1, 2) * (g.h || 720); } else { I.mouse.x = +m.x || 0; I.mouse.y = +m.y || 0; }
+    }
     else if (m.t === 'b') {
         const p = g.f, down = !!m.down;
         if (m.button === 0) I.mouse.down = down;
@@ -19525,7 +19527,8 @@ function attachGuest(g) {
     g.f = best; g.cam = { x: best.x, y: best.y }; g.va = null; g.hurt = 0;
     g.input.keys.clear(); g.input.mouse.down = false;
     // Their view, drawn here and streamed to them
-    g.canvas = document.createElement('canvas'); g.canvas.width = g.w; g.canvas.height = g.h;
+    g.s = g.s || 1; g.ui = null; g.uiSent = '';
+    g.canvas = document.createElement('canvas'); g.canvas.width = Math.round(g.w * g.s); g.canvas.height = Math.round(g.h * g.s);
     g.ctx = g.canvas.getContext('2d');
     g.vig = null; g.hv = null; g.light = [null, null];
     renderGuest(g, 0);
@@ -19582,7 +19585,7 @@ function renderGuest(g, dt) {
     if (!g.f || !g.ctx) return;
     updateGuestCam(g, dt);
     const keep = { ctx, viewW, viewH, dpr, vignette, hurtVignette, lightCv, lightG, player: G.player, cam: G.cam, zoom: G.zoom, hurt: G.hurt, strike: G.strikeCam, shake: G.shake, flash: G.flash, whiteout: G.whiteout, mx: mouse.x, my: mouse.y, md: mouse.down };
-    ctx = g.ctx; viewW = g.w; viewH = g.h; dpr = 1;
+    ctx = g.ctx; viewW = g.w; viewH = g.h; dpr = g.s || 1;
     if (!g.vig) { g.vig = makeVignette('rgba(10,4,24,0.55)'); g.hv = makeVignette('rgba(220,20,60,0.75)'); }
     vignette = g.vig; hurtVignette = g.hv; [lightCv, lightG] = g.light;
     G.player = g.f; G.cam = g.cam; G.zoom = g.zoom; G.hurt = g.hurt; G.strikeCam = null; G.shake = 0; G.flash = 0; G.whiteout = 0;
@@ -19599,8 +19602,10 @@ function renderGuest(g, dt) {
 }
 // The friend's HUD, drawn into their view: health and armor, the gun and its ammo, their slots and supplies
 function drawGuestHud(g) {
-    const p = g.f, c = ctx, W = viewW, H = viewH;
-    c.setTransform(1, 0, 0, 1, 0, 0);
+    const p = g.f, c = ctx, W = viewW, H = viewH, ui = [];
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // (each button they can tap, as fractions of the screen, sent over so a tap there presses it)
+    const btn = (x, y, w, h, code) => ui.push([+(x / W).toFixed(4), +(y / H).toFixed(4), +(w / W).toFixed(4), +(h / H).toFixed(4), code]);
     c.textBaseline = 'middle';
     const panel = (x, y, w, h) => { c.fillStyle = 'rgba(14,10,28,0.72)'; roundRect(c, x, y, w, h, 10); c.fill(); };
     // top left: alive and kills
@@ -19615,15 +19620,39 @@ function drawGuestHud(g) {
     bar(by, p.hp / p.maxHp, p.hp < p.maxHp * 0.3 ? '#ff4f6d' : '#5ee08a', `${Math.ceil(Math.max(0, p.hp))} / ${p.maxHp}`);
     // bottom left: slots, and bandages / medkits
     c.textAlign = 'left';
-    p.inv.forEach((k, i) => {
-        const x = 14, y = H - 30 - (p.inv.length - i) * 30;
-        panel(x, y, 190, 26);
-        if (i === p.slot) { c.strokeStyle = '#ffd166'; c.lineWidth = 2; roundRect(c, x, y, 190, 26, 10); c.stroke(); }
-        c.font = '600 14px Rajdhani, sans-serif'; c.fillStyle = k ? '#fff7ec' : '#6f6890'; c.fillText(`${i + 1}  ${k || '—'}`, x + 12, y + 14);
-    });
-    panel(14, H - 28 - 2, 190, 24);
-    c.font = '600 13px Rajdhani, sans-serif'; c.fillStyle = '#fff7ec';
-    c.fillText(`Q bandage ${p.items.bandage || 0}   E medkit ${p.items.medkit || 0}`, 26, H - 17);
+    if (g.touch) {
+        // On a phone or iPad: the slots across the top, and big supply buttons down the left, all tappable
+        const n = p.inv.length, sw = Math.min(110, (W - 28 - (n - 1) * 6) / n), sx = W / 2 - (n * sw + (n - 1) * 6) / 2;
+        p.inv.forEach((k, i) => {
+            const x = sx + i * (sw + 6), y = 70;
+            panel(x, y, sw, 40);
+            if (i === p.slot) { c.strokeStyle = '#ffd166'; c.lineWidth = 2; roundRect(c, x, y, sw, 40, 10); c.stroke(); }
+            c.font = '600 13px Rajdhani, sans-serif'; c.textAlign = 'center'; c.fillStyle = k ? '#fff7ec' : '#6f6890'; c.fillText(k || `${i + 1}  —`, x + sw / 2, y + 20, sw - 8);
+            btn(x, y, sw, 40, `Digit${i + 1}`);
+        });
+        const side = [['🩹', p.items.bandage || 0, 'KeyQ'], ['➕', p.items.medkit || 0, 'KeyE']];
+        if (!G.early && !G.duel && !G.prop) { const tk = p.throwSel || 'grenade'; side.push(['💣', p.items[tk] || 0, 'KeyT']); }
+        side.forEach(([icon, num, code], i) => {
+            const x = 14, y = H * 0.42 + i * 62;
+            panel(x, y, 56, 54);
+            c.textAlign = 'center'; c.font = '22px sans-serif'; c.fillStyle = '#fff'; c.fillText(icon, x + 28, y + 22);
+            c.font = '700 14px Rajdhani, sans-serif'; c.fillStyle = num ? '#fff7ec' : '#6f6890'; c.fillText(String(num), x + 28, y + 44);
+            btn(x, y, 56, 54, code);
+        });
+        c.textAlign = 'left';
+    } else {
+        p.inv.forEach((k, i) => {
+            const x = 14, y = H - 30 - (p.inv.length - i) * 30;
+            panel(x, y, 190, 26);
+            if (i === p.slot) { c.strokeStyle = '#ffd166'; c.lineWidth = 2; roundRect(c, x, y, 190, 26, 10); c.stroke(); }
+            c.font = '600 14px Rajdhani, sans-serif'; c.fillStyle = k ? '#fff7ec' : '#6f6890'; c.fillText(`${i + 1}  ${k || '—'}`, x + 12, y + 14);
+            btn(x, y, 190, 26, `Digit${i + 1}`);
+        });
+        panel(14, H - 28 - 2, 190, 24);
+        c.font = '600 13px Rajdhani, sans-serif'; c.fillStyle = '#fff7ec';
+        c.fillText(`Q bandage ${p.items.bandage || 0}   E medkit ${p.items.medkit || 0}`, 26, H - 17);
+        btn(14, H - 30, 95, 24, 'KeyQ'); btn(109, H - 30, 95, 24, 'KeyE');
+    }
     // bottom right: the gun and its ammo
     const w = held(p), W8 = WEAPONS[w];
     panel(W - 214, H - 74, 200, 60);
@@ -19634,7 +19663,9 @@ function drawGuestHud(g) {
     // what F does here
     const loot = !p.dead && !p.car && nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE), car = !p.dead && !p.car && !loot && nearestCar(p, 90);
     const navyHint = G.navy && !p.dead && !p.car ? navyLabel(p) : '';
-    const hint = navyHint ? `F  ${navyHint.toLowerCase()}` : p.car ? 'F  get out' : loot ? `F  pick up ${lootName(loot.key)}` : car ? `F  get in the ${vt(car).name}` : '';
+    let hint = navyHint ? `F  ${navyHint.toLowerCase()}` : p.car ? 'F  get out' : loot ? `F  pick up ${lootName(loot.key)}` : car ? `F  get in the ${vt(car).name}` : '';
+    if (G.prop && p.prop && !p.dead) hint = 'F  change prop';
+    if (hint && g.touch) hint = hint.replace(/^F {2}/, '').toUpperCase();  // (on a touch screen it's their USE button)
     if (hint) { c.font = '700 16px Rajdhani, sans-serif'; c.textAlign = 'center'; const tw = c.measureText(hint).width + 30; panel(W / 2 - tw / 2, H - 132, tw, 30); c.fillStyle = '#ffd166'; c.fillText(hint, W / 2, H - 116); }
     // out of the game, or the game's over
     if (p.dead || G.result) {
@@ -19646,6 +19677,9 @@ function drawGuestHud(g) {
         c.font = '600 19px Rajdhani, sans-serif'; c.fillStyle = '#fff7ec';
         c.fillText(G.result ? 'Waiting for the host to start the next game' : `Watching ${g.watch ? g.watch.name : 'the game'}`, W / 2, H * 0.51);
     }
+    // (only sent when the buttons change)
+    const key = JSON.stringify(ui);
+    if (key !== g.uiSent && g.conn && g.conn.open) { g.uiSent = key; try { g.conn.send({ t: 'ui', r: ui }); } catch (e) { /* gone */ } }
 }
 
 // ----- Joining -----
@@ -19667,7 +19701,7 @@ async function joinGame(code) {
     peer.on('open', () => {
         const conn = peer.connect(NET.prefix + code.toLowerCase(), { reliable: true });
         NET.conn = conn;
-        conn.on('open', () => conn.send({ t: 'hello', w: window.innerWidth, h: window.innerHeight }));
+        conn.on('open', () => conn.send({ t: 'hello', w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1, touch: TOUCH.enabled || matchMedia('(pointer: coarse)').matches }));
         conn.on('data', m => onHostMsg(m));
         conn.on('close', () => { if (NET.peer !== peer) return; stopViewing(); $('friends').classList.remove('hidden'); friendsView('fr-joining'); $('fr-join-msg').textContent = 'The host left the game. Type a code to join another:'; NET.role = null; });
     });
@@ -19679,6 +19713,7 @@ async function joinGame(code) {
 }
 function onHostMsg(m) {
     if (!m || typeof m !== 'object') return;
+    if (m.t === 'ui') { NET.ui = Array.isArray(m.r) ? m.r : null; return; }
     if (m.t === 'welcome') $('fr-join-msg').textContent = `Connected as ${m.name}! Waiting for the host to start the game...`;
     if (m.t === 'full') $('fr-join-msg').textContent = 'That game is full.';
     if (m.t === 'start') $('fr-join-msg').textContent = `Joining ${m.mode}...`;
@@ -19704,7 +19739,7 @@ function stopViewing(backToLobby) {
     $('net-leave') && $('net-leave').classList.add('hidden');
     document.body.classList.remove('net-viewing');
     if (!NET.viewing) return;
-    NET.viewing = false; NET.stream = null;
+    NET.viewing = false; NET.stream = null; NET.ui = null;
     document.body.classList.remove('playing');
     if (backToLobby) { screens.mapsel.classList.remove('hidden'); $('friends').classList.remove('hidden'); friendsView('fr-joining'); }
 }
@@ -19712,7 +19747,8 @@ function stopViewing(backToLobby) {
 function netMouse(e) {
     const v = $('net-video'), r = v.getBoundingClientRect(), vw = v.videoWidth || 1280, vh = v.videoHeight || 720;
     const k = Math.min(r.width / vw, r.height / vh), ox = r.left + (r.width - vw * k) / 2, oy = r.top + (r.height - vh * k) / 2;
-    return { x: (e.clientX - ox) / k, y: (e.clientY - oy) / k };
+    // (as a fraction of the picture: the host draws it at its own size and the video can arrive smaller)
+    return { x: (e.clientX - ox) / (vw * k), y: (e.clientY - oy) / (vh * k), n: 1 };
 }
 const netSend = m => { if (NET.conn && NET.conn.open) NET.conn.send(m); };
 // While playing on a friend's game, your keys and mouse go to them (capture first, so the game here ignores them)
@@ -19787,7 +19823,7 @@ function quickMatch(start) {
             if (!live()) return;
             const conn = peer.connect(lobby(k), { reliable: true });
             NET.conn = conn;
-            conn.on('open', () => conn.send({ t: 'hello', w: window.innerWidth, h: window.innerHeight }));
+            conn.on('open', () => conn.send({ t: 'hello', w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1, touch: TOUCH.enabled || matchMedia('(pointer: coarse)').matches }));
             conn.on('data', m => {
                 if (!m || typeof m !== 'object') return;
                 if (m.t === 'full') { if (live()) trySlot(k + 1, 0); return; }
@@ -19936,8 +19972,7 @@ function drawStick(el, st, v) {
 function touchFrame() {
     const a = TOUCH.aim, firing = a.on && a.mag > TOUCH.fireAt;
     if (NET.viewing) {
-        const v = $('net-video'), vw = v.videoWidth || 1280, vh = v.videoHeight || 720;
-        if (a.on) netSend({ t: 'm', x: vw / 2 + a.x * 220, y: vh / 2 + a.y * 220 });
+        if (a.on) netSend({ t: 'm', x: 0.5 + a.x * 220 / Math.max(320, window.innerWidth), y: 0.5 + a.y * 220 / Math.max(240, window.innerHeight), n: 1 });
         if (firing !== !!TOUCH.netFiring) { TOUCH.netFiring = firing; netSend({ t: 'b', button: 0, down: firing }); }
         return;
     }
@@ -19960,6 +19995,11 @@ function touchFrame() {
         e.preventDefault();
         enableTouch();
         Sound.init();
+        // On a friend's game: the buttons in the picture (guns, bandages, medkits, grenades) work when tapped
+        if (NET.viewing && NET.ui) {
+            const q = netMouse(e), hit = NET.ui.find(b => q.x >= b[0] && q.x <= b[0] + b[2] && q.y >= b[1] && q.y <= b[1] + b[3]);
+            if (hit) { touchKey(String(hit[4]), true); touchKey(String(hit[4]), false); return; }
+        }
         // (the sticks stay put, next to the supplies: a thumb anywhere on that side works the stick on that side)
         const left = e.clientX < window.innerWidth * 0.5;
         const st = left ? TOUCH.move : TOUCH.aim, el = left ? moveEl : aimEl;
