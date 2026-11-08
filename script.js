@@ -59,7 +59,7 @@ const WEAPONS = {
     'Plasma Rifle': { damage: 24, range: 1500, rate: 105, speed: 1800, spread: 0.03, mag: 45, rarity: 'hyper', len: 38, w: 9, sound: 'mid', shake: 1.5, hyper: true },
     'Railgun': { damage: 220, range: Infinity, rate: 1800, speed: 4200, spread: 0, mag: 4, rarity: 'hyper', len: 64, w: 9, sound: 'sniper', shake: 10, hyper: true, pierce: true },  // goes through everyone in a line
     // Payload's guns: the dual shock pistols everyone starts with, a chargeable energy gun, a rocket you steer, and a minigun with 8-round bursts
-    'Dual Shock': { damage: 15, range: 950, rate: 250, speed: 1300, spread: 0.03, mag: 999, rarity: 'rare', len: 14, w: 7, sound: 'light', shake: 1, spark: true, dual: true, bolt: true },
+    'Dual Shock': { damage: 15, range: 950, rate: 250, speed: 1300, spread: 0.03, mag: 999, rarity: 'rare', len: 14, w: 7, sound: 'light', shake: 1, dual: true, bolt: true },
     'Energy Gun': { damage: 14, range: 650, rate: 260, speed: 1400, spread: 0, mag: 999, rarity: 'legendary', len: 34, w: 11, sound: 'light', shake: 2, charge: 1100 },
     'Guided Rocket': { damage: 40, range: 2600, rate: 1300, speed: 600, spread: 0, mag: 999, rarity: 'mythic', len: 50, w: 12, sound: 'heavy', shake: 8, rocket: true, guided: true },
     'Burst Minigun': { damage: 12, range: 1300, rate: 55, speed: 1600, spread: 0.12, mag: 999, rarity: 'mythic', len: 44, w: 13, sound: 'mid', shake: 1.6, clip: 8, reload: 1300 },
@@ -5251,7 +5251,7 @@ function propStatus(p) {
 // Three maps: a rocket launch site (with launch pads that throw the cart into the air), a canyon, and a forest.
 const PAYLOAD = {
     W: 6000, time: 300000, cpBonus: 60000, speed: 52, perPusher: 0.22, maxPushers: 4, onR: 105, contestR: 200,
-    rollAfter: 12000, safeR: 240, safeDmg: 30, shieldR: 92, shieldArc: 0.95, rollSpeed: 16, respawn: 5000, protect: 2500, regenAfter: 4000, regen: 9, clearR: 190, maxPlayers: 100,
+    rollAfter: 12000, safeR: 240, safeDmg: 30, shieldR: 92, shieldArc: 0.95, rollSpeed: 16, players: 10, respawn: 5000, protect: 2500, regenAfter: 4000, regen: 9, clearR: 190, maxPlayers: 100,
     blue: '#3d8bff', red: '#ff4b4b',
     guns: ['Machine Gun', 'Energy Gun', 'Guided Rocket', 'Sniper', 'Shotgun', 'Burst Minigun', 'Assault Rifle']
 };
@@ -5792,7 +5792,7 @@ function fireEnergy(f, k) {
     f.lastShot = G.time; f.lastLoud = G.time; f.recoil = 0.5 + k;
     const big = k > 0.3, a = f.angle + (big ? 0 : rand(-0.03, 0.03)), sp = big ? 900 : 1400;
     G.bullets.push({ x: f.x + Math.cos(a) * (f.r + 6), y: f.y + Math.sin(a) * (f.r + 6), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: big ? 22 + 68 * k : w.damage, owner: f, left: big ? 1500 : 650, weapon: name, ball: { r: big ? 7 + 11 * k : 4.5, glow: '20,50,230', core: '#1f4dff' }, eblast: big ? 50 + 90 * k : 0 });
-    if (inView(f.x, f.y, 100)) burst(f.x + Math.cos(a) * 30, f.y + Math.sin(a) * 30, big ? 14 : 5, '#3a6bff', big ? 220 : 120, 'glow');
+    if (inView(f.x, f.y, 100)) G.particles.push({ type: 'ring', x: f.x + Math.cos(a) * 30, y: f.y + Math.sin(a) * 30, vx: 0, vy: 0, life: 0.18, max: 0.18, size: big ? 40 : 18, color: '#2a5cff' });
     Sound.tone(big ? 260 : 950, big ? 0.35 : 0.12, 'sine', (big ? 0.12 : 0.07) * Sound.volAt(f.x, f.y), big ? 90 : 1500);
 }
 function energyBlast(x, y, R, owner, dmg) {
@@ -9682,7 +9682,7 @@ function newDemo() {
         return;
     }
     if (id === 'payload') {
-        newState('demo', { type: 'payload', count: 20, map: pick(PAYLOAD_MAPS) });
+        newState('demo', { type: 'payload', count: PAYLOAD.players, map: pick(PAYLOAD_MAPS) });
         G.alive = G.fighters.length;
         G.cam.x = G.payload.cart.x; G.cam.y = G.payload.cart.y;
         return;
@@ -10373,7 +10373,8 @@ function tryAttack(f) {
         if (w.dual) { f.dualSide = -(f.dualSide || 1); bx += -sa * 10 * f.dualSide; by += ca * 10 * f.dualSide; }
         G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive, spark: !!w.spark, guided: !!w.guided, ball: w.ball ? { r: w.ball, glow: '30,70,255', core: '#8fb0ff' } : null, bolt: !!w.bolt });
     }
-    if (inView(mx, my, 100) && !w.string) {
+    if (inView(mx, my, 100) && w.bolt) { for (let k = 0; k < 2; k++) { const a2 = f.angle + rand(-0.9, 0.9); G.particles.push({ type: 'bolt', x: mx, y: my, x2: mx + Math.cos(a2) * rand(12, 24), y2: my + Math.sin(a2) * rand(12, 24), vx: 0, vy: 0, life: 0.08, max: 0.08, size: 1.5, seed: Math.random() }); } }
+    else if (inView(mx, my, 100) && !w.string) {
         G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.06, max: 0.06, size: 10 + w.w * 1.4, angle: f.angle });
         for (let i = 0; i < 2; i++) G.particles.push({ type: 'smoke', x: mx, y: my, vx: ca * 40 + rand(-20, 20), vy: sa * 40 + rand(-20, 20), life: 0.5, max: 0.5, size: rand(4, 8) });
         G.particles.push({ type: 'shell', x: f.x + ca * 14, y: f.y + sa * 14, vx: -sa * rand(150, 300) + ca * rand(-90, 40), vy: ca * rand(150, 300) + sa * rand(-90, 40), life: 0.45, max: 0.45, size: 2, rot: rand(0, TAU), spin: rand(-30, 30) });
@@ -16793,8 +16794,8 @@ function updateBullets(dt) {
                 if (wall.drivecar) damageCar(wall.drivecar, b.dmg * 0.6, b.owner);
                 if (wall.type === 'tree') { damagePlant(wall, b.dmg, b.owner); break; }
                 const col = wall.type === 'rock' ? '#d6dae2' : wall.type === 'crate' ? '#d9a066' : wall.type === 'wall' ? '#d8cfc0' : '#9a6b45';
-                burst(b.x - sx, b.y - sy, 5, col, 150);
-                if (inView(b.x, b.y, 50)) {
+                if (!b.bolt) burst(b.x - sx, b.y - sy, 5, col, 150);
+                if (inView(b.x, b.y, 50) && !b.bolt) {
                     burst(b.x - sx, b.y - sy, 3, '#ffe08a', 260, 'glow');
                     G.particles.push({ type: 'smoke', x: b.x - sx, y: b.y - sy, vx: -sx * 2, vy: -sy * 2, life: 0.6, max: 0.6, size: rand(4, 7), color: '190,180,165' });
                 }
@@ -16833,13 +16834,15 @@ function updateBullets(dt) {
                 const mul = !head ? 1 : hit.zombie ? REALISM.zombieHeadMul : hit.soldier && !hit.boss ? REALISM.helmetMul : REALISM.headMul;
                 const armored = hit.armor > 0;
                 damage(hit, b.dmg * mul, b.owner, b.weapon);
-                burst(b.x, b.y, b.heavy ? 14 : 6, armored ? '#8fd8ff' : '#a3121e', 200, 'blood');
+                if (!b.bolt) burst(b.x, b.y, b.heavy ? 14 : 6, armored ? '#8fd8ff' : '#a3121e', 200, 'blood');
                 if (!armored) bloodSplat(hit.x + b.vx / speed * hit.r * 0.6, hit.y + b.vy / speed * hit.r * 0.6, Math.atan2(b.vy, b.vx), b.heavy ? 1.5 : 1);
                 if (head && b.owner && b.owner.isPlayer && !hit.dead && G.time - (hit.headAt || -1e9) > 700) { hit.headAt = G.time; addFloat(hit.x, hit.y - 46, 'HEADSHOT', '#ffd166', true); Sound.tone(1500, 0.05, 'square', 0.08); }
                 else if (head && hit.isPlayer) G.hurt = Math.max(G.hurt, 0.6);
             }
         }
         if (b.dead && b.explosive) miniBlast(b.x - b.vx * 0.008, b.y - b.vy * 0.008, b.owner);
+        // (a shock bolt ends in a little crackle of forks, not a spray of dots)
+        if (b.dead && b.bolt && inView(b.x, b.y, 80)) for (let k = 0; k < 3; k++) { const a = rand(0, TAU), d = rand(18, 42); G.particles.push({ type: 'bolt', x: b.x, y: b.y, x2: b.x + Math.cos(a) * d, y2: b.y + Math.sin(a) * d, vx: 0, vy: 0, life: 0.14, max: 0.14, size: 2, seed: Math.random() }); }
         if (b.dead && b.eblast) energyBlast(b.x - b.vx * 0.01, b.y - b.vy * 0.01, b.eblast, b.owner, b.dmg * 0.5);
         if (b.dead && b.rocket) {
             const ex = clamp(b.x - b.vx * 0.012, 0, W), ey = clamp(b.y - b.vy * 0.012, 0, W);
@@ -19300,7 +19303,7 @@ function setMenuMode(i, dir) {
     $('mode-desc').textContent = m.desc;
     $('settings-navy').classList.toggle('hidden', m.id !== 'navy');
     $('solo-friends').classList.toggle('hidden', !soloMap(m.id));
-    $('settings-ffa').classList.toggle('hidden', m.id === 'navy' || m.id === 'chase' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-ffa').classList.toggle('hidden', m.id === 'payload' || m.id === 'navy' || m.id === 'chase' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
     $('settings-prop').classList.toggle('hidden', m.id !== 'prop');
@@ -19685,7 +19688,7 @@ const BRIEF = {
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
-BRIEF.payload = [['🛤️', '<b>Goal:</b> Blue pushes the platform along the track from their base to the target in the middle of Red\'s base. Red stops them before the time runs out.'], ['🧍', 'The platform only moves with Blue standing on it, faster with more of them. It stops while Red is next to it, and rolls back if Blue leaves it alone too long.'], ['🛡️', 'A shield across its front stops shots coming at it from ahead.'], ['⛰️', 'The track winds and goes up and down hills: slower uphill, faster downhill. Two checkpoints each add a minute.'], ['🔫', 'Everyone starts with <b>dual shock pistols</b>. Grab a machine gun, energy gun, guided rocket, sniper, shotgun, burst minigun or rifle from the racks in your base and along the track.'], ['⚡', '<b>Energy Gun:</b> hold to charge (on a phone or iPad, hold the aim stick in the middle), let go to fire. <b>Guided Rocket:</b> keep aiming after you fire to steer it.'], ['♻️', 'When you die you come back in your safe zone after 5 seconds. Nobody can hurt you in your own safe zone.']];
+BRIEF.payload = [['🛤️', '<b>5 against 5.</b> Blue pushes the platform along the track from their base to the target in the middle of Red\'s base. Red stops them before the time runs out.'], ['🧍', 'The platform only moves with Blue standing on it, faster with more of them. It stops while Red is next to it, and rolls back if Blue leaves it alone too long.'], ['🛡️', 'A shield across its front stops shots coming at it from ahead.'], ['⛰️', 'The track winds and goes up and down hills: slower uphill, faster downhill. Two checkpoints each add a minute.'], ['🔫', 'Everyone starts with <b>dual shock pistols</b>. Grab a machine gun, energy gun, guided rocket, sniper, shotgun, burst minigun or rifle from the racks in your base and along the track.'], ['⚡', '<b>Energy Gun:</b> hold to charge (on a phone or iPad, hold the aim stick in the middle), let go to fire. <b>Guided Rocket:</b> keep aiming after you fire to steer it.'], ['♻️', 'When you die you come back in your safe zone after 5 seconds. Nobody can hurt you in your own safe zone.']];
 BRIEF.prop = [['📦', '<b>Props:</b> you look like a barrel, crate, bush, rock, cone or the like, with hundreds of real ones all round. Stand beside ones that look like you, and keep still: a prop that moves is no prop.'], ['🔄', '<b>F</b> (or the button) turns you into the closest prop you\'re next to.'], ['🙈', 'The seekers wait blindfolded for 30 seconds while you hide, then have 3 minutes to find everyone.'], ['🔫', '<b>Seekers:</b> shoot anything that looks wrong. Watch for props that move, or that don\'t match the ones round them.'], ['🎵', 'Every so often each prop whistles: listen for it.'], ['🎯', 'A prop who\'s found joins the seekers. Props win if anyone is still hidden when the time runs out.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
@@ -19943,7 +19946,7 @@ function startGame(map = lastMap) {
         : id === 'duel' ? { type: id, count: 1 }
         : id === 'chase' ? { type: id, count: 0 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
-        : id === 'payload' ? { type: id, count: Math.max(1, Math.min(PAYLOAD.maxPlayers - 1, sliderToCount(+slider.value))), side: payloadSidePick }
+        : id === 'payload' ? { type: id, count: PAYLOAD.players - 1, side: payloadSidePick }
         : id === 'prop' ? { type: id, count: Math.max(1, Math.min(PROP.maxPlayers - 1, sliderToCount(+slider.value))), role: propRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
