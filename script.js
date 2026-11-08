@@ -5345,6 +5345,7 @@ function navyCrewman(s, name, isPlayerToo) {
     if (human) f.hp = f.maxHp = NAVY.playerHp;  // (real players are tougher out here: 300 health)
     f.items.bandage = 3; f.items.medkit = 1; f.items.grenade = 2;
     f.boarder = Math.random() < (s.kind === 'gunboat' ? 0.9 : 0.5);
+    f.worker = s.kind !== 'gunboat' && Math.random() < 0.1;  // (a few of every crew are workers who fix wrecked guns)
     f.postX = rand(-0.42, 0.42) * s.C.len; f.postY = rand(0.35, 1); f.nextThink = rand(0, 500);
     G.teamAlive[s.team]++;
     return f;
@@ -5366,7 +5367,7 @@ function setupNavy(setup) {
             if (t === 0) flagship = s;
             for (let i = 0; i < crew; i++) {
                 const mine = firstPlayer && t === 0 && i === 0, f = navyCrewman(s, botName(name++), mine);
-                if (mine) continue;
+                if (mine || f.worker) continue;
                 const st = navyVacant(s, f);
                 if (st && st.sub) { f.room = 'subdeck'; enterCar(f, st.sub); continue; }
                 if (st) navyMan(f, st);
@@ -5389,7 +5390,7 @@ function setupNavy(setup) {
             for (let i = 0; i < count; i++) {
                 const mine = firstPlayer && s === flagship && i === 0;
                 const f = navyCrewman(s, botName(name++), mine);
-                if (mine) continue;
+                if (mine || f.worker) continue;
                 const st = navyVacant(s, f);
                 if (st && st.heli) { navyBoardHeli(f, st.heli); continue; }
                 if (st && st.sub) { f.room = 'subdeck'; enterCar(f, st.sub); continue; }
@@ -5508,6 +5509,11 @@ function navyAction(p) {
         const d = Math.hypot(lx - r.lx, ly - r.ly);
         if (d < 80) consider(d, { rack: r, text: 'Take a heavy gun from the hangar' });
     }
+    if (s.team === p.team) for (const g of s.guns) {
+        if (g.hp > 0 || (g.room || null) !== room) continue;
+        const d = Math.hypot(lx - g.lx, ly - g.ly);
+        if (d < g.r + 60) consider(d, p.fixing === g ? { fixStop: g, text: `Repairing the ${g.D.name.toLowerCase()}... ${Math.round((g.fixP || 0) * 100)}%` } : { fix: g, text: `Repair the ${g.D.name.toLowerCase()}` });
+    }
     if (room) {
         if (s.team === p.team) for (const g of s.guns) {
             if (g.hp <= 0 || g.room !== room || g.crew) continue;
@@ -5538,6 +5544,8 @@ function navyUse(p) {
     else if (act.link) { p.room = act.to; if (p.isPlayer) addFloat(p.x, p.y - 30, act.text, '#fff7ec'); Sound.tone(act.to ? 180 : 260, 0.2, 'triangle', 0.08); }
     else if (act.st) { if (act.st.helm && act.st.crew && act.st.crew !== p) navyLeave(act.st.crew); navyMan(p, act.st); }
     else if (act.rack) navyTakeRack(p);
+    else if (act.fix) p.fixing = act.fix;
+    else if (act.fixStop) p.fixing = null;
     else if (act.jump) {
         const s = p.ship, lx = navyLx(s, p.x, p.y), ly = navyLy(s, p.x, p.y), side = ly >= 0 ? 1 : -1, hw = navyHw(s.C, lx);
         const end = s.C.len / 2 - Math.abs(lx) < 62 && hw - Math.abs(ly) >= 62;
@@ -5829,6 +5837,7 @@ function updateNavy(dt) {
     }
     for (const f of G.fighters) {
         if (f.dead) continue;
+        if (f.fixing) navyRepairStep(f, dt);
         if (f.car) { f.ship = null; f.swim = false; continue; }
         const s = f.ship;
         if (s) {
@@ -6344,7 +6353,7 @@ function navyThink(b) {
     b.nSwimTo = null;
     if (s.team !== b.team && G.chase && !b.soldier) {
         // Chase: one of the squad on a soldier boat goes back over to ours if she's alongside, or jumps for it
-        const home = G.chase.ship, pl = home && !home.sinkAt && s.planks.find(q => q.other === home);
+        const home = chaseBoat(b), pl = home && !home.sinkAt && s.planks.find(q => q.other === home);
         if (pl) { const ly = navyLy(s, home.x, home.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, home.x, home.y), -s.C.len * 0.4, s.C.len * 0.4); b.nGoal = { lx, ly: ly * (navyHw(s.C, lx) + 30), over: true }; return; }
         if (b.station) navyLeave(b);
         const side = home && navyLy(s, home.x, home.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, b.x, b.y), -s.C.len * 0.4, s.C.len * 0.4);
@@ -6367,7 +6376,11 @@ function navyThink(b) {
     }
     // An enemy on our deck comes first
     if (enemy && enemy.ship === s) { b.nGoal = { lx: navyLx(s, enemy.x, enemy.y), ly: navyLy(s, enemy.x, enemy.y) }; return; }
-    const st = navyVacant(s, b);
+    // Workers go and fix wrecked guns first; the rest of the crew do it when there's no gun free to man
+    const st0 = b.worker ? null : navyVacant(s, b), fix = !st0 && navyBrokenGun(s, b);
+    b.nFix = null;
+    if (fix) { fix.fixer = b; b.nFix = fix; b.nGoal = { lx: fix.lx, ly: fix.ly + (fix.ly >= 0 ? -1 : 1) * (fix.r + 28), room: fix.room || null }; return; }
+    const st = st0 || (b.worker ? navyVacant(s, b) : null);
     if (st) {
         if (st.heli) s.heliClaim = b; else if (st.sub) st.bay.claim = b; else st.claim = b;
         b.nStation = st;
@@ -6391,8 +6404,33 @@ function navyThink(b) {
     const lx = clamp(b.postX, -s.C.len / 2 + 60, s.C.len / 2 - 60);
     b.nGoal = { lx, ly: side * Math.max(0, navyHw(s.C, lx) - 40) * b.postY };
 }
+// Repairing a wrecked gun: workers in the crew (and you) can put it back together
+const NAVY_FIX = { bot: 9, player: 5 };
+function navyBrokenGun(s, b) {
+    let best = null, bd = Infinity;
+    const lx = navyLx(s, b.x, b.y), ly = navyLy(s, b.x, b.y);
+    for (const g of s.guns) {
+        if (g.hp > 0 || (g.fixer && g.fixer !== b && !g.fixer.dead && g.fixer.ship === s)) continue;
+        const d = Math.hypot(g.lx - lx, g.ly - ly) + ((g.room || null) === (b.room || null) ? 0 : 900);
+        if (d < bd) { bd = d; best = g; }
+    }
+    return best;
+}
+function navyRepairStep(f, dt) {
+    const g = f.fixing, s = g.ship;
+    if (g.hp > 0 || f.ship !== s || f.station || f.car || f.dead || (f.room || null) !== (g.room || null) || Math.hypot(navyLx(s, f.x, f.y) - g.lx, navyLy(s, f.x, f.y) - g.ly) > g.r + 80) { f.fixing = null; if (g.fixer === f) g.fixer = null; return; }
+    g.fixer = f;
+    g.fixP = (g.fixP || 0) + dt / (isHuman(f) ? NAVY_FIX.player : NAVY_FIX.bot);
+    if (Math.random() < dt * 12 && inView(f.x, f.y, 100)) G.particles.push({ type: 'glow', x: navyWx(s, g.lx, g.ly) + rand(-g.r, g.r) * 0.6, y: navyWy(s, g.lx, g.ly) + rand(-g.r, g.r) * 0.6, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.25, max: 0.25, size: rand(2, 4), color: '#ffd166' });
+    if (g.fixP >= 1) {
+        g.hp = g.D.hp; g.fixP = 0; g.fixer = null; f.fixing = null;
+        if (inView(f.x, f.y, 200)) addFloat(navyWx(s, g.lx, g.ly), navyWy(s, g.lx, g.ly) - 40, `${g.D.name.toUpperCase()} REPAIRED`, '#7dffb0', isHuman(f));
+        Sound.tone(520, 0.2, 'triangle', 0.06 * Sound.volAt(f.x, f.y), 780);
+    }
+}
 function navyBot(b, dt) {
-    if (G.chase && b.ship && b.ship === G.chase.ship && !b.soldier && chaseDisembark(b)) return;
+    if (b.fixing) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
+    if (G.chase && b.ship && (b.ship.chase === 'squad' || b.ship.chase === 'mini') && !b.soldier && chaseDisembark(b)) return;
     if (b.station) {
         b.vx = b.vy = 0; b._wantSpeed = 0;
         if (b.station.gun) {
@@ -6424,6 +6462,7 @@ function navyBot(b, dt) {
             if (st.sub) { if (!st.sub.driver && !st.sub.dead && st.sub.onShip === s) { st.bay.claim = null; enterCar(b, st.sub); } b.vx = b.vy = 0; return; }
             if (!st.crew) { navyMan(b, st); b.vx = b.vy = 0; return; }
         }
+        if (b.nFix && want === here && b.nFix.hp <= 0 && Math.hypot(b.nFix.lx - lx, b.nFix.ly - ly) < b.nFix.r + 60) { b.fixing = b.nFix; b.nFix = null; b.vx = b.vy = 0; return; }
         if (d > 16) {
             // (below deck there's nothing in the way but that deck's own guns, which you just slide round)
             const w = here ? { x: g.lx, y: g.ly } : navyRoute(s, lx, ly, g.lx, g.ly, b.r), ax = w.x - lx, ay = w.y - ly, l = Math.hypot(ax, ay) || 1;
@@ -6621,6 +6660,11 @@ function navyDrawGun(g) {
     const D = g.D, dead = g.hp <= 0, r = g.r;
     ctx.save();
     ctx.translate(g.lx, g.ly);
+    // (a wrecked gun being put back together: a ring filling up as the repair goes on)
+    if (dead && g.fixP > 0) {
+        ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.arc(0, 0, r + 16, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0, 0, r + 16, -Math.PI / 2, -Math.PI / 2 + TAU * g.fixP); ctx.stroke();
+    }
     ctx.rotate(g.rel);
     const steel = dead ? '#2a2826' : g.kind === 'main' ? '#5d6670' : '#69737d', dark = dead ? '#191716' : '#3c4249';
     if (g.kind === 'main' || (g.kind === 'med' && r >= 24)) {
@@ -7114,7 +7158,7 @@ function updateTeamCenters() {
 // It's meant to be a long game (on a world three times the size, with day and night): the squad has 500 health each, the soldiers 45.
 const CHASE = {
     people: 20, hp: 500, soldierHp: 45, armor: 100, scale: 3, dayDark: 0, nightDark: 0.87,
-    oceanY: 3400, mountY: 7500, river: 340, bank: 430,
+    oceanY: 3400, mountY: 7500, river: 1020, bank: 430,
     fac: { x0: 600, y0: 9300, x1: 3300, y1: 11500 },
     island: { x: 10350, y: 1500, r: 1250 },
     airship: { x: 10500, y: 1150, board: 230 },
@@ -7122,7 +7166,7 @@ const CHASE = {
     riverPts: [[10900, 8350], [10860, 7350], [10300, 6850], [9300, 6900], [8500, 6450], [8700, 5650], [9500, 5100], [9300, 4350], [8300, 4050], [7300, 4450], [7000, 5300], [7400, 6150], [6900, 6850], [5900, 6850], [5200, 6250], [5500, 5400], [5000, 4550], [4100, 4200], [3200, 4600], [3000, 5500], [3400, 6350], [2700, 6850], [1850, 6600], [1500, 5850], [1900, 5050], [1600, 4300], [1500, 3500], [1550, 2800]],
     seaPts: [[1550, 2800], [2600, 2300], [4500, 2000], [6500, 1800], [8650, 1600]],
     guns: ['Assault Rifle', 'Assault Rifle', 'Mac10', 'Shotgun', 'Machine Gun', 'Sniper', 'Vector'],
-    desertSquads: 16, bankSquads: 10, helis: 3, riverShips: 5, seaShips: 2, shipCrew: 8,
+    desertSquads: 16, bankSquads: 14, helis: 3, riverShips: 7, seaShips: 3, shipCrew: 6, shipHp: 500, sailors: 80,
     reinforce: [70000, 100000], heliSight: 520, blimp: { count: 7, max: 9, speed: 75, scan: 760, hp: 2600, drop: 22000, len: 640, wid: 210 }, desert: { dmg: 1.7, reinforce: [25000, 40000], waves: 2, sight: 720, helis: 10 }, shipHull: 36000, art: 12, soldierDmg: 0.45, alertR: 2600
 };
 // Everything is laid out on the normal map's 12000 and then stretched 3 times over (the river and the banks stay
@@ -7130,15 +7174,27 @@ const CHASE = {
 (() => {
     const k = CHASE.scale, W = CHASE.world = 12000 * k;
     CHASE.oceanY *= k; CHASE.mountY *= k;
-    CHASE.riverPts = CHASE.riverPts.map(([x, y]) => [x * k, y * k]);
-    const I = CHASE.island = { x: 10350 * k, y: 1500 * k, r: 1900 };
-    CHASE.airship = { x: I.x + 150, y: I.y - 350, board: 230 };
-    CHASE.seaPts = CHASE.seaPts.map(([x, y]) => [x * k, y * k]);
-    CHASE.seaPts[CHASE.seaPts.length - 1] = [I.x - I.r - 430, I.y + 100];
+    CHASE.riverPts = CHASE.riverPts.map(([x, y], i, a) => [x * k, (i < 2 || i > a.length - 3 ? y : 4500 + (y - 4050) * 2050 / 2850) * k]);
+    // (across the ocean the boat sails into the mouth of the far land's river, where the mini ships are waiting)
+    CHASE.seaPts = [[4650, 8400], [7800, 6900], [11000, 5900], [14000, 5100], [16800, 4700]];
     CHASE.fac = { x0: 1200, y0: W - 5300, x1: 7200, y1: W - 500 };
     for (const key of ['desertSquads', 'bankSquads', 'riverShips', 'seaShips']) CHASE[key] = Math.round(CHASE[key] * (key === 'seaShips' ? 2 : k * 0.8));
     CHASE.helis = CHASE.desert.helis;
 })();
+// The far land, across the ocean: a forest with a long river through it (you take two mini ships up it), then high
+// mountains full of caves where the river splits into channels round rocky islands, and the airship at the very end
+CHASE.far = {
+    x: 17500, y: 8300, mx: 26500, river: 560, branch: 330, bank: 380, mouth: 1150, lake: 950,
+    pts: [[19400, 4700], [21000, 4680], [22400, 4600], [23500, 5600], [25000, 6600], [26400, 5900], [26600, 4300], [25700, 3000], [25900, 1700], [27200, 1100], [28700, 1500], [29400, 2900], [29700, 4400], [30500, 5800], [32000, 6500], [33500, 5800], [33900, 4300], [33300, 3000], [33500, 1900]],
+    minis: 2, miniHull: 12000, miniS: 3000, ships: 9, bankSquads: 20, patrols: 10, blimps: 3, clear: { x: 33750, y: 1650, r: 1500 }
+};
+// (laid out for a coast at 21000, then stretched west to give the forest and the mountains more room)
+CHASE.far.pts = CHASE.far.pts.map(([x, y]) => [CHASE.far.x + (x - 21000) * (36000 - CHASE.far.x) / 15000, y]);
+CHASE.airship = { x: 34250, y: 1350, board: 230 };
+const chaseFarX = y => CHASE.far.x + Math.sin(y / 800) * 220 + Math.sin(y / 290 + 1) * 80;     // its west shore
+const chaseFarY = x => CHASE.far.y + Math.sin(x / 760) * 200 + Math.sin(x / 270 + 2) * 70;     // its south shore
+const chaseFarMX = y => CHASE.far.mx + Math.sin(y / 700) * 300 + Math.sin(y / 230) * 90;       // where the mountains start
+const chaseInFar = (x, y, m = 0) => x > chaseFarX(y) + m && y < chaseFarY(x) - m;
 const chaseCoast = x => CHASE.oceanY + Math.sin(x / 700) * 110 + Math.sin(x / 260 + 2) * 40;
 const chaseMount = x => CHASE.mountY + Math.sin(x / 900) * 150 + Math.sin(x / 310 + 1) * 70;
 function chaseSpline(pts, step) {
@@ -7164,23 +7220,42 @@ function chaseNearIn(C, x, y) {
     return { d: Math.sqrt(bd), i: bi };
 }
 const chaseRiverNear = (x, y) => chaseNearIn(G.world.chase, x, y);
-// Water at least m away from any shore (the ocean, the river); the piers and the island count as land
+// The far land's river is a whole network of channels of different widths: how far a point is from being in one
+// (e < 0 means in the water), and which bit of channel that is
+function chaseFarNearIn(C, x, y) {
+    const list = C.farHash[Math.floor(x / C.cell) + Math.floor(y / C.cell) * C.cols];
+    let be = Infinity, bi = -1, bd = 0;
+    if (list && x >= 0 && y >= 0) for (const i of list) { const q = C.far[i], d = Math.sqrt((q.x - x) ** 2 + (q.y - y) ** 2), e = d - q.w; if (e < be) { be = e; bi = i; bd = d; } }
+    return { e: be, i: bi, d: bd };
+}
+const chaseFarNear = (x, y) => chaseFarNearIn(G.world.chase, x, y);
+// Water at least m away from any shore (the ocean, the rivers); the piers count as land
 function chaseWet(x, y, m = 0) {
-    const I = CHASE.island;
-    if (y < chaseCoast(x) - m) return (x - I.x) ** 2 + (y - I.y) ** 2 > (I.r + m) ** 2;
     for (const p of G.world.chase.piers) if (x > p.x0 - m && x < p.x1 + m && y > p.y0 - m && y < p.y1 + m) return false;
+    if (y < chaseCoast(x) - m) return x < chaseFarX(y) - m || y > chaseFarY(x) + m || chaseFarNear(x, y).e < -m;
     return chaseRiverNear(x, y).d < CHASE.river - m;
 }
-// Mountain you can't walk through: everything in the range except the river and its banks
+// Mountain you can't walk through: everything in the range except the river and its banks (and, over in the far
+// land's mountains, the caves and the airship's clearing)
+function chaseFarRockIn(C, x, y) {
+    if (x < chaseFarMX(y) || y > chaseFarY(x)) return false;
+    const n = chaseFarNearIn(C, x, y);
+    if (n.i >= 0 && n.e < C.far[n.i].bank) return false;
+    const K = CHASE.far.clear;
+    if ((x - K.x) ** 2 + (y - K.y) ** 2 < K.r * K.r) return false;
+    for (const c of C.farCaves) if ((x - c.x) ** 2 + (y - c.y) ** 2 < c.r * c.r) return false;
+    return true;
+}
 function chaseRock(x, y) {
-    if (y <= chaseCoast(x) || y >= chaseMount(x)) return false;
+    if (y >= chaseMount(x)) return false;
+    if (y <= chaseCoast(x)) return chaseFarRockIn(G.world.chase, x, y);
     const n = chaseRiverNear(x, y);
     return n.i < 0 || n.d > CHASE.river + G.world.chase.river[n.i].bank;
 }
 const chaseBad = (x, y) => chaseRock(x, y) || chaseWet(x, y, -30);
 
 function generateChase() {
-    const W = CONFIG.WORLD_SIZE, grid = new Grid(256, 90), obstacles = [], lootSpots = [], F = CHASE.fac, I = CHASE.island;
+    const W = CONFIG.WORLD_SIZE, grid = new Grid(256, 90), obstacles = [], lootSpots = [], F = CHASE.fac, FL = CHASE.far;
     const addCircle = o => { obstacles.push(o); grid.insert(o); }, addBox = o => { obstacles.push(o); grid.insertBox(o); };
     // The river, and the whole route the boat takes (down the river, then across the sea to the landing)
     const river = chaseSpline(CHASE.riverPts, 50);
@@ -7196,10 +7271,57 @@ function generateChase() {
                 (hash[cx + cy * cols] || (hash[cx + cy * cols] = [])).push(i);
     });
     // The boat waits at a pier where the river starts, at the edge of the desert
-    const di = river.findIndex(q => q.y < CHASE.riverPts[0][1] - 520), d0 = river[di], d1 = river[di + 1];
+    const di = river.findIndex(q => q.y < CHASE.riverPts[0][1] - 1250), d0 = river[di], d1 = river[di + 1];
     const dock = { x: d0.x, y: d0.y, a: Math.atan2(d1.y - d0.y, d1.x - d0.x) };
-    const piers = [{ x0: dock.x - CHASE.river - 120, x1: dock.x - 92, y0: dock.y - 55, y1: dock.y + 55 }];
+    const hb = NAVY.ships.battleship.beam / 2, piers = [{ x0: dock.x - CHASE.river - 120, x1: dock.x - hb + 10, y0: dock.y - 70, y1: dock.y + 70 }, { x0: dock.x - CHASE.river - 120, x1: dock.x - hb + 10, y0: dock.y + 500, y1: dock.y + 640 }];
     const C = { river, route, hash, cell, cols, piers, dock, mouthS: route[river.length - 1].s, endS: s, ruins: [], gates: [], start: null, buildings: [] };
+    // The far land's river: a wide mouth where the mini ships wait, then the main channel up through the forest and
+    // into the mountains, ending in a lake by the airship. Along the way it splits into channels round islands
+    // (a delta at the mouth, and braids of channels between the cliffs), and every channel is water you can sail.
+    const main = chaseSpline(FL.pts, 50), nm = main.length;
+    main.forEach((q, i) => { q.w = i < 60 ? FL.mouth + (FL.river - FL.mouth) * (i / 60) : i > nm - 22 ? FL.river + (FL.lake - FL.river) * ((i - (nm - 22)) / 21) : FL.river; q.bank = FL.bank + Math.sin(i * 0.07) * 120 + Math.sin(i * 0.023 + 2) * 80; q.main = true; });
+    const route2 = main.map(q => ({ x: q.x, y: q.y }));
+    let s2 = 0;
+    route2.forEach((q, i) => { if (i) s2 += Math.hypot(q.x - route2[i - 1].x, q.y - route2[i - 1].y); q.s = s2; });
+    const far = main.slice(), inLand = (x, y, m) => chaseInFar(x, y, m) && y > m && x < W - m;
+    const nrm = i => { const q = main[Math.max(0, i - 1)], q2 = main[Math.min(nm - 1, i + 1)], tl = Math.hypot(q2.x - q.x, q2.y - q.y) || 1; return [-(q2.y - q.y) / tl, (q2.x - q.x) / tl]; };
+    // a channel that splits off the main one and joins it again further on, round an island
+    const braid = (f0, f1, amp, w) => {
+        const i0 = Math.floor(nm * f0), i1 = Math.floor(nm * f1), im = (i0 + i1) >> 1, [nx, ny] = nrm(im);
+        let side = Math.random() < 0.5 ? 1 : -1;
+        if (!inLand(main[im].x + nx * side * amp, main[im].y + ny * side * amp, 900)) side = -side;
+        if (!inLand(main[im].x + nx * side * amp, main[im].y + ny * side * amp, 900)) amp *= 0.55;
+        for (let i = i0; i <= i1; i++) {
+            const t = (i - i0) / (i1 - i0), [ax, ay] = nrm(i), o = side * amp * Math.sin(Math.PI * t) * (1 + 0.12 * Math.sin(t * 11));
+            for (let k = 0; k < 3; k++) {  // (a few points per step, so the channel stays unbroken where it swings out)
+                const j = Math.min(nm - 1, i + k / 3), qa = main[Math.floor(j)], tt = (j - i0) / (i1 - i0), oo = side * amp * Math.sin(Math.PI * Math.min(1, tt)) * (1 + 0.12 * Math.sin(tt * 11));
+                far.push({ x: qa.x + ax * oo, y: qa.y + ay * oo, w: w * (0.75 + 0.25 * Math.sin(Math.PI * Math.min(1, tt))), bank: FL.bank * 0.85 });
+            }
+        }
+    };
+    // a channel that splits off and runs its own way out to the sea (the delta at the mouth)
+    const toSea = (i0, ex, ey, w) => {
+        const q = main[i0], mx = (q.x + ex) / 2 + rand(-500, 500), my = (q.y + ey) / 2 + rand(-500, 500);
+        for (const p of chaseSpline([[q.x, q.y], [mx, my], [ex, ey]], 40)) far.push({ x: p.x, y: p.y, w, bank: FL.bank * 0.7 });
+    };
+    toSea(Math.floor(nm * 0.09), chaseFarX(6600) - 400, 6600, 330);
+    toSea(Math.floor(nm * 0.07), chaseFarX(2700) - 400, 2700, 300);
+    toSea(Math.floor(nm * 0.13), FL.x + 2600, chaseFarY(FL.x + 2600) + 400, 280);
+    braid(0.22, 0.3, 1100, FL.branch);
+    braid(0.38, 0.45, 950, FL.branch * 0.9);
+    braid(0.56, 0.63, 950, FL.branch);
+    braid(0.69, 0.76, 1000, FL.branch * 0.9);
+    braid(0.83, 0.9, 900, FL.branch);
+    const farHash = new Array(cols * cols);
+    far.forEach((q, i) => {
+        const R = q.w + q.bank + 150;
+        for (let cy = Math.max(0, Math.floor((q.y - R) / cell)); cy <= Math.min(cols - 1, Math.floor((q.y + R) / cell)); cy++)
+            for (let cx = Math.max(0, Math.floor((q.x - R) / cell)); cx <= Math.min(cols - 1, Math.floor((q.x + R) / cell)); cx++)
+                (farHash[cx + cy * cols] || (farHash[cx + cy * cols] = [])).push(i);
+    });
+    Object.assign(C, { far, farHash, farCaves: [], route2, endS2: s2, miniS: FL.miniS, farMount: route2[main.findIndex(q => q.x > chaseFarMX(q.y))].s });
+    const farEnd = route2[route2.length - 1];
+    C.farEnd = { x: farEnd.x, y: farEnd.y };
     const rockAt = (x, y) => { if (y <= chaseCoast(x) || y >= chaseMount(x)) return false; const n = chaseNearIn(C, x, y); return n.i < 0 || n.d > CHASE.river + river[n.i].bank; };
     const nearRiver = (x, y, r) => chaseNearIn(C, x, y).d < r;
     const clearAt = (x, y, r) => !blockedAt(grid, x, y, r);
@@ -7258,8 +7380,8 @@ function generateChase() {
     // boulders (all of it cover from the searching helicopters) ---
     const inFac = (x, y, m) => x > F.x0 - m && x < F.x1 + m && y > F.y0 - m && y < F.y1 + m;
     const desertOk = (x, y, m) => y - m > chaseMount(x) + 250 && y + m < W - 300 && x - m > 300 && x + m < W - 300 && !inFac(x, y, 500 + m) && Math.hypot(x - dock.x, y - dock.y) > 900 + m && !nearRiver(x, y, 900 + m) && Math.hypot(x - C.start.x, y - C.start.y) > 2500;
-    const ruin = (x, y, w, h, big) => {
-        if (!desertOk(x, y, Math.max(w, h) / 2)) return false;
+    const ruin = (x, y, w, h, big, ok = desertOk) => {
+        if (!ok(x, y, Math.max(w, h) / 2)) return false;
         if (C.ruins.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + 160 && Math.abs(r.y - y) < (r.h + h) / 2 + 160)) return false;
         const col = pick(['#9b8f7e', '#8a7f70', '#a39580', '#857868', '#9a8a72']), t = big ? 24 : 18, x0 = x - w / 2, y0 = y - h / 2;
         C.ruins.push({ x, y, w, h, col });
@@ -7304,8 +7426,8 @@ function generateChase() {
     };
     C.rockFields = []; C.roofs = []; C.caves = [];
     // A cave: a ring of huge boulders with a way in, and a rock roof over the hollow inside. Nobody sees you in there.
-    const cave = (cx, cy, R) => {
-        const gap = rand(0, TAU), n = Math.round(R / 30);
+    const cave = (cx, cy, R, gap = rand(0, TAU)) => {
+        const n = Math.round(R / 30);
         for (let k = 0; k < n; k++) {
             const a = (k / n) * TAU;
             if (Math.abs(angleDiff(a, gap)) < 0.45) continue;  // (the entrance)
@@ -7411,22 +7533,76 @@ function generateChase() {
             if (Math.random() < 0.03) chest(x, y, Math.random() < 0.3); else if (Math.random() < 0.6) tree(x, y, false); else bush(x, y);
         }
     }
-    for (let k = 0; k < 4; k++) chest(I.x + rand(-I.r * 0.6, I.r * 0.6), I.y + rand(-I.r * 0.3, I.r * 0.6), true);
     for (let i = 0; i < 1600; i++) {
         const x = rand(200, W - 200), y = rand(CHASE.oceanY, CHASE.mountY + 200);
         if (!rockAt(x, y) || nearRiver(x, y, CHASE.river + 700)) continue;
         addCircle({ type: 'rock', x, y, r: rand(60, 150), spr: randInt(0, 5), rot: rand(0, TAU) });
     }
 
-    // --- The far shore: an island with trees, a supply point, and the airship moored on it ---
-    const island = { x: I.x, y: I.y, r: I.r, seed: 7, edge: new Array(28).fill(1), supply: [{ x: I.x - 350, y: I.y + 420 }] };
-    for (let k = 0; k < 120; k++) {
-        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (I.r - 120), x = I.x + Math.cos(a) * d, y = I.y + Math.sin(a) * d;
-        if (Math.hypot(x - CHASE.airship.x, y - CHASE.airship.y) < 750 || !clearAt(x, y, 70) || Math.hypot(x - island.supply[0].x, y - island.supply[0].y) < 120) continue;
-        const o = { type: 'tree', x, y, r: 0, canopy: rand(70, 110), spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999, seed: randInt(1, 1e9) };
-        o.r = o.canopy * 0.27;
-        addCircle(o);
+    // --- The far land. The forest first: trees everywhere, thickest along the river, a fishing village gone to ruin,
+    // and chests to find. Then the mountains: cliffs right down to the banks, caves cut into them all the way along
+    // (soldiers wait in plenty of them), and a clearing at the end where the airship is moored ---
+    const farWater = (x, y, m) => chaseFarNearIn(C, x, y).e < m;
+    const K = FL.clear, inClear = (x, y, m) => Math.hypot(x - K.x, y - K.y) < K.r + m;
+    const moor = chaseRoutePt(FL.miniS, route2);
+    C.moor = moor;
+    const lowOk = (x, y, m) => inLand(x, y, 250 + m) && x + m < chaseFarMX(y) - 150 && !farWater(x, y, 140 + m) && Math.hypot(x - moor.x, y - moor.y) > 1500 + m;
+    for (let i = 0, tries = 0; i < 18 && tries < 900; tries++) {  // (the old fishing village by the mouth, and huts up the banks)
+        const k = Math.floor(nm * (0.08 + 0.3 * Math.random())), q = main[k], [nx, ny] = nrm(k), side = Math.random() < 0.5 ? 1 : -1, d = q.w + rand(350, 900);
+        if (ruin(q.x + nx * side * d, q.y + ny * side * d, rand(200, 380), rand(180, 340), false, lowOk)) i++;
     }
+    for (let i = 0, tries = 0; i < 4 && tries < 300; tries++) {
+        const x = rand(FL.x + 800, FL.mx - 300), y = rand(800, 7800);
+        if (ruin(x, y, rand(700, 1000), rand(600, 850), true, lowOk)) i++;
+    }
+    for (let i = 0; i < 5200; i++) {
+        const x = rand(FL.x + 300, FL.mx + 700), y = rand(300, 8400);
+        if (!lowOk(x, y, 0) || !clearAt(x, y, 70)) continue;
+        const nearW = farWater(x, y, 900);
+        if (!nearW && Math.random() < 0.35) continue;
+        const r = Math.random();
+        if (r < 0.6) tree(x, y, false); else if (r < 0.97) bush(x, y); else chest(x, y, Math.random() < 0.25);
+    }
+    // the mountains: boulders along the foot of the cliffs
+    for (let i = 0; i < far.length; i += 2) {
+        const q = far[i];
+        if (q.x < chaseFarMX(q.y) - 200) continue;
+        for (let k = 0; k < 2; k++) {
+            const a = rand(0, TAU), d = q.w + q.bank + rand(10, 140), x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d;
+            if (!chaseFarRockIn(C, x, y) || farWater(x, y, q.bank * 0.6)) continue;
+            addCircle({ type: 'rock', x, y, r: rand(45, 100), spr: randInt(0, 5), rot: rand(0, TAU) });
+        }
+    }
+    // caves cut into the cliffs, opening onto the banks (and a few huge caverns)
+    C.farCaveList = [];
+    for (let i = 0, tries = 0; i < 46 && tries < 8000; tries++) {
+        const q = far[randInt(0, far.length - 1)];
+        if (q.x < chaseFarMX(q.y) + 150) continue;
+        const ang = rand(0, TAU), R = Math.random() < 0.18 ? rand(420, 540) : rand(210, 330);
+        const cx = q.x + Math.cos(ang) * (q.w + q.bank + R * 0.55), cy = q.y + Math.sin(ang) * (q.w + q.bank + R * 0.55);
+        const n = chaseFarNearIn(C, cx, cy);
+        if (n.e < q.bank + R * 0.35 || !inLand(cx, cy, R + 300) || cx < chaseFarMX(cy) + R || inClear(cx, cy, R + 200)) continue;
+        if (C.farCaves.some(c => Math.hypot(c.x - cx, c.y - cy) < c.r + R + 260)) continue;
+        // (the mouth faces the nearest water)
+        const w = far[n.i], gap = Math.atan2(w.y - cy, w.x - cx);
+        C.farCaves.push({ x: cx, y: cy, r: R + 40 });
+        cave(cx, cy, R, gap);
+        C.farCaveList.push({ x: cx, y: cy, r: R });
+        if (Math.random() < 0.6) chest(cx + rand(-R / 3, R / 3), cy + rand(-R / 3, R / 3), Math.random() < 0.4);
+        i++;
+    }
+    for (let i = 0; i < 900; i++) {
+        const x = rand(chaseFarMX(0), W - 200), y = rand(200, 8400);
+        if (!chaseFarRockIn(C, x, y) || farWater(x, y, 700)) continue;
+        addCircle({ type: 'rock', x, y, r: rand(60, 150), spr: randInt(0, 5), rot: rand(0, TAU) });
+    }
+    // the clearing: a few trees round the edge, and supplies
+    for (let k = 0; k < 60; k++) {
+        const a = rand(0, TAU), d = rand(K.r * 0.6, K.r - 80), x = K.x + Math.cos(a) * d, y = K.y + Math.sin(a) * d;
+        if (Math.hypot(x - CHASE.airship.x, y - CHASE.airship.y) < 800 || farWater(x, y, 80) || !clearAt(x, y, 70)) continue;
+        tree(x, y, false);
+    }
+    for (let k = 0; k < 3; k++) chest(K.x + rand(-500, 0), K.y + rand(300, 700), true);
 
     // --- The painted ground, at 1/6 scale ---
     const S = CHASE.art, N = Math.ceil(W / S), [cv, g] = makeCanvas(N, N), rnd = seededRand(9090);
@@ -7476,17 +7652,56 @@ function generateChase() {
     g.fillStyle = '#2a7fa3'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river, 0, TAU); g.fill(); }
     g.fillStyle = '#2f8ab0'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river * 0.55, 0, TAU); g.fill(); }
     g.fillStyle = '#1c6e93'; coastPath(-40); g.fill();
-    // the island
-    g.fillStyle = '#5bb6c9'; g.beginPath(); g.arc(I.x, I.y, I.r + 70, 0, TAU); g.fill();
-    g.fillStyle = '#e4cf97'; g.beginPath(); g.arc(I.x, I.y, I.r + 6, 0, TAU); g.fill();
-    g.fillStyle = '#5c9a48'; g.beginPath(); g.arc(I.x, I.y, I.r - 90, 0, TAU); g.fill();
-    g.fillStyle = '#4c8a3c'; for (let i = 0; i < 60; i++) { const a = rnd() * TAU, d = rnd() * (I.r - 300); g.beginPath(); g.arc(I.x + Math.cos(a) * d, I.y + Math.sin(a) * d, 60 + rnd() * 140, 0, TAU); g.fill(); }
+    // the far land: beaches, the forest, and the mountains beyond it
+    const outline = mx => {
+        const pts = [];
+        for (let y = -100; y <= 9000; y += 80) { const x = mx(y); if (y > chaseFarY(x)) break; pts.push([x, y]); }
+        for (let x = pts[pts.length - 1][0]; x <= W + 100; x += 80) pts.push([x, chaseFarY(x)]);
+        pts.push([W + 100, -100]);
+        return pts;
+    };
+    const landPts = outline(chaseFarX), mountPts = outline(chaseFarMX), poly = (pts, ox = 0, oy = 0) => { g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x + ox, y + oy) : g.moveTo(x + ox, y + oy)); g.closePath(); };
+    C.farPoly = landPts;
+    g.strokeStyle = '#4fa6c2'; g.lineWidth = 200; g.lineJoin = 'round'; poly(landPts); g.stroke();
+    g.fillStyle = '#e4cf97'; poly(landPts); g.fill();
+    g.fillStyle = '#4f8a3e'; poly(landPts, 120, -120); g.fill();
+    g.save(); poly(landPts, 120, -120); g.clip();
+    for (let i = 0; i < 4500; i++) { const x = FL.x + rnd() * (W - FL.x), y = rnd() * FL.y, r = 60 + rnd() * 260; g.fillStyle = pick(['rgba(92,154,72,0.5)', 'rgba(60,112,48,0.5)', 'rgba(110,160,80,0.35)', 'rgba(50,95,40,0.45)']); g.beginPath(); g.ellipse(x, y, r, r * (0.5 + rnd() * 0.5), rnd() * TAU, 0, TAU); g.fill(); }
+    g.fillStyle = '#6f665c'; poly(mountPts); g.fill();
+    poly(mountPts); g.clip();
+    for (let i = 0; i < 7000; i++) { const x = FL.mx - 400 + rnd() * (W - FL.mx + 400), y = rnd() * FL.y, r = 40 + rnd() * 220; g.fillStyle = pick(['rgba(84,76,67,0.55)', 'rgba(128,118,104,0.5)', 'rgba(98,90,80,0.5)', 'rgba(60,54,48,0.4)']); g.beginPath(); g.ellipse(x, y, r, r * (0.4 + rnd() * 0.5), rnd() * TAU, 0, TAU); g.fill(); }
+    g.strokeStyle = 'rgba(40,34,30,0.35)'; g.lineWidth = 14;
+    for (let i = 0; i < 900; i++) { const x = FL.mx + rnd() * (W - FL.mx), y = rnd() * FL.y, l = 200 + rnd() * 500, a = rnd() * TAU; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l * 0.5); g.stroke(); }
+    for (let i = 0; i < 900; i++) {
+        const x = FL.mx + rnd() * (W - FL.mx), y = rnd() * FL.y;
+        if (farWater(x, y, 1100) || inClear(x, y, 500) || C.farCaves.some(c => Math.hypot(c.x - x, c.y - y) < c.r + 400)) continue;
+        const r = 120 + rnd() * 300;
+        g.fillStyle = 'rgba(232,238,242,0.9)'; g.beginPath(); g.ellipse(x, y, r, r * 0.7, rnd() * TAU, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(180,196,210,0.5)'; g.beginPath(); g.ellipse(x + r * 0.2, y + r * 0.15, r * 0.6, r * 0.35, rnd() * TAU, 0, TAU); g.fill();
+    }
+    g.restore();
+    // the clearing at the end
+    g.fillStyle = '#6a7a4c'; g.beginPath(); g.arc(K.x, K.y, K.r + 40, 0, TAU); g.fill();
+    g.fillStyle = '#7f8f58'; g.beginPath(); g.arc(K.x, K.y, K.r - 30, 0, TAU); g.fill();
+    // the caves' floors
+    for (const q of C.farCaveList) { g.fillStyle = '#3a332c'; g.beginPath(); g.arc(q.x, q.y, q.r + 40, 0, TAU); g.fill(); g.fillStyle = '#4a4238'; g.beginPath(); g.arc(q.x, q.y, q.r, 0, TAU); g.fill(); }
+    // the river's banks (grassy in the forest, stony in the mountains), then all its channels
+    const inM = q => q.x > chaseFarMX(q.y);
+    g.save(); poly(landPts, 60, -60); g.clip();
+    for (const q of far) { g.fillStyle = inM(q) ? '#6a6650' : '#456f35'; g.beginPath(); g.arc(q.x, q.y, q.w + q.bank + 30, 0, TAU); g.fill(); }
+    for (const q of far) { g.fillStyle = inM(q) ? '#8c8a62' : '#6f9a4a'; g.beginPath(); g.arc(q.x, q.y, q.w + q.bank, 0, TAU); g.fill(); }
+    g.fillStyle = '#7d8a55'; for (let i = 0; i < 2500; i++) { const q = far[Math.floor(rnd() * far.length)], a = rnd() * TAU, d = q.w + 40 + rnd() * q.bank * 0.9; g.beginPath(); g.arc(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, 20 + rnd() * 50, 0, TAU); g.fill(); }
+    g.fillStyle = '#b9ad84'; for (const q of far) { g.beginPath(); g.arc(q.x, q.y, q.w + 30, 0, TAU); g.fill(); }
+    g.fillStyle = '#2a7fa3'; for (const q of far) { g.beginPath(); g.arc(q.x, q.y, q.w, 0, TAU); g.fill(); }
+    g.fillStyle = '#2f8ab0'; for (const q of far) { g.beginPath(); g.arc(q.x, q.y, q.w * 0.55, 0, TAU); g.fill(); }
+    g.restore();
+    for (const r of C.ruins) if (r.y < CHASE.oceanY) { g.fillStyle = shade(r.col, 0.2); g.fillRect(r.x - r.w / 2, r.y - r.h / 2, r.w, r.h); }
     g.fillStyle = '#a99a7a'; g.beginPath(); g.ellipse(CHASE.airship.x, CHASE.airship.y + 60, 700, 330, 0, 0, TAU); g.fill();
     // the pier
     for (const p of piers) { g.fillStyle = '#6b4c2c'; g.fillRect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0); g.fillStyle = '#8a6440'; for (let x = p.x0; x < p.x1; x += 22) g.fillRect(x, p.y0 + 4, 16, p.y1 - p.y0 - 8); }
     const [mm, mg] = makeCanvas(200, 200);
     mg.drawImage(cv, 0, 0, 200, 200);
-    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'chase', islands: [island], chase: C, chaseArt: cv };
+    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'chase', islands: [], chase: C, chaseArt: cv };
 }
 function drawChaseGround(L, T, R, B, now) {
     const W = CONFIG.WORLD_SIZE, S = CHASE.art, cv = G.world.chaseArt;
@@ -7496,9 +7711,11 @@ function drawChaseGround(L, T, R, B, now) {
     // waves rolling over the open sea
     if (T < CHASE.oceanY && !lowDetail) {
         if (!navySeaPat) drawSea(0, 0, 0, 0, now);
-        const pat = ctx.createPattern(navySeaPat, 'repeat'), I = CHASE.island;
+        const pat = ctx.createPattern(navySeaPat, 'repeat'), P = G.world.chase.farPoly;
         if (pat) {
-            ctx.save(); ctx.beginPath(); ctx.rect(L, T, R - L, Math.min(B, CHASE.oceanY - 170) - T); ctx.arc(I.x, I.y, I.r + 80, 0, TAU, true); ctx.clip('evenodd');
+            ctx.save(); ctx.beginPath(); ctx.rect(L, T, R - L, Math.min(B, CHASE.oceanY - 170) - T);
+            if (R > CHASE.far.x - 400) { P.forEach(([x, y], i) => i ? ctx.lineTo(x - 110, y + 110) : ctx.moveTo(x - 110, y + 110)); ctx.closePath(); }
+            ctx.clip('evenodd');
             const ox = (now * 9) % 512, oy = (now * 4) % 512;
             ctx.translate(ox, oy); ctx.fillStyle = pat; ctx.fillRect(L - ox - 20, T - oy - 20, R - L + 40, B - T + 40); ctx.restore();
         }
@@ -7531,12 +7748,13 @@ function chaseNoSubs(s) {
 }
 function chaseSoldierShip(x, y, a, home) {
     const s = addShip('mini', 1, x, y, a);
-    s.speed = 0; s.throttle = 0; s.chase = 'soldier'; s.home = home;
+    s.speed = 0; s.throttle = 0; s.chase = 'soldier'; s.home = home; s.hp = s.maxHp = CHASE.shipHp;
     chaseNoSubs(s);
     for (let i = 0; i < CHASE.shipCrew; i++) {
         const o = navyDeckSpot(s), f = chaseSoldier({ x: navyWx(s, o.lx, o.ly), y: navyWy(s, o.lx, o.ly) }, 700 + i, false);
         f.ship = s; f.swim = false; f.station = null; f.boarder = false; f.room = null;
-        f.postX = rand(-0.42, 0.42) * s.C.len; f.postY = rand(0.35, 1); f.nextThink = rand(0, 500);
+        f.postX = rand(-0.42, 0.42) * s.C.len; f.postY = rand(0.35, 1); f.nextThink = rand(0, 500); f.worker = i === CHASE.shipCrew - 1;
+        if (f.worker) continue;
         const st = navyVacant(s, f);
         if (st && !st.sub && !st.heli) navyMan(f, st);
     }
@@ -7545,7 +7763,7 @@ function chaseSoldierShip(x, y, a, home) {
 function setupChase() {
     const Cw = G.world.chase, F = CHASE.fac;
     G.navy = { ships: [], wrecks: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n: 1, crew: 0, wake: 0, mini: true, chase: true, out: [] };
-    G.chase = { stage: 0, seen: null, alertAt: -1e9, nextReinf: 80000, helis: [], blimps: [], ship: null, boardedAt: 0, arrived: false };
+    G.chase = { stage: 0, seen: null, alertAt: -1e9, nextReinf: 80000, helis: [], blimps: [], ship: null, minis: [], arrived: false, leg2: false, arrived2: false };
     G.extract = { x: CHASE.airship.x, y: CHASE.airship.y + 270 };
     G.world.cars = [];
     // The squad: you and 19 others, tough (450 health each) and armed
@@ -7557,7 +7775,7 @@ function setupChase() {
     let slot = 0;
     for (const f of G.fighters) {
         if (f.team !== 0) continue;
-        if (!f.isPlayer) giveSlot(f, slot++, CHASE.people - 1);
+        if (!f.isPlayer) { f.boat = slot % 2; giveSlot(f, slot++, CHASE.people - 1); }
         f.hp = f.maxHp = CHASE.hp; f.armor = CHASE.armor;
         f.items.bandage = 3; f.items.medkit = 1; f.items.grenade = 2;
         f.inv[1] = null;
@@ -7607,34 +7825,82 @@ function setupChase() {
     // Giant airships drift slowly over the desert, sweeping the ground with their scanners
     for (let k = 0; k < CHASE.blimp.count; k++) chaseAddBlimp(rand(CONFIG.WORLD_SIZE * 0.2, CONFIG.WORLD_SIZE * 0.92), rand(chaseMount(0) + 1500, CONFIG.WORLD_SIZE - 1500));
     // The boat, waiting at the pier, and the soldier boats on the river and out at sea
-    const d = Cw.dock, ss = addShip('mini', 0, d.x, d.y, d.a);
+    // Your team's ship: a battleship, crewed by 80 sailors who'll man every gun (100 aboard with your squad)
+    const d = Cw.dock, ss = addShip('battleship', 0, d.x, d.y, d.a);
+    ss.C = { ...ss.C, speed: 210, accel: 26, turn: 0.17 };  // (a bit quicker and handier than a battleship at sea, for the river)
     ss.hp = ss.maxHp = CHASE.shipHull; ss.name = 'Runaway'; ss.chase = 'squad'; ss.speed = 0; ss.throttle = 0;
     chaseNoSubs(ss);
+    for (let i = 0; i < CHASE.sailors; i++) {
+        const o = navyDeckSpot(ss), f = createFighter(navyWx(ss, o.lx, o.ly), navyWy(ss, o.lx, o.ly), { name: `Sailor ${i + 1}`, color: '#3a6ea5', team: 0 });
+        G.fighters.push(f);
+        f.sailor = true; f.ship = ss; f.swim = false; f.station = null; f.room = null; f.likesCars = false;
+        f.inv = [weightedPick(NAVY_GUNS), 'Pistol']; f.slot = 0; f.ammo = { [f.inv[0]]: Infinity, Pistol: Infinity };
+        f.hp = f.maxHp = 150; f.armor = 100; f.boarder = false; f.worker = i < 8;
+        f.postX = rand(-0.42, 0.42) * ss.C.len; f.postY = rand(0.1, 0.55); f.nextThink = rand(0, 500);
+        if (f.worker) continue;
+        const st = navyVacant(ss, f);
+        if (st && !st.sub) { if (st.heli) navyBoardHeli(f, st.heli); else { f.room = st.room || null; navyMan(f, st); } }
+    }
     G.chase.ship = ss;  // (your boat is the only way across the sea, so she's much tougher than any other ship)
     for (let k = 0; k < CHASE.riverShips; k++) {
         const s0 = Cw.mouthS * (0.4 + 0.5 * k / Math.max(1, CHASE.riverShips - 1)), P = chaseRoutePt(s0), P2 = chaseRoutePt(s0 - 30);
         chaseSoldierShip(P.x, P.y, Math.atan2(P2.y - P.y, P2.x - P.x), s0);
     }
     for (let k = 0, tries = 0; k < CHASE.seaShips && tries < 200; tries++) {
-        const W = CONFIG.WORLD_SIZE, x = W * (0.25 + 0.55 * (k + Math.random()) / CHASE.seaShips), y = rand(1500, CHASE.oceanY - 1500);
+        const x = 7000 + (CHASE.far.x - 9500) * (k + Math.random()) / CHASE.seaShips, y = rand(1500, CHASE.oceanY - 1500);
         if (!chaseWet(x, y, 600)) continue;
         chaseSoldierShip(x, y, Math.PI, null); k++;
     }
-    for (const s of G.navy.ships) s.crewN = 1;
+    // The far land. Two mini ships moored side by side in the river mouth, waiting for the squad (half of you each)
+    const FL = CHASE.far, R2 = Cw.route2;
+    for (let k = 0; k < FL.minis; k++) {
+        const P = chaseRoutePt(FL.miniS, R2), P2 = chaseRoutePt(FL.miniS + 30, R2), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1, side = k ? 1 : -1;
+        const m = addShip('mini', 0, P.x - (P2.y - P.y) / tl * side * 260, P.y + (P2.x - P.x) / tl * side * 260, Math.atan2(P2.y - P.y, P2.x - P.x));
+        m.hp = m.maxHp = FL.miniHull; m.name = k ? 'Kestrel' : 'Swift'; m.chase = 'mini'; m.leg = 2; m.speed = 0; m.throttle = 0;
+        chaseNoSubs(m);
+        G.chase.minis.push(m);
+    }
+    // soldier boats all the way up the river (bows pointed down it, at you)
+    for (let k = 0; k < FL.ships; k++) {
+        const s0 = Cw.endS2 * (0.2 + 0.72 * k / Math.max(1, FL.ships - 1)), P = chaseRoutePt(s0, R2), P2 = chaseRoutePt(s0 - 30, R2);
+        chaseSoldierShip(P.x, P.y, Math.atan2(P2.y - P.y, P2.x - P.x), s0).leg = 2;
+    }
+    // soldiers on the banks, patrols in the forest, and ambushes waiting in the caves
+    for (let k = 0; k < FL.bankSquads; k++) {
+        const s0 = Cw.endS2 * (0.12 + 0.84 * (k + 0.5) / FL.bankSquads), P = chaseRoutePt(s0, R2), P2 = chaseRoutePt(s0 + 20, R2), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1, side = k % 2 ? 1 : -1, d = FL.river + rand(120, 300);
+        const c = { x: P.x - (P2.y - P.y) / tl * side * d, y: P.y + (P2.x - P.x) / tl * side * d };
+        if (chaseBad(c.x, c.y)) continue;
+        const size = randInt(4, 6);
+        spawnSquad(c, size, n, false); n += size;
+    }
+    for (let k = 0, tries = 0; k < FL.patrols && tries < 300; tries++) {
+        const c = { x: rand(FL.x + 1500, FL.mx - 300), y: rand(800, 7800) };
+        if (chaseBad(c.x, c.y) || !chaseInFar(c.x, c.y, 300) || Math.hypot(c.x - Cw.moor.x, c.y - Cw.moor.y) < 3000) continue;
+        const size = randInt(4, 6);
+        spawnSquad(c, size, n, Math.random() < 0.3); n += size; k++;
+    }
+    for (const q of Cw.farCaveList) {
+        if (Math.random() > 0.6) continue;
+        const c = spawnNear({ x: q.x, y: q.y }, q.r * 0.5, 30, true);
+        if (chaseBad(c.x, c.y)) continue;
+        const size = q.r > 400 ? randInt(6, 8) : randInt(3, 5);
+        spawnSquad(c, size, n, false); n += size;
+        G.squads[G.squads.length - 1].ambush = true;
+    }
+    for (let k = 0; k < FL.blimps; k++) { chaseAddBlimp(rand(FL.x + 2500, 33000), rand(1500, 7000)); G.chase.blimps[G.chase.blimps.length - 1].far = true; }
+    for (const s of G.navy.ships) s.crewN = s.chase === 'mini' ? 0 : 1;
     if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
 }
 
 // --- The route: how far along it something is, and the point a given distance along ---
-function chaseRoutePt(s) {
-    const R = G.world.chase.route;
+function chaseRoutePt(s, R = G.world.chase.route) {
     s = clamp(s, 0, R[R.length - 1].s);
     let lo = 0, hi = R.length - 1;
     while (hi - lo > 1) { const m = (lo + hi) >> 1; if (R[m].s <= s) lo = m; else hi = m; }
     const a = R[lo], b = R[hi], t = (s - a.s) / ((b.s - a.s) || 1);
     return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
-function chaseRouteS(x, y) {
-    const R = G.world.chase.route;
+function chaseRouteS(x, y, R = G.world.chase.route) {
     let bd = Infinity, bs = 0;
     for (const q of R) { const d = (q.x - x) ** 2 + (q.y - y) ** 2; if (d < bd) { bd = d; bs = q.s; } }
     return bs;
@@ -7644,43 +7910,61 @@ const chaseLeader = () => G.player && !G.player.dead ? G.player : G.fighters.fin
 // The boats' captains: ours sails the route (waiting for you, or keeping pace with you on the bank);
 // the soldier boats come up the river at it, bow first, and back down after it once it's past
 function chaseShipOrders(s) {
-    const Cw = G.world.chase, here = chaseRouteS(s.x, s.y);
+    const Cw = G.world.chase, Ch = G.chase, R = s.leg === 2 ? Cw.route2 : Cw.route, endS = R[R.length - 1].s, here = chaseRouteS(s.x, s.y, R);
     s.routeS = here;
     let target = here, off = 0, bowDown = true;
-    if (s.chase === 'squad') {
-        const p = chaseLeader();
-        if (!p) target = Cw.endS;
-        else if (p.ship === s) {
-            // (a moment at the pier for everyone to climb aboard)
-            if (!G.chase.boardedAt) G.chase.boardedAt = G.time;
-            const waiting = G.time - G.chase.boardedAt < 45000 && G.fighters.some(f => !f.dead && !f.soldier && f.team === 0 && !f.ship && !f.car && !f.chaseOff && dist(f, s) < 5000);
-            target = waiting ? here : Cw.endS;
+    const ours = s.chase === 'squad' || s.chase === 'mini';
+    if (ours) {
+        const p = chaseLeader(), mini = s.chase === 'mini', mine = q => q && (mini ? q.chase === 'mini' : q === s);
+        if (mini && !Ch.leg2) target = here;  // (moored in the river mouth till you get there)
+        else if (!p) target = endS;
+        else if (mine(p.ship)) {
+            // (a moment for everyone to climb aboard)
+            if (!s.boardedAt) s.boardedAt = G.time;
+            const waiting = G.time - s.boardedAt < 45000 && G.fighters.some(f => !f.dead && !f.soldier && !f.sailor && f.team === 0 && (!f.ship || (mini && f.ship.chase === 'squad')) && !f.car && !f.chaseOff && dist(f, s) < 5000);
+            target = waiting ? here : endS;
             // (someone of ours in the water close by: ease off so they can catch up)
             if (!waiting && G.fighters.some(f => f.swim && !f.dead && !f.soldier && f.team === 0 && !f.chaseOff && dist(f, s) < 1500)) s.slowFor = G.time + 1000;
-        } else if (!p.ship && p.y < chaseMount(p.x) + 200) {
-            const ps = chaseRouteS(p.x, p.y);
-            if (ps > here + 250) target = Math.min(ps, Cw.mouthS - 400);
+        } else if (!p.ship && (mini ? chaseInFar(p.x, p.y) : p.y < chaseMount(p.x) + 200 && p.y > chaseCoast(p.x))) {
+            const ps = chaseRouteS(p.x, p.y, R);
+            if (ps > here + 250) target = Math.min(ps, mini ? endS - 400 : Cw.mouthS - 400);
+        }
+        // (the second mini ship keeps a little way behind the one in front)
+        if (mini) {
+            const o = Ch.minis.find(q => q !== s && !q.sinkAt), follow = p && p.ship === o ? true : p && p.ship === s ? false : Ch.minis[1] === s;
+            if (o && follow) target = Math.min(target, (o.routeS || 0) - 950);
         }
     } else if (s.home === null) {
         // Out at sea: the normal captain's plan (go for the nearest enemy ship) works fine in open water
-        const q = G.chase.ship;
-        if (q && !q.sinkAt && (q.routeS || 0) > Cw.mouthS - 900) { navyOrders(s); return; }
+        const q = Ch.ship;
+        if (q && !q.sinkAt && (q.routeS || 0) > Cw.mouthS - 900 && !Ch.leg2) { navyOrders(s); return; }
         s.wantThrottle = 0; s.want = s.a; return;
     } else {
-        const q = G.chase.ship;
-        target = q && !q.sinkAt && Math.abs((q.routeS || 0) - here) < 4500 && (q.routeS || 0) > 300 ? q.routeS : s.home + Math.sin(G.time / 9000 + s.home) * 500;
+        const q = s.leg === 2 ? chaseLeadMini() : Ch.ship, qs = q && q.leg === s.leg ? q.routeS || 0 : -1e9;
+        target = q && !q.sinkAt && (s.leg !== 2 || Ch.leg2) && Math.abs(qs - here) < 4500 && qs > 300 ? qs : s.home + Math.sin(G.time / 9000 + s.home) * 500;
         off = 150; bowDown = false;
     }
-    if (s.chase === 'squad' && here > Cw.endS - 250) G.chase.arrived = true;
+    if (s.chase === 'squad' && here > endS - 250) Ch.arrived = true;
+    if (s.chase === 'mini' && Ch.leg2 && here > endS - 300) Ch.arrived2 = true;
     const gap = target - here, ad = Math.abs(gap), dir = gap >= 0 ? 1 : -1;
-    if (ad < 140 || (s.chase === 'squad' && gap < 0)) { s.wantThrottle = 0; s.want = s.a; return; }
-    const at = here + dir * 600, P = chaseRoutePt(at), P2 = chaseRoutePt(at + 20), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1;
+    if (ad < 140 || (ours && gap < 0)) { s.wantThrottle = 0; s.want = s.a; return; }
+    const at = here + dir * 600, P = chaseRoutePt(at, R), P2 = chaseRoutePt(at + 20, R), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1;
     if (off) { P.x += -(P2.y - P.y) / tl * off; P.y += (P2.x - P.x) / tl * off; }
     const bowFirst = bowDown ? dir > 0 : dir < 0;
     s.want = bowFirst ? Math.atan2(P.y - s.y, P.x - s.x) : Math.atan2(s.y - P.y, s.x - P.x);
     const th = clamp(ad / 900, 0.25, 1) * clamp(Math.cos(angleDiff(s.a, s.want)), 0.3, 1) * (G.time < (s.slowFor || 0) ? 0.3 : 1);
     s.wantThrottle = bowFirst ? th : -th * 0.6;
 }
+const chaseLeadMini = () => { let b = null; for (const q of G.chase.minis || []) if (!q.sinkAt && (!b || (q.routeS || 0) > (b.routeS || 0))) b = q; return b; };
+// Which boat one of the squad belongs on: the battleship, then (once you've reached the far land) their own mini ship
+function chaseBoat(b) {
+    const Ch = G.chase;
+    if (!Ch.leg2 || b.sailor) return Ch.ship;
+    const m = Ch.minis, k = b.boat || 0, a = m[k], o = m[1 - k];
+    return a && !a.sinkAt ? a : o && !o.sinkAt ? o : null;
+}
+// Is the leader aboard (the battleship, or either mini ship once we've switched to them)?
+const chaseAboard = L => !!(L && L.ship && (G.chase.leg2 ? L.ship.chase === 'mini' : L.ship === G.chase.ship));
 // Hulls stay in the water: any part of a ship over the bank or the beach is pushed back toward deep water
 function chaseKeepAfloat(s, dt) {
     const C = s.C, h = C.len / 2 - C.beam / 2, rr = C.beam / 2, ca = Math.cos(s.a), sa = Math.sin(s.a);
@@ -7693,6 +7977,14 @@ function chaseKeepAfloat(s, dt) {
         if (e0 > 0 && e0 < 1500) { best = e0; py = -e0; }
         const nr = chaseRiverNear(x, y);
         if (nr.i >= 0) { const q = G.world.chase.river[nr.i], e = nr.d - (CHASE.river - rr); if (e > 0 && e < best) { best = e; px = (q.x - x) / (nr.d || 1) * e; py = (q.y - y) / (nr.d || 1) * e; } }
+        if (y < chaseCoast(x)) {
+            // (the far land: back out to sea, or in toward the middle of the channel)
+            const ew = x - (chaseFarX(y) - rr), es = chaseFarY(x) + rr - y;
+            if (ew > 0 && ew < best) { best = ew; px = -ew; py = 0; }
+            if (es > 0 && es < best) { best = es; px = 0; py = es; }
+            const nf = chaseFarNear(x, y);
+            if (nf.i >= 0) { const q = G.world.chase.far[nf.i], e = nf.d - (q.w - rr); if (e > 0 && e < best) { best = e; px = (q.x - x) / (nf.d || 1) * e; py = (q.y - y) / (nf.d || 1) * e; } }
+        }
         if (best === Infinity) continue;
         mx += px; my += py; n++;
         rot += (-px * sa + py * ca) * lx; rl += lx * lx;
@@ -7705,38 +7997,61 @@ function chaseKeepAfloat(s, dt) {
 
 // --- The squad's bots ---
 function chaseRunnerGoal(b) {
-    const s = G.chase.ship, L = b.lead;
+    const s = chaseBoat(b), L = b.lead, Ch = G.chase;
     if (!s || s.sinkAt || b.chaseOff || !L || dist(b, s) > 9000) return null;
-    // (once you're aboard, or right by the boat, the whole squad heads for her: walking, then swimming out)
-    if (L.ship !== s && !(dist(L, s) < 900 && dist(b, s) < 2500)) return null;
+    // (once you're aboard, or right by the boats, the whole squad heads for them: walking, then swimming out)
+    const near = Ch.leg2 ? Ch.minis.some(q => !q.sinkAt && dist(L, q) < 900) : dist(L, s) < 900;
+    if (!chaseAboard(L) && !(near && dist(b, s) < 2500)) return null;
     return { x: s.x, y: s.y };
 }
 // Someone in the water swims for our boat (if that's where the group is) or for the nearest dry land
 function chaseSwimGoal(b) {
-    const s = G.chase.ship, L = chaseLeader();
-    if (!b.soldier && s && !s.sinkAt && !b.chaseOff && (dist(b, s) < 1200 || (L && L.ship === s) || b.y < chaseCoast(b.x) - 600)) return s;
+    const s = chaseBoat(b), L = chaseLeader(), Ch = G.chase;
+    if (!b.soldier && s && !s.sinkAt && !b.chaseOff) {
+        if (dist(b, s) < 1200 || chaseAboard(L) || (b.y < chaseCoast(b.x) - 600 && !chaseInFar(b.x, b.y))) return s;
+        if (Ch.leg2 && !Ch.arrived2 && L && dist(L, s) < 3000) return s;
+    }
     return chaseLandNear(b.x, b.y);
 }
 function chaseLandNear(x, y) {
-    const I = CHASE.island;
+    const Cw = G.world.chase;
     if (y < chaseCoast(x)) {
-        const di = Math.hypot(x - I.x, y - I.y), dc = chaseCoast(x) - y;
-        if (di - I.r < dc) return { x: I.x + (x - I.x) / (di || 1) * (I.r - 80), y: I.y + (y - I.y) / (di || 1) * (I.r - 80) };
-        return { x, y: chaseCoast(x) + 160 };
+        // in the far land's river: the nearest bank
+        const nf = chaseFarNear(x, y);
+        if (nf.i >= 0 && nf.e < 0 && chaseInFar(x, y, -300)) {
+            const q = Cw.far[nf.i], d = nf.d || 1;
+            return { x: q.x + (x - q.x) / d * (q.w + 110), y: q.y + (y - q.y) / d * (q.w + 110) };
+        }
+        // out at sea: the mountains' shore, or the far land's, whichever's closer
+        let best = { x, y: chaseCoast(x) + 160 }, bd = chaseCoast(x) - y;
+        const dw = chaseFarX(y) - x, ds = y - chaseFarY(x);
+        if (y < chaseFarY(chaseFarX(y)) && dw > 0 && dw < bd) { bd = dw; best = { x: chaseFarX(y) + 200, y }; }
+        if (x > chaseFarX(chaseFarY(x)) && ds > 0 && ds < bd) { bd = ds; best = { x, y: chaseFarY(x) - 200 }; }
+        return best;
     }
-    const n = chaseRiverNear(x, y), R = G.world.chase.river;
+    const n = chaseRiverNear(x, y), R = Cw.river;
     if (n.i < 0) return { x, y };
     const q = R[n.i];
     let dx = x - q.x, dy = y - q.y, d = Math.hypot(dx, dy);
     if (d < 20) { const q2 = R[Math.min(n.i + 1, R.length - 1)]; dx = -(q2.y - q.y); dy = q2.x - q.x; d = Math.hypot(dx, dy) || 1; }
     return { x: q.x + dx / d * (CHASE.river + 110), y: q.y + dy / d * (CHASE.river + 110) };
 }
-// At the far shore, everyone still aboard climbs off toward the airship once you have
+// Getting off. At the far land, the squad goes over the side of the battleship once you have, and swims for the mini
+// ships (the sailors stay with her). At the end of the river, everyone climbs off the minis toward the airship.
 function chaseDisembark(b) {
-    const s = b.ship, L = chaseLeader();
-    if (!G.chase.arrived || (L && L.ship === s)) return false;
+    const s = b.ship, L = chaseLeader(), Ch = G.chase;
+    if (s.chase === 'squad') {
+        if (!Ch.arrived || b.sailor || (L && L.ship === s)) return false;
+        const t = chaseBoat(b) || G.world.chase.farEnd;
+        if (b.station) navyLeave(b);
+        const lx = clamp(navyLx(s, t.x, t.y), -s.C.len * 0.45, s.C.len * 0.45), side = navyLy(s, t.x, t.y) >= 0 ? 1 : -1, hw = navyHw(s.C, lx);
+        b.x = navyWx(s, lx, side * (hw + 50)); b.y = navyWy(s, lx, side * (hw + 50));
+        b.ship = null; b.room = null; b.swim = true; b.noClimb = G.time + 2500; b.nGoal = null; b.nStation = null;
+        return true;
+    }
+    if (!Ch.arrived2 || chaseAboard(L)) return false;
     if (b.station) navyLeave(b);
-    const I = CHASE.island, side = navyLy(s, I.x, I.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, I.x, I.y), -s.C.len * 0.4, s.C.len * 0.4), hw = navyHw(s.C, lx);
+    const A = CHASE.airship, side = navyLy(s, A.x, A.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, A.x, A.y), -s.C.len * 0.4, s.C.len * 0.4), hw = navyHw(s.C, lx);
     b.x = navyWx(s, lx, side * (hw + 50)); b.y = navyWy(s, lx, side * (hw + 50));
     b.ship = null; b.room = null; b.swim = true; b.noClimb = G.time + 1e9; b.chaseOff = true; b.nGoal = null; b.nStation = null;
     return true;
@@ -7768,8 +8083,9 @@ function chaseBlimpTick(dt) {
             if (prey) { Ch.seen = { x: prey.x, y: prey.y, t: G.time }; z.lockAt = G.time; }
             if (!prey && (!z.goal || Math.hypot(z.goal.x - z.x, z.goal.y - z.y) < 300 || G.time > z.goalAt)) {
                 const seen = Ch.seen && G.time - Ch.seen.t < 30000 ? Ch.seen : null;
-                const base = seen || (L && Ch.stage > 0 ? { x: L.x + rand(-3500, 3500), y: L.y + rand(-3500, 3500) } : { x: rand(W * 0.3, W * 0.9), y: rand(chaseMount(0) + 1200, W - 1200) });
-                z.goal = { x: clamp(base.x + rand(-900, 900), 600, W - 600), y: clamp(base.y + rand(-900, 900), chaseMount(0) + 600, W - 600) };
+                const mine = L && (z.far ? Ch.stage >= 4 : Ch.stage > 0 && Ch.stage < 4), bx0 = z.far ? CHASE.far.x + 800 : 600, by0 = z.far ? 800 : chaseMount(0) + 600, by1 = z.far ? CHASE.far.y - 800 : W - 600;
+                const base = (seen && chaseInFar(seen.x, seen.y) === !!z.far ? seen : null) || (mine ? { x: L.x + rand(-3500, 3500), y: L.y + rand(-3500, 3500) } : { x: rand(bx0, W - 600), y: rand(by0, by1) });
+                z.goal = { x: clamp(base.x + rand(-900, 900), bx0, W - 600), y: clamp(base.y + rand(-900, 900), by0, by1) };
                 z.goalAt = G.time + rand(15000, 25000);
             }
             // while it has you, soldiers come down on ropes nearby
@@ -7967,8 +8283,8 @@ function drawAirship(now) {
 
 // --- How far you've got, and what's next ---
 function chaseStageOf(f) {
-    const F = CHASE.fac, I = CHASE.island;
-    if (Math.hypot(f.x - I.x, f.y - I.y) < I.r + 100) return 4;
+    const F = CHASE.fac;
+    if (f.y < chaseCoast(f.x) && chaseInFar(f.x, f.y)) return Math.hypot(f.x - CHASE.far.clear.x, f.y - CHASE.far.clear.y) < CHASE.far.clear.r ? 6 : f.x > chaseFarMX(f.y) ? 5 : 4;
     if (f.y < chaseCoast(f.x)) return 3;
     if (f.y < chaseMount(f.x)) return 2;
     if (f.x > F.x0 && f.x < F.x1 && f.y > F.y0 && f.y < F.y1) return 0;
@@ -7978,16 +8294,21 @@ const CHASE_STAGES = [
     null,
     ['YOU\'RE OUT!', 'Cross the desert to the boat on the river, far to the north-east. Airships are scanning the ground: stay under roofs and in caves.'],
     ['THE MOUNTAINS', 'Sail the boat down the river, or walk the banks to dodge the soldier boats. Ambushes wait along the way.'],
-    ['THE OCEAN', 'Head for the land in the north-east. Enemy ships are out here.'],
-    ['LAND!', 'The airship is waiting. Get everyone aboard!']
+    ['THE OCEAN', 'Head for the far land in the east. Enemy ships are out here.'],
+    ['THE FAR LAND', 'Take the two mini ships up the river through the forest, or walk the banks. Soldier boats patrol it and airships are watching.'],
+    ['THE HIGH MOUNTAINS', 'The river splits into channels between the cliffs. The caves are full of hiding places, and of soldiers waiting in ambush.'],
+    ['THE AIRSHIP!', 'It\'s waiting in the clearing. Get everyone aboard!']
 ];
 function chaseNext() {
-    const Cw = G.world.chase, st = G.chase.stage;
+    const Cw = G.world.chase, Ch = G.chase, st = Ch.stage;
     if (st === 0) return { ...Cw.gates[0], label: 'Break out of the facility' };
     if (st === 1) return { x: Cw.dock.x, y: Cw.dock.y, label: 'Cross the desert to the boat' };
     if (st === 2) return { ...Cw.mouth, label: 'Follow the river to the sea' };
-    if (st === 3) return { ...Cw.landing, label: 'Cross the ocean to land' };
-    return { x: G.extract.x, y: G.extract.y, label: 'Get to the airship' };
+    if (st === 3 && !Ch.arrived) return { ...Cw.landing, label: 'Cross the ocean to the far land' };
+    const m = Ch.minis.find(q => !q.sinkAt);
+    if (st <= 3 || (!Ch.minis.some(q => !q.sinkAt && G.player && G.player.ship === q) && m && !Ch.minis.some(q => q.boardedAt))) return { x: m ? m.x : Cw.farEnd.x, y: m ? m.y : Cw.farEnd.y, label: 'Jump overboard and swim to the mini ships' };
+    if (st === 4) { const P = chaseRoutePt(Cw.farMount, Cw.route2); return { x: P.x, y: P.y, label: 'Follow the river to the mountains' }; }
+    return { x: G.extract.x, y: G.extract.y, label: 'Follow the river to the airship' };
 }
 function chaseStatus(p) {
     if (p.ship || p.car) return navyStatus(p);
@@ -8001,18 +8322,29 @@ function chaseTick(dt) {
         if (st > Ch.stage) { Ch.stage = st; const b = CHASE_STAGES[st]; if (b) { showBanner(b[0], true, b[1]); Sound.tone(520, 0.4, 'triangle', 0.09, 780); } }
     }
     if (p && !p.dead && dist(p, G.extract) < CHASE.airship.board) { chaseWin(); return; }
-    if (L && G.time >= (Ch.nextCatch || 0)) { Ch.nextCatch = G.time + 2000; chaseCatchUp(L); }
+    // the battleship's reached the far land: over to the mini ships
+    if (Ch.arrived && !Ch.leg2) {
+        Ch.leg2 = true;
+        showBanner('LAND!', true, 'Jump overboard and swim to the two mini ships in the river mouth. The squad will follow you; the sailors stay with the battleship.');
+        Sound.tone(520, 0.4, 'triangle', 0.09, 780);
+    }
+    if (Ch.arrived2 && !Ch.endSaid) { Ch.endSaid = true; showBanner('END OF THE RIVER', true, 'Climb off and run for the airship in the clearing!'); }
+    if (L && G.time >= (Ch.nextCatch || 0)) {
+        Ch.nextCatch = G.time + 2000; chaseCatchUp(L);
+        for (const m of Ch.minis) m.crewN = G.fighters.reduce((n, f) => n + (!f.dead && f.ship === m ? 1 : 0), 0);  // (an empty, moored mini ship isn't a target)
+    }
     chaseBlimpTick(dt);
     if (G.time >= Ch.nextReinf) { chaseReinforce(); Ch.nextReinf = G.time + rand(...(Ch.stage <= 1 ? CHASE.desert.reinforce : CHASE.reinforce)); }
 }
 // Nobody gets hopelessly left behind: anyone of the squad who's fallen far back (and out of sight) catches up,
 // and if you're on the boat, they're aboard
 function chaseCatchUp(L) {
-    const s = G.chase.ship;
     for (const f of G.fighters) {
-        if (f.dead || f.soldier || f.team !== 0 || isHuman(f) || f.car || f.chaseOff || f === L || f.ship === s) continue;
+        if (f.dead || f.soldier || f.sailor || f.team !== 0 || isHuman(f) || f.car || f.chaseOff || f === L) continue;
+        const s = chaseBoat(f);
+        if (f.ship && (f.ship === s || f.ship.chase === 'squad')) continue;
         if (dist(f, L) < 3500 || (G.player && dist(f, G.player) < 1400)) continue;
-        if (L.ship && L.ship === s && !s.sinkAt) {
+        if (chaseAboard(L) && s && !s.sinkAt) {
             if (f.station) navyLeave(f);
             const o = navyDeckSpot(s);
             f.ship = s; f.room = null; f.swim = false; f.x = navyWx(s, o.lx, o.ly); f.y = navyWy(s, o.lx, o.ly); f.nGoal = null; f.nextThink = 0;
@@ -8060,11 +8392,30 @@ function chaseReinforce() {
         spawnSquad(c, randInt(4, 6), 0, true);
         showBanner('AMBUSH AHEAD', true, 'Soldiers are waiting on the bank down the river.');
     } else if (st === 3) {
-        if (G.navy.ships.filter(s => s.chase === "soldier" && !s.sinkAt && s.home === null).length >= 2) return;
-        const x = clamp(L.x + rand(2500, 3200), 1500, CHASE.island.x - 3000), y = rand(700, CHASE.oceanY - 1000);
+        if (G.chase.leg2 || G.navy.ships.filter(s => s.chase === "soldier" && !s.sinkAt && s.home === null).length >= 2) return;
+        const x = clamp(L.x + rand(2500, 3200), 1500, CHASE.far.x - 3000), y = rand(700, CHASE.oceanY - 1000);
         if (!chaseWet(x, y, 500)) return;
         chaseSoldierShip(x, y, Math.PI, null);
         showBanner('ENEMY SHIP', true, 'Another soldier ship is coming after you.');
+    } else if (st >= 4 && st <= 5) {
+        // the far land: soldiers waiting on the banks ahead, and now and then another boat coming down the river
+        const R2 = Cw.route2, here = L.ship && L.ship.leg === 2 ? L.ship.routeS || 0 : chaseRouteS(L.x, L.y, R2);
+        if (Math.random() < 0.4 && G.navy.ships.filter(s => s.chase === 'soldier' && !s.sinkAt && s.leg === 2 && Math.abs((s.routeS || s.home) - here) < 5000).length < 3) {
+            const s0 = here + rand(3500, 4500);
+            if (s0 < Cw.endS2 - 1500) {
+                const P = chaseRoutePt(s0, R2), P2 = chaseRoutePt(s0 - 30, R2);
+                chaseSoldierShip(P.x, P.y, Math.atan2(P2.y - P.y, P2.x - P.x), s0).leg = 2;
+                showBanner('SOLDIER BOAT', true, 'Another boat is coming down the river at you.');
+                return;
+            }
+        }
+        const s0 = here + rand(1500, 2300);
+        if (s0 > Cw.endS2 - 600) return;
+        const P = chaseRoutePt(s0, R2), P2 = chaseRoutePt(s0 + 20, R2), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1, side = Math.random() < 0.5 ? 1 : -1;
+        const c = { x: P.x - (P2.y - P.y) / tl * side * (CHASE.far.river + 220), y: P.y + (P2.x - P.x) / tl * side * (CHASE.far.river + 220) };
+        if (chaseBad(c.x, c.y)) return;
+        spawnSquad(c, randInt(4, 6), 0, true);
+        showBanner('AMBUSH AHEAD', true, 'Soldiers are waiting on the bank up the river.');
     }
 }
 
@@ -8342,7 +8693,7 @@ function updateOutbreak(dt) {
             if (f.zombie) { b++; f.hp = Math.min(f.maxHp, f.hp + ZOMBIE.regen * dt); } else a++;
         } else if (f.soldier || f.giant) b++;
         else {
-            a++;
+            if (!f.sailor) a++;  // (Chase: the battleship's sailors aren't counted as part of your squad)
             // Out of the fight for a while, the group patches itself up
             if (G.escape && G.time - (f.lastHurt || 0) > ESCAPE.regen.after) f.hp = Math.min(f.maxHp, f.hp + ESCAPE.regen.rate * dt);
         }
@@ -15335,7 +15686,9 @@ function moveFighter(f, dt) {
         }
     });
     // Chase: the mountains are a wall, except along the river and its banks
-    if (G.chase && !f.ship && chaseRock(f.x, f.y)) { if (!chaseRock(f.x, oy)) f.y = oy; else if (!chaseRock(ox, f.y)) f.x = ox; else { f.x = ox; f.y = oy; } }
+    // (and soldiers on dry land don't wade into the river after you: they shoot from the bank)
+    const chaseNo = (x, y) => chaseRock(x, y) || (f.soldier && !f.swim && chaseWet(x, y, 0));
+    if (G.chase && !f.ship && chaseNo(f.x, f.y)) { if (!chaseNo(f.x, oy)) f.y = oy; else if (!chaseNo(ox, f.y)) f.x = ox; else { f.x = ox; f.y = oy; } }
     const W = CONFIG.WORLD_SIZE;
     f.x = clamp(f.x, f.r, W - f.r);
     f.y = clamp(f.y, f.r, W - f.r);
