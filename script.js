@@ -58,7 +58,7 @@ const WEAPONS = {
     // Hyper drop weapons
     'Plasma Rifle': { damage: 24, range: 1500, rate: 105, speed: 1800, spread: 0.03, mag: 45, rarity: 'hyper', len: 38, w: 9, sound: 'mid', shake: 1.5, hyper: true },
     'Railgun': { damage: 220, range: Infinity, rate: 1800, speed: 4200, spread: 0, mag: 4, rarity: 'hyper', len: 64, w: 9, sound: 'sniper', shake: 10, hyper: true, pierce: true },  // goes through everyone in a line
-    // Payload's guns: the dual shock pistols everyone starts with, a chargeable energy gun, a rocket you steer, and a minigun with 8-round bursts
+    // Electric and energy guns: dual shock pistols, a chargeable energy gun, a rocket you steer, and a minigun with 8-round bursts
     'Dual Shock': { damage: 15, range: 950, rate: 250, speed: 1300, spread: 0.03, mag: 999, rarity: 'rare', len: 14, w: 7, sound: 'light', shake: 1, dual: true, bolt: true },
     'Energy Gun': { damage: 14, range: 650, rate: 260, speed: 1400, spread: 0, mag: 999, rarity: 'legendary', len: 34, w: 11, sound: 'light', shake: 2, charge: 1100 },
     'Guided Rocket': { damage: 40, range: 2600, rate: 1300, speed: 600, spread: 0, mag: 999, rarity: 'mythic', len: 50, w: 12, sound: 'heavy', shake: 8, rocket: true, guided: true },
@@ -70,7 +70,7 @@ const WEAPONS = {
     'Torch': { damage: 14, range: 64, rate: 450, speed: 0, spread: 0, mag: 0, rarity: 'rare', len: 26, w: 6, sound: 'light', shake: 0.5, melee: true, torch: true, burn: 3500 },
     'Blunderbuss': { damage: 9, count: 8, range: 520, rate: 1100, speed: 1000, spread: 0.36, mag: 999, rarity: 'epic', len: 32, w: 10, sound: 'heavy', shake: 7 },
     'Trap Trigger': { damage: 0, range: 700, rate: 4000, speed: 0, spread: 0, mag: 999, rarity: 'legendary', len: 14, w: 9, sound: 'light', shake: 0, trigger: true },
-    'Shock Pistol': { damage: 24, range: 1050, rate: 260, speed: 1500, spread: 0.02, mag: 15, rarity: 'hyper', len: 18, w: 8, sound: 'light', shake: 1.6, hyper: true, chain: 2, spark: true },  // Chase: everyone's sidearm, its bolts arc on to 2 more enemies
+    'Shock Pistol': { damage: 24, range: 1050, rate: 260, speed: 1500, spread: 0.02, mag: 15, rarity: 'hyper', len: 18, w: 8, sound: 'light', shake: 1.6, hyper: true, chain: 2, spark: true },  // its bolts arc on to 2 more enemies
     'Tesla Cannon': { damage: 32, range: 900, rate: 420, speed: 1300, spread: 0.02, mag: 12, rarity: 'hyper', len: 34, w: 13, sound: 'heavy', shake: 4, hyper: true, chain: 3 },  // arcs to 3 more enemies
     'Laser Beam': { damage: 7, range: 950, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 36, w: 9, sound: 'mid', shake: 0.3, hyper: true, beam: true },  // hold it on them
     'Freeze Ray': { damage: 2, range: 800, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 34, w: 10, sound: 'mid', shake: 0.2, hyper: true, beam: true, freeze: 0.09 },  // chills, then freezes solid
@@ -550,7 +550,6 @@ canvas.addEventListener('wheel', e => {
     switchSlot(p, (p.slot + (e.deltaY > 0 ? 1 : -1) + n) % n);
 }, { passive: true });
 
-let cheatKeys = '';
 let secretKeys = '';
 function onKeyPress(code, caps = false, who = null) {
     if (!G) return;
@@ -570,17 +569,8 @@ function onKeyPress(code, caps = false, who = null) {
     }
     if (G.mode !== 'playing' || G.player.dead) return;
     const p = G.player;
-    // Escape shortcut: type X, Y, Z in a row to jump your group straight to the HQ's 10th floor
-    cheatKeys = (cheatKeys + ((!caps && { KeyX: 'x', KeyY: 'y', KeyZ: 'z' }[code]) || '-')).slice(-3);
     secretKeys = (secretKeys + ((caps && { KeyX: 'X', KeyY: 'Y', KeyZ: 'Z' }[code]) || '-')).slice(-3);
     if (secretKeys === 'XYZ' && G.mode === 'playing' && !p.dead) { secretKeys = ''; if (secretGrenades(p)) return; }
-    if (cheatKeys === 'xyz' && G.escape && G.hq && !(G.world.floor && G.world.floor.b.hq && G.world.floor.level === 10)) {
-        cheatKeys = '';
-        for (const f of G.fighters) if (!f.soldier && !f.dead) { f.x = p.x + rand(-50, 50); f.y = p.y + rand(-50, 50); }
-        G.hq.R = G.hq.R || floorRect(G.hq);
-        travel({ b: G.hq, to: 10, dir: 'up', ...floorStairs(G.hq.R, 9) });
-        return;
-    }
     playerAction(p, code);
 }
 // What a key does for someone in the game (you, or a friend playing on your game)
@@ -593,7 +583,6 @@ function playerAction(p, code) {
     if (code === 'KeyF') {
         // F: launch the boss strike, get out of the car, pick up what's at your feet, or get into a car nearby
         // (up on the castle walkway, the only thing to get into is a corner gun)
-        if (G.prop && p.prop) { propChange(p); return; }
         if (G.temple && templeUse(p)) return;
         if (G.navy && navyUse(p)) return;
         if (tryLaunchStrike(p)) return;
@@ -1243,8 +1232,6 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'cavern') return generateCavern();
     if (type === 'haunted') return generateHaunted();
     if (type === 'sea') return generateSea();
-    if (type === 'chase') return generateChase();
-    if (PAYLOAD_MAPS.includes(type)) return generatePayload(type);
     if (type === 'temple') return generateTemple();
     // Wasteland (the sniping map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
@@ -4648,38 +4635,38 @@ function findSpawn(avoid, minDist) {
     const W = CONFIG.WORLD_SIZE;
     for (let tries = 0; tries < 60; tries++) {
         const x = rand(200, W - 200), y = rand(200, W - 200);
-        let ok = !blockedAt(G.world.grid, x, y, 40) && (!G.world.cave || G.world.cave.inside(x, y, 200)) && !(G.world.chase && chaseBad(x, y));
+        let ok = !blockedAt(G.world.grid, x, y, 40) && (!G.world.cave || G.world.cave.inside(x, y, 200));
         if (ok && avoid) for (const a of avoid) if (Math.hypot(a.x - x, a.y - y) < minDist) { ok = false; break; }
         if (ok) return { x, y };
     }
     return { x: rand(200, W - 200), y: rand(200, W - 200) };
 }
 
-// setup: { type: 'ffa' | 'epic' | 'escape', count }, { type: 'zombies', count, zombies } or { type: 'war' | 'hightech', teams, size }
+// setup: { type: 'ffa' | 'epic', count }, { type: 'zombies', count, zombies } or { type: 'war' | 'hightech', teams, size }
 function newState(mode, setup) {
-    CONFIG.WORLD_SIZE = setup.type === 'chase' ? CHASE.world : setup.type === 'payload' ? PAYLOAD.W : setup.type === 'temple' ? TEMPLE.W : 12000;  // (Chase is played on a world three times the size)
+    CONFIG.WORLD_SIZE = setup.type === 'temple' ? TEMPLE.W : 12000;
     const W = CONFIG.WORLD_SIZE;
-    const zombies = setup.type === 'zombies', chase = setup.type === 'chase', escape = setup.type === 'escape' || chase, survival = setup.type === 'survival';
+    const zombies = setup.type === 'zombies', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', bossFight = setup.type === 'boss';
-    const ghostMode = setup.type === 'ghost', propHunt = setup.type === 'prop', payloadMode = setup.type === 'payload', templeMode = setup.type === 'temple', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
+    const ghostMode = setup.type === 'ghost', templeMode = setup.type === 'temple', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution || navy ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
         mode, cpuCount, war,
         revolution: revolution ? { tickets: [0, 0], queue: [], bases: [], chests: [] } : null,
         // War and Epic Free For All both have supply crates and the heavy guns
-        epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
+        epic: setup.type === 'epic' || (heavy && !war && !zombies), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, prop: null, payload: null, temple: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape: false, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || bossFight, bossFight, bossF: null, ghostMode, temple: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
-        dayCycle: mode === 'playing' && (setup.type === 'survival' || setup.type === 'chase'), dayPhase: rand(0.02, 0.25),
+        dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
         layers: {}, layerKey: 'street', hq: null, nextReinf: 45000, squads: [], nextSquads: 0,
         traffic: [], fires: [], jets: [], bombs: [], pendingBooms: [],
-        world: generateWorld(setup.map || (escape ? 'city' : 'ordinary'), { floors: true }),
-        map: setup.map || (escape ? 'city' : 'ordinary'),
+        world: generateWorld(setup.map || 'ordinary', { floors: true }),
+        map: setup.map || 'ordinary',
         time: 0,
         fighters: [],
         bullets: [],
@@ -4722,9 +4709,9 @@ function newState(mode, setup) {
     };
     setNextZoneTarget(G.zone);
     // (no red zone at all in Survival)
-    if (G.noZone || revolution || survival || navy || payloadMode || templeMode) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    if (G.noZone || revolution || survival || navy || templeMode) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Ghost is played in one fixed circle in the middle of the map
-    const arena = ghostMode ? GHOST.arena : propHunt ? PROP.arena : 0;
+    const arena = ghostMode ? GHOST.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
     // (the haunted house has its iron fence instead)
     if (G.world.terrain === 'haunted') Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
@@ -4732,7 +4719,7 @@ function newState(mode, setup) {
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
-    const noLoot = duel || navy || propHunt || payloadMode || templeMode;
+    const noLoot = duel || navy || templeMode;
     if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
@@ -4741,7 +4728,7 @@ function newState(mode, setup) {
         spawnLoot(s.x, s.y, key);
     }
     const caveK = G.world.cave ? 0.12 : 1;  // (the cavern is a lot smaller than the whole world)
-    const boxes = noLoot ? 0 : Math.min(800, 220 + cpuCount * 0.6) * caveK * (setup.type === 'chase' ? 3 : 1);
+    const boxes = noLoot ? 0 : Math.min(800, 220 + cpuCount * 0.6) * caveK;
     for (let i = 0; i < boxes; i++) {
         const s = findSpawn(null, 0);
         if (!blockedAt(G.world.grid, s.x, s.y, 34) && !buildingAt(s.x, s.y, 30)) addLootBox(s.x, s.y);
@@ -4758,15 +4745,11 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !propHunt && !payloadMode && !templeMode && !duel && !navy && !chase) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !templeMode && !duel && !navy) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (navy) setupNavy(setup);
     else if (war) {
         spawnTeams(W / 2, setup.baseDist || W * 0.33);
-    } else if (escape) {
-        // (the title screen sets up its own small breakout instead)
-        if (chase) { if (mode === 'playing') setupChase(); }
-        else if (mode === 'playing') spawnEscape(cpuCount, ESCAPE.people);
     } else {
         if (mode === 'playing') addPlayer(findSpawn(null, 0), null);
         const avoid = G.player ? [G.player] : null;
@@ -4788,8 +4771,6 @@ function newState(mode, setup) {
     if (bossFight) setupBossFight();
     if (duel) setupDuel();
     if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
-    if (propHunt) setupProp(setup);
-    if (payloadMode) setupPayload(setup);
     if (templeMode) setupTemple(setup);
     G.alive = G.fighters.length;
 }
@@ -4928,865 +4909,7 @@ function drawGhostSteps(camX, camY, zoom) {
     ctx.restore();
 }
 
-// ---------- Prop Hunt ----------
-// The hiders turn into barrels, crates, bushes and the like, hidden among hundreds of real ones. The seekers wait blindfolded
-// while the props hide, then have three minutes to find them. A hit on a hider gives the seeker some health back.
-// A hider who's found joins the seekers. Every so often each hider lets out a little whistle.
-const PROP = { arena: 1700, hide: 30000, seek: 180000, decoys: 380, change: 160, taunt: [18000, 26000], maxPlayers: 60, color: '#ff8a3d' };
-const PROP_KINDS = {
-    barrel: { name: 'Barrel', r: 17 }, crate: { name: 'Crate', r: 19 }, bush: { name: 'Bush', r: 21 }, rock: { name: 'Rock', r: 19 },
-    bin: { name: 'Trash Can', r: 16 }, cone: { name: 'Traffic Cone', r: 14 }, tires: { name: 'Tire Stack', r: 18 }, pot: { name: 'Plant Pot', r: 15 },
-    hay: { name: 'Hay Bale', r: 20 }, tv: { name: 'Old TV', r: 16 }
-};
-const PROP_LIST = Object.keys(PROP_KINDS);
-let propRolePick = 'hider';
-const propKindOf = o => o.prop || o.kind;
-function setPropKind(f, kind, v, a) { f.prop = kind; f.propVar = v; f.propA = a; f.r = PROP_KINDS[kind].r; }
-function makeSeeker(f) {
-    f.prop = null; f.seeker = true; f.team = 1; f.r = CONFIG.RADIUS;
-    f.color = PROP.color; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
-    f.inv = [null, null]; f.slot = 0;
-    applyLoot(f, pick(['Assault Rifle', 'Mac10', 'Machine Gun']), -1);
-    f.hp = f.maxHp = CONFIG.MAX_HEALTH; f.armor = 0;
-    f.checked = new Map(); f.mode = 'wander'; f.target = null; f.goal = null;
-}
-// Fill the circle with real props, in little clumps of one or two kinds (that's where a hider blends in best)
-function propPlaceDecoys() {
-    const P = G.prop, c = CONFIG.WORLD_SIZE / 2, R = PROP.arena - 140;
-    const crowded = (x, y, r) => { let hit = false; P.dgrid.query(x, y, 60, d => { if (!hit && Math.hypot(d.x - x, d.y - y) < d.r + r + 6) hit = true; }); return hit; };
-    for (let k = 0; k < 3000 && P.decoys.length < PROP.decoys; k++) {
-        const a = rand(0, TAU), dd = Math.sqrt(Math.random()) * R, cx = c + Math.cos(a) * dd, cy = c + Math.sin(a) * dd;
-        const kinds = [pick(PROP_LIST)]; if (Math.random() < 0.5) kinds.push(pick(PROP_LIST));
-        const m = randInt(1, 5);
-        for (let i = 0; i < m; i++) {
-            const x = cx + rand(-120, 120), y = cy + rand(-120, 120), kind = pick(kinds), r = PROP_KINDS[kind].r;
-            if (Math.hypot(x - c, y - c) > R || blockedAt(G.world.grid, x, y, r + 4) || crowded(x, y, r)) continue;
-            const d = { x, y, kind, r, v: Math.random(), a: rand(0, TAU), dead: false };
-            P.decoys.push(d); P.dgrid.insert(d);
-        }
-    }
-}
-// A free spot right beside a prop, to hide next to it looking just like it
-function propSpotBy(d) {
-    for (let t = 0; t < 12; t++) {
-        const a = rand(0, TAU), k = rand(d.r * 2 + 6, d.r * 2 + 40), x = d.x + Math.cos(a) * k, y = d.y + Math.sin(a) * k;
-        if (!blockedAt(G.world.grid, x, y, 24) && Math.hypot(x - CONFIG.WORLD_SIZE / 2, y - CONFIG.WORLD_SIZE / 2) < PROP.arena - 120) return { x, y };
-    }
-    return null;
-}
-function setupProp(setup) {
-    const W = CONFIG.WORLD_SIZE, c = W / 2;
-    G.prop = { phase: G.mode === 'playing' ? 'hide' : 'seek', seekAt: G.mode === 'playing' ? PROP.hide : 0, decoys: [], dgrid: new Grid(128, 0) };
-    propPlaceDecoys();
-    placeInArena(PROP.arena, 300);
-    const all = G.fighters.slice(), p = G.player;
-    const nSeek = clamp(Math.round(all.length * 0.25), 1, Math.max(1, all.length - 1));
-    const others = all.filter(f => f !== p).sort(() => Math.random() - 0.5);
-    const seekers = p && setup.role === 'seeker' ? [p, ...others.slice(0, nSeek - 1)] : others.slice(0, nSeek);
-    for (const f of all) {
-        if (seekers.includes(f)) {
-            makeSeeker(f);
-            // (the seekers start together in the middle)
-            for (let t = 0; t < 30; t++) { const x = c + rand(-140, 140), y = c + rand(-140, 140); if (!blockedAt(G.world.grid, x, y, 26)) { f.x = x; f.y = y; break; } }
-        } else {
-            f.team = 0; f.seeker = false; f.inv = [null, null];
-            const d = pick(G.prop.decoys);
-            if (d) setPropKind(f, d.kind, d.v, rand(0, TAU)); else setPropKind(f, pick(PROP_LIST), Math.random(), rand(0, TAU));
-            // (hiders start well away from the seekers)
-            if (Math.hypot(f.x - c, f.y - c) < 500) { const a = rand(0, TAU), k = rand(600, PROP.arena - 200); const x = c + Math.cos(a) * k, y = c + Math.sin(a) * k; if (!blockedAt(G.world.grid, x, y, 26)) { f.x = x; f.y = y; } }
-            f.nextTaunt = G.prop.seekAt + rand(...PROP.taunt);
-        }
-    }
-    if (p) { G.cam.x = p.x; G.cam.y = p.y; }
-}
-// Change into the closest prop you're next to (or, with none close, the next kind of prop)
-function propChange(f) {
-    if (!f.prop) return;
-    const best = propNear(f);
-    if (best) setPropKind(f, best.kind, best.v, rand(0, TAU));
-    else { const i = PROP_LIST.indexOf(f.prop); setPropKind(f, PROP_LIST[(i + 1) % PROP_LIST.length], Math.random(), rand(0, TAU)); }
-    if (inView(f.x, f.y, 60)) burst(f.x, f.y, 10, '#fff7ec', 120, 'smoke');
-    Sound.tone(660, 0.08, 'sine', 0.05 * Sound.volAt(f.x, f.y), 990);
-}
-function propNear(f) {
-    let best = null, bd = PROP.change;
-    G.prop.dgrid.query(f.x, f.y, PROP.change, d => {
-        if (d.dead || (d.kind === f.prop && d.v === f.propVar)) return;
-        const k = dist(f, d); if (k < bd) { bd = k; best = d; }
-    });
-    return best;
-}
-// A shot that hits a real prop just knocks bits off it
-function propBulletHit(b) {
-    let hit = null;
-    G.prop.dgrid.query(b.x, b.y, 30, d => { if (!hit && !d.dead && (b.x - d.x) ** 2 + (b.y - d.y) ** 2 < (d.r + 2) ** 2) hit = d; });
-    if (!hit) return false;
-    // (real props can't be shot to bits: they just chip)
-    if (inView(hit.x, hit.y, 60)) burst(b.x, b.y, 5, '#d9c7a3', 150);
-    return true;
-}
-// A hider's been found: they come out and join the seekers
-function propFound(t, killer) {
-    if (killer && killer !== t) killer.kills++;
-    if (inView(t.x, t.y, 100)) { burst(t.x, t.y, 24, '#ffd166', 240, 'glow'); G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 60, color: '#ffd166' }); }
-    if (G.mode !== 'demo') addKillfeed(t, killer, 'found');
-    t.wasHider = true;
-    makeSeeker(t);
-    t.protectUntil = G.time + 1500;
-    if (t.isPlayer && G.mode === 'playing') { showBanner('FOUND!', true, "You're a seeker now. Help find the rest of the props!"); G.flash = 0.4; G.flashColor = '255,209,102'; Sound.death(); }
-}
-function updateProp(dt) {
-    const P = G.prop, p = G.player;
-    if (P.phase === 'hide' && G.time >= P.seekAt) {
-        P.phase = 'seek';
-        if (G.mode === 'playing') { showBanner('READY OR NOT!', true, p && p.prop ? 'The seekers are coming. Stay still!' : 'Find the props. Watch for anything that moves!'); Sound.tone(520, 0.5, 'square', 0.08, 260); }
-    }
-    for (const f of G.fighters) {
-        if (f.dead) continue;
-        if (f.seeker) { const w = held(f); if (f.ammo[w] !== undefined) f.ammo[w] = 9999; }
-        else if (f.prop && P.phase === 'seek' && G.time >= f.nextTaunt) {
-            // The whistle: you can hear roughly where it came from
-            f.nextTaunt = G.time + rand(...PROP.taunt);
-            Sound.tone(rand(900, 1400), 0.28, 'sine', 0.1 * Sound.volAt(f.x, f.y), rand(600, 1800));
-            if (inView(f.x, f.y, 100)) addFloat(f.x + rand(-60, 60), f.y - 30 + rand(-40, 40), '♪', '#fff7ec');
-            G.fgrid.query(f.x, f.y, 900, s => { if (s.seeker && !s.dead && !s.isPlayer) s.heard = { x: f.x + rand(-130, 130), y: f.y + rand(-130, 130), t: G.time }; });
-        }
-    }
-    const hiders = G.fighters.filter(f => !f.dead && f.prop).length, seekers = G.fighters.filter(f => !f.dead && f.seeker).length;
-    if (G.mode === 'demo') {
-        // (the title screen's game starts over once everyone's found)
-        if (!hiders || G.time > P.seekAt + PROP.seek) { P.seekAt = G.time; for (const f of G.fighters) if (!f.dead && Math.random() < 0.7) { const d = pick(P.decoys.filter(q => !q.dead)); if (d) { const s = propSpotBy(d); if (s) { f.x = s.x; f.y = s.y; } f.seeker = false; f.team = 0; setPropKind(f, d.kind, d.v, rand(0, TAU)); f.mode = 'rest'; } } }
-        return;
-    }
-    if (G.mode !== 'playing' || G.result || !p) return;
-    let won = null, title, sub;
-    if (!hiders) { won = !!p.seeker && !p.wasHider; title = won ? 'ALL PROPS FOUND!' : 'EVERY PROP WAS FOUND'; sub = p.wasHider ? 'You were found, and so was everyone else.' : 'Not one prop got away.'; }
-    else if (!seekers) { won = !!p.prop; title = 'THE PROPS WIN'; sub = 'No seekers are left.'; }
-    else if (G.time >= P.seekAt + PROP.seek) { won = !!p.prop; title = won ? 'YOU STAYED HIDDEN!' : 'THE PROPS WIN'; sub = `${hiders} prop${hiders === 1 ? '' : 's'} never got found.`; }
-    if (won === null) return;
-    if (!won && p.dead) return;
-    G.result = { won, place: won ? 1 : 2, title, sub };
-    G.overAt = G.time + 2400;
-    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
-}
-function propBot(b) {
-    if (b.seeker) propSeekerBot(b);
-    else if (b.prop) propHiderBot(b);
-    else { b.nextThink = G.time + 500; b.mode = 'rest'; }
-}
-// Hiders: go and stand beside a prop looking just like it, and keep still. Get shot (or shot at) and run for another spot.
-function propHiderBot(b) {
-    const P = G.prop;
-    b.nextThink = G.time + rand(200, 350);
-    if (b.hideAt && b.mode === 'zone') {
-        if (dist(b, b.goal) < 18) { setPropKind(b, b.hideAt.kind, b.hideAt.v, rand(0, TAU)); b.hideAt = null; b.mode = 'rest'; }
-        return;
-    }
-    let panic = G.time - b.lastHurt < 1500, threat = null, td = 1e9;
-    G.fgrid.query(b.x, b.y, 450, s => {
-        if (s.dead || !s.seeker) return;
-        const d = dist(b, s); if (d < td) { td = d; threat = s; }
-        if (s.target === b && s.mode === 'fight') panic = true;
-    });
-    const first = !b.hidSpot;
-    if (!panic && !first) { b.mode = 'rest'; return; }
-    // A new place: beside a real prop, away from whoever's after me
-    let best = null, bs = -Infinity;
-    for (let i = 0; i < 14; i++) {
-        const d = pick(P.decoys); if (!d || d.dead) continue;
-        const k = dist(b, d); if (k > (first ? 2500 : 900) || k < 100) continue;
-        const score = (threat ? Math.min(700, dist(d, threat)) : 0) - k * 0.3 + rand(0, 200);
-        if (score > bs) { bs = score; best = d; }
-    }
-    const s = best && propSpotBy(best);
-    if (!s) { b.mode = 'rest'; return; }
-    b.hidSpot = true; b.hideAt = best; b.mode = 'zone'; b.goal = s;
-}
-// Seekers: hunt down anything seen moving, follow the whistles, and test-fire at props that look out of place
-function propSeekerBot(b) {
-    const P = G.prop;
-    b.nextThink = G.time + rand(180, 320);
-    if (!b.checked) b.checked = new Map();
-    if (P.phase === 'hide') { b.mode = 'rest'; return; }
-    const t = b.target && !b.target.dead && b.target.prop ? b.target : null;
-    if (t) {
-        const d = dist(b, t), los = d < 750 && lineOfSight(b, t);
-        if (los) { b.lastSeen = G.time; b.lastSpot = { x: t.x, y: t.y }; }
-        if (los || G.time - b.lastSeen < 2500) { b.mode = 'fight'; b.hasLOS = los; return; }
-    }
-    b.target = null;
-    // A prop that moves is no prop
-    let mover = null, md = 650;
-    G.fgrid.query(b.x, b.y, 650, f => {
-        if (f.dead || !f.prop || Math.hypot(f.vx, f.vy) < 25) return;
-        const d = dist(b, f); if (d < md && Math.random() < 0.75 && lineOfSight(b, f)) { md = d; mover = f; }
-    });
-    if (mover) { b.target = mover; b.mode = 'fight'; b.hasLOS = true; b.lastSeen = G.time; b.engageAt = G.time + rand(200, 420); return; }
-    if (b.mode === 'propshoot' && b.goal && !b.goal.dead && !b.goal.seeker && G.time < b.shootUntil) return;
-    // Test a prop close by: the odd one out (no others like it round it) is the most suspicious
-    {
-        const cands = [];
-        const add = c => {
-            if (dist(b, c) > 320 || (b.checked.get(c) || -1e9) > G.time - 90000) return;
-            const kind = propKindOf(c); let same = 0;
-            P.dgrid.query(c.x, c.y, 220, d => { if (d !== c && !d.dead && d.kind === kind) same++; });
-            cands.push([c, same ? 1 : 3]);
-        };
-        P.dgrid.query(b.x, b.y, 320, d => { if (!d.dead) add(d); });
-        G.fgrid.query(b.x, b.y, 320, f => { if (!f.dead && f.prop) add(f); });
-        if (cands.length && Math.random() < 0.035) {
-            let sum = 0; for (const c of cands) sum += c[1];
-            let r = Math.random() * sum, c = cands[0][0];
-            for (const q of cands) { r -= q[1]; if (r <= 0) { c = q[0]; break; } }
-            b.checked.set(c, G.time);
-            if (lineOfSight(b, c)) { b.mode = 'propshoot'; b.goal = c; b.shootUntil = G.time + rand(300, 600); return; }
-        }
-    }
-    if (b.heard && G.time - b.heard.t < 8000 && dist(b, b.heard) > 120) { b.mode = 'zone'; b.goal = { x: b.heard.x, y: b.heard.y }; return; }
-    strollArena(b);
-}
-// The props, drawn the same whether they're real or someone hiding
-function drawPropShape(g, x, y, kind, v, a, me) {
-    const r = PROP_KINDS[kind].r;
-    g.save(); g.translate(x, y);
-    if (!lowDetail) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(3, 5, r, r * 0.85, 0, 0, TAU); g.fill(); }
-    g.rotate(a);
-    const circ = (rr, col, ox = 0, oy = 0) => { g.fillStyle = col; g.beginPath(); g.arc(ox, oy, rr, 0, TAU); g.fill(); };
-    switch (kind) {
-        case 'barrel': {
-            const col = ['#b8342c', '#2f6fb3', '#3f8a45', '#c98a1e'][Math.floor(v * 4)];
-            circ(r, shade(col, -0.35)); circ(r - 2.5, col);
-            g.strokeStyle = shade(col, -0.3); g.lineWidth = 2; g.beginPath(); g.arc(0, 0, r * 0.62, 0, TAU); g.stroke();
-            circ(2.5, shade(col, -0.5), r * 0.35, -r * 0.2); circ(r * 0.3, 'rgba(255,255,255,0.18)', -r * 0.35, -r * 0.35);
-            break;
-        }
-        case 'crate': {
-            const s = r * 0.92;
-            g.fillStyle = '#7a5230'; g.fillRect(-s, -s, 2 * s, 2 * s);
-            g.fillStyle = v < 0.5 ? '#c48a4e' : '#b37a40'; g.fillRect(-s + 2.5, -s + 2.5, 2 * s - 5, 2 * s - 5);
-            g.strokeStyle = '#7a5230'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(-s + 3, -s + 3); g.lineTo(s - 3, s - 3); g.moveTo(s - 3, -s + 3); g.lineTo(-s + 3, s - 3); g.stroke();
-            break;
-        }
-        case 'bush': {
-            const col = v < 0.5 ? '#3f7d3a' : '#4d8f3f';
-            circ(r, shade(col, -0.3));
-            for (let i = 0; i < 6; i++) { const q = i / 6 * TAU + v * 3; circ(r * 0.45, col, Math.cos(q) * r * 0.48, Math.sin(q) * r * 0.48); }
-            circ(r * 0.5, shade(col, 0.12)); circ(r * 0.22, 'rgba(255,255,255,0.12)', -r * 0.25, -r * 0.25);
-            break;
-        }
-        case 'rock': {
-            const col = v < 0.5 ? '#8d939c' : '#7d8189';
-            g.fillStyle = shade(col, -0.3); g.beginPath();
-            for (let i = 0; i < 8; i++) { const q = i / 8 * TAU, k = r * (0.82 + 0.18 * Math.sin(i * 2.7 + v * 20)); g.lineTo(Math.cos(q) * k, Math.sin(q) * k); }
-            g.closePath(); g.fill();
-            g.fillStyle = col; g.beginPath();
-            for (let i = 0; i < 8; i++) { const q = i / 8 * TAU, k = r * (0.82 + 0.18 * Math.sin(i * 2.7 + v * 20)) - 3; g.lineTo(Math.cos(q) * k, Math.sin(q) * k); }
-            g.closePath(); g.fill();
-            circ(r * 0.3, 'rgba(255,255,255,0.16)', -r * 0.25, -r * 0.3);
-            break;
-        }
-        case 'bin': {
-            const col = v < 0.5 ? '#3b5d45' : '#55606b';
-            circ(r, shade(col, -0.35)); circ(r - 2.5, col);
-            g.strokeStyle = shade(col, -0.4); g.lineWidth = 1.5;
-            for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(0, 0, r * (0.25 + i * 0.17), 0, TAU); g.stroke(); }
-            g.fillStyle = shade(col, -0.5); g.fillRect(-r * 0.45, -2, r * 0.9, 4);
-            break;
-        }
-        case 'cone': {
-            g.fillStyle = '#2b2b2b'; g.fillRect(-r, -r, 2 * r, 2 * r);
-            circ(r * 0.85, '#ff7a1a'); circ(r * 0.6, '#f4f1ea'); circ(r * 0.42, '#ff7a1a'); circ(r * 0.16, '#ffb070');
-            break;
-        }
-        case 'tires': {
-            for (const [ox, oy] of [[-3, 3], [2, -2]]) { circ(r - 2, '#1c1c1f', ox, oy); circ(r - 6, '#2c2c31', ox, oy); circ(r * 0.42, '#0e0e10', ox, oy); }
-            break;
-        }
-        case 'pot': {
-            circ(r, '#8e4a2a'); circ(r - 3, '#b9653a'); circ(r - 5, '#4a3424');
-            g.fillStyle = v < 0.5 ? '#5aa04a' : '#7bbf4e';
-            for (let i = 0; i < 5; i++) { const q = i / 5 * TAU + v * 6; g.beginPath(); g.ellipse(Math.cos(q) * r * 0.45, Math.sin(q) * r * 0.45, r * 0.5, r * 0.2, q, 0, TAU); g.fill(); }
-            break;
-        }
-        case 'hay': {
-            const w = r * 1.15, h = r * 0.8;
-            g.fillStyle = '#a8862e'; roundRect(g, -w, -h, 2 * w, 2 * h, 6); g.fill();
-            g.fillStyle = v < 0.5 ? '#e0bf55' : '#d6b048'; roundRect(g, -w + 2.5, -h + 2.5, 2 * w - 5, 2 * h - 5, 5); g.fill();
-            g.strokeStyle = '#a8862e'; g.lineWidth = 1.2;
-            for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(-w + 4, i * h * 0.3); g.lineTo(w - 4, i * h * 0.3 + 1); g.stroke(); }
-            g.strokeStyle = '#7a5a1e'; g.lineWidth = 2; g.beginPath(); g.moveTo(-w * 0.4, -h); g.lineTo(-w * 0.4, h); g.moveTo(w * 0.4, -h); g.lineTo(w * 0.4, h); g.stroke();
-            break;
-        }
-        case 'tv': {
-            const s = r * 0.95;
-            g.fillStyle = v < 0.5 ? '#4b4038' : '#3a3d44'; roundRect(g, -s, -s * 0.85, 2 * s, 1.7 * s, 4); g.fill();
-            g.fillStyle = '#1a2a38'; roundRect(g, -s * 0.75, -s * 0.62, s * 1.2, s * 1.24, 3); g.fill();
-            g.fillStyle = 'rgba(160,210,255,0.18)'; g.fillRect(-s * 0.68, -s * 0.55, s * 0.4, s * 0.3);
-            circ(2.2, '#c9b38a', s * 0.72, -s * 0.3); circ(2.2, '#c9b38a', s * 0.72, s * 0.2);
-            break;
-        }
-    }
-    g.restore();
-    if (me) {
-        // (so you can tell which one is you)
-        g.save(); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2; g.setLineDash([5, 5]);
-        g.beginPath(); g.arc(x, y, r + 8, 0, TAU); g.stroke(); g.restore();
-    }
-}
-function drawPropDecoys(L, T, R, B) {
-    for (const d of G.prop.decoys) if (!d.dead && d.x > L - 40 && d.x < R + 40 && d.y > T - 40 && d.y < B + 40) drawPropShape(ctx, d.x, d.y, d.kind, d.v, d.a, false);
-}
-// Seekers can't see a thing while the props hide
-function drawPropBlindfold() {
-    const P = G.prop, p = G.player;
-    if (!P || P.phase !== 'hide' || !p || !p.seeker || G.mode !== 'playing') return;
-    ctx.fillStyle = 'rgba(8,6,14,0.97)'; ctx.fillRect(0, 0, viewW, viewH);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffd166'; ctx.font = '900 34px "Black Ops One", sans-serif';
-    ctx.fillText('THE PROPS ARE HIDING', viewW / 2, viewH / 2 - 30);
-    ctx.fillStyle = '#fff7ec'; ctx.font = '800 56px Rajdhani, sans-serif';
-    ctx.fillText(String(Math.max(0, Math.ceil((P.seekAt - G.time) / 1000))), viewW / 2, viewH / 2 + 30);
-}
-function propStatus(p) {
-    const P = G.prop, n = G.fighters.filter(f => !f.dead && f.prop).length;
-    if (P.phase === 'hide') return p.seeker ? 'Blindfolded while the props hide' : `Hide! Seekers come out in ${Math.max(0, Math.ceil((P.seekAt - G.time) / 1000))}s`;
-    const left = fmtTime(Math.max(0, (P.seekAt + PROP.seek - G.time) / 1000));
-    return p.prop ? `Stay hidden · ${left} left · ${n} prop${n === 1 ? '' : 's'} left` : `Find the props · ${left} · ${n} left`;
-}
-
-// ---------- Payload ----------
-// Blue escorts a platform (a shield on its front stops bullets from ahead) along a winding track from their base to the middle of Red's base. It only moves with Blue
-// on it (faster with more of them), stops while Red is next to it, and rolls back if Blue leave it alone too long.
-// Uphill it slows down, downhill it speeds up. Two checkpoints on the way each add time. Everyone respawns.
-// Three maps: a rocket launch site (with launch pads that throw the cart into the air), a canyon, and a forest.
-const PAYLOAD = {
-    W: 6000, time: 300000, cpBonus: 60000, speed: 52, perPusher: 0.22, maxPushers: 4, onR: 105, contestR: 200,
-    rollAfter: 12000, safeR: 240, safeDmg: 30, shieldR: 92, shieldArc: 0.95, rollSpeed: 16, players: 10, respawn: 5000, protect: 2500, regenAfter: 4000, regen: 9, clearR: 190, maxPlayers: 100,
-    blue: '#3d8bff', red: '#ff4b4b',
-    guns: ['Machine Gun', 'Energy Gun', 'Guided Rocket', 'Sniper', 'Shotgun', 'Burst Minigun', 'Assault Rifle']
-};
-let payloadSidePick = 'blue';
-const PAYLOAD_MAPS = ['launchpad', 'canyon', 'forest'];
-// The track: a smooth line through waypoints that sweep up and down the map and turn as they go
-function payloadTrack() {
-    const W = PAYLOAD.W, way = [{ x: 650, y: 4500 }];
-    const cols = [1400, 2300, 3200, 4100];
-    cols.forEach((x, i) => way.push({ x: x + rand(-150, 150), y: (i % 2 ? 4550 : 1450) + rand(-200, 200) }));
-    way.push({ x: 4950, y: 3000 });
-    // (extra bends between the main turns)
-    const pts = [way[0]];
-    for (let i = 1; i < way.length; i++) {
-        const a = way[i - 1], b = way[i], n = i === way.length - 1 ? 1 : 2;
-        for (let k = 1; k <= n; k++) {
-            const t = k / (n + 1), nx = -(b.y - a.y), ny = b.x - a.x, l = Math.hypot(nx, ny) || 1;
-            const off = rand(-380, 380);
-            pts.push({ x: clamp(lerp(a.x, b.x, t) + nx / l * off, 400, W - 400), y: clamp(lerp(a.y, b.y, t) + ny / l * off, 400, W - 400) });
-        }
-        pts.push(b);
-    }
-    // Catmull-Rom through them, then even spacing
-    const dense = [];
-    for (let i = 0; i < pts.length - 1; i++) {
-        const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
-        for (let t = 0; t < 1; t += 0.02) {
-            const t2 = t * t, t3 = t2 * t;
-            const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
-            dense.push({ x: f(p0.x, p1.x, p2.x, p3.x), y: f(p0.y, p1.y, p2.y, p3.y) });
-        }
-    }
-    dense.push(pts[pts.length - 1]);
-    const out = [{ x: dense[0].x, y: dense[0].y, s: 0 }], STEP = 24;
-    let acc = 0;
-    for (let i = 1; i < dense.length; i++) {
-        let a = out[out.length - 1];
-        const b = dense[i];
-        let d = Math.hypot(b.x - a.x, b.y - a.y);
-        while (d >= STEP) { const k = STEP / d; const q = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k }; acc += STEP; q.s = acc; out.push(q); a = q; d = Math.hypot(b.x - a.x, b.y - a.y); }
-    }
-    const end = pts[pts.length - 1]; acc += Math.hypot(end.x - out[out.length - 1].x, end.y - out[out.length - 1].y); out.push({ x: end.x, y: end.y, s: acc });
-    // Hills: the height along the track (0 low, 1 high)
-    const ph = [rand(0, TAU), rand(0, TAU), rand(0, TAU)];
-    for (const q of out) q.h = clamp(0.5 + 0.28 * Math.sin(q.s * 0.0009 + ph[0]) + 0.16 * Math.sin(q.s * 0.0023 + ph[1]) + 0.06 * Math.sin(q.s * 0.006 + ph[2]), 0, 1);
-    for (let i = 0; i < out.length; i++) { const a = out[Math.max(0, i - 2)], b = out[Math.min(out.length - 1, i + 2)]; out[i].a = Math.atan2(b.y - a.y, b.x - a.x); out[i].slope = (b.h - a.h) / Math.max(1, b.s - a.s); }
-    return out;
-}
-function trackAt(track, s) {
-    const i = clamp(Math.floor(s / 24), 0, track.length - 2);
-    let j = i;
-    while (j < track.length - 2 && track[j + 1].s < s) j++;
-    while (j > 0 && track[j].s > s) j--;
-    const a = track[j], b = track[j + 1], t = clamp((s - a.s) / Math.max(1e-6, b.s - a.s), 0, 1);
-    return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), a: a.a + angleDiff(a.a, b.a) * t, h: lerp(a.h, b.h, t), slope: a.slope };
-}
-function trackDist(track, x, y) {
-    let best = Infinity;
-    for (let i = 0; i < track.length; i += 2) { const q = track[i], d = (q.x - x) ** 2 + (q.y - y) ** 2; if (d < best) best = d; }
-    return Math.sqrt(best);
-}
-function generatePayload(theme) {
-    const W = PAYLOAD.W, grid = new Grid(256, 90), obstacles = [], lootSpots = [], decor = [], rockets = [];
-    const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
-    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
-    const track = payloadTrack(), start = track[0], end = track[track.length - 1];
-    const blueBase = { x: 330, y: start.y, x0: 120, x1: 760, y0: start.y - 380, y1: start.y + 380 };
-    const redBase = { x: end.x, y: end.y, x0: end.x - 460, x1: end.x + 800, y0: end.y - 460, y1: end.y + 460 };
-    const inBase = (x, y, m = 0) => [blueBase, redBase].some(b => x > b.x0 - m && x < b.x1 + m && y > b.y0 - m && y < b.y1 + m);
-    const free = (x, y, r) => x > 150 && y > 150 && x < W - 150 && y < W - 150 && !inBase(x, y, 80) && trackDist(track, x, y) > PAYLOAD.clearR + r && !blockedAt(grid, x, y, r);
-    const wallCol = theme === 'launchpad' ? '#8c929c' : theme === 'canyon' ? '#8a5a3a' : '#6b5a44';
-    // The edge of the world: a wall all the way round
-    for (const [x, y, hw, hh] of [[W / 2, 20, W / 2, 20], [W / 2, W - 20, W / 2, 20], [20, W / 2, 20, W / 2], [W - 20, W / 2, 20, W / 2]]) addBox({ type: 'wall', x, y, hw, hh, color: wallCol });
-    // Bases: walled compounds with gaps to get in and out, and the track running in
-    const baseWalls = (b, color) => {
-        const T = 16, gap = 150, segs = [];
-        const side = (x0, y0, x1, y1) => {
-            const len = Math.hypot(x1 - x0, y1 - y0), n = 3;
-            for (let k = 0; k < n; k++) {
-                // each side split in three with two doorways
-                const t0 = k / n + (k ? gap / len / 2 : 0), t1 = (k + 1) / n - (k < n - 1 ? gap / len / 2 : 0);
-                const ax = lerp(x0, x1, t0), ay = lerp(y0, y1, t0), bx = lerp(x0, x1, t1), by = lerp(y0, y1, t1);
-                segs.push({ x: (ax + bx) / 2, y: (ay + by) / 2, hw: Math.max(T, Math.abs(bx - ax) / 2), hh: Math.max(T, Math.abs(by - ay) / 2) });
-            }
-        };
-        side(b.x0, b.y0, b.x1, b.y0); side(b.x0, b.y1, b.x1, b.y1); side(b.x0, b.y0, b.x0, b.y1); side(b.x1, b.y0, b.x1, b.y1);
-        for (const s of segs) {
-            // (no wall across the track)
-            let hit = false;
-            for (const q of track) if (Math.abs(q.x - s.x) < s.hw + 70 && Math.abs(q.y - s.y) < s.hh + 70) { hit = true; break; }
-            if (!hit) addBox({ type: 'wall', x: s.x, y: s.y, hw: s.hw, hh: s.hh, color });
-        }
-        // a bit of cover inside
-        for (let i = 0; i < 4; i++) { const x = rand(b.x0 + 90, b.x1 - 90), y = rand(b.y0 + 90, b.y1 - 90); if (trackDist(track, x, y) > 140 && !blockedAt(grid, x, y, 40)) addBox({ type: 'crate', x, y, hw: 22, hh: 22 }); }
-    };
-    baseWalls(blueBase, '#3a5f9a'); baseWalls(redBase, '#9a3a3a');
-    if (theme === 'forest') {
-        for (let i = 0; i < 1300; i++) {
-            const x = rand(150, W - 150), y = rand(150, W - 150), canopy = rand(100, 165);
-            if (!free(x, y, 40)) continue;
-            addCircle({ type: 'tree', x, y, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 });
-        }
-        for (let i = 0; i < 700; i++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (free(x, y, 30)) addCircle({ type: 'bush', x, y, r: rand(30, 44), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999 }); }
-        for (let i = 0; i < 160; i++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (free(x, y, 30)) addCircle({ type: 'rock', x, y, r: rand(22, 50), spr: randInt(0, 5), rot: rand(0, TAU) }); }
-        for (let i = 0; i < 900; i++) decor.push({ x: rand(0, W), y: rand(0, W), s: rand(0.5, 1.3), spr: randInt(0, Math.max(0, SPR.patches.length - 1)) });
-    } else if (theme === 'canyon') {
-        // Canyon walls of cliff rock along the track (with side passages), and a rocky mesa beyond
-        for (let i = 0; i < track.length; i += 3) {
-            const q = track[i];
-            if (inBase(q.x, q.y, 250) || Math.sin(q.s * 0.004) > 0.75) continue;  // (gaps: side passages)
-            for (const side of [-1, 1]) {
-                const d = rand(310, 380), x = q.x + Math.cos(q.a + side * Math.PI / 2) * d, y = q.y + Math.sin(q.a + side * Math.PI / 2) * d, r = rand(70, 110);
-                if (trackDist(track, x, y) > 220 + r * 0.3 && !inBase(x, y, 60) && !blockedAt(grid, x, y, r * 0.5) && x > 100 && y > 100 && x < W - 100 && y < W - 100) addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU), cliff: true });
-            }
-        }
-        for (let i = 0; i < 900; i++) { const x = rand(150, W - 150), y = rand(150, W - 150), big = Math.random() < 0.25, r = big ? rand(70, 130) : rand(20, 45); if (free(x, y, r)) addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU), cliff: big }); }
-        for (let i = 0; i < 120; i++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (free(x, y, 30)) addCircle({ type: 'bush', x, y, r: rand(24, 34), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999, dry: true }); }
-    } else {
-        // The launch site: rockets standing on their pads, blast walls, fuel tanks and stacks of crates
-        for (let i = 0; i < 6; i++) {
-            for (let t = 0; t < 40; t++) {
-                const x = rand(600, W - 600), y = rand(600, W - 600);
-                if (!free(x, y, 200) || rockets.some(r => Math.hypot(r.x - x, r.y - y) < 900)) continue;
-                rockets.push({ x, y, h: rand(0.9, 1.25) });
-                addBox({ type: 'wall', x, y, hw: 58, hh: 58, color: '#d9dde2', rocketBase: true });
-                for (const [ox, oy] of [[-150, 0], [150, 0], [0, -150], [0, 150]]) if (Math.random() < 0.6) addBox({ type: 'wall', x: x + ox, y: y + oy, hw: ox ? 12 : 60, hh: ox ? 60 : 12, color: '#7a8088' });
-                break;
-            }
-        }
-        for (let i = 0; i < 260; i++) {
-            const x = rand(150, W - 150), y = rand(150, W - 150), r = Math.random();
-            if (!free(x, y, 60)) continue;
-            if (r < 0.35) { const n = randInt(1, 4); for (let k = 0; k < n; k++) { const cx = x + rand(-50, 50), cy = y + rand(-50, 50); if (!blockedAt(grid, cx, cy, 24)) addBox({ type: 'crate', x: cx, y: cy, hw: 22, hh: 22 }); } }
-            else if (r < 0.6) addBox({ type: 'crate', barrel: true, x, y, hw: 16, hh: 16, color: pick(['#c9cdd3', '#e0b030', '#c04040']) });
-            else if (r < 0.85) { const horiz = Math.random() < 0.5; addBox({ type: 'wall', x, y, hw: horiz ? rand(60, 140) : 14, hh: horiz ? 14 : rand(60, 140), color: '#7a8088' }); }
-            else addBox({ type: 'wall', x, y, hw: rand(40, 70), hh: rand(40, 70), color: '#9aa0a8' });
-        }
-    }
-    // Weapon spots: racks in each base, and pickups along the way
-    const spots = [];
-    for (const [b, dir] of [[blueBase, 1], [redBase, -1]]) for (let i = 0; i < PAYLOAD.guns.length; i++) {
-        const x = (dir > 0 ? b.x0 + 60 : b.x1 - 60), y = b.y0 + 80 + i * ((b.y1 - b.y0 - 160) / (PAYLOAD.guns.length - 1));
-        spots.push({ x, y, key: PAYLOAD.guns[i], every: 15000 });
-    }
-    for (let s = 900; s < track[track.length - 1].s - 900; s += 1100) {
-        const q = trackAt(track, s);
-        for (const side of [-1, 1]) {
-            const x = q.x + Math.cos(q.a + side * Math.PI / 2) * 150, y = q.y + Math.sin(q.a + side * Math.PI / 2) * 150;
-            if (!blockedAt(grid, x, y, 24)) spots.push({ x, y, key: null, every: 25000 });
-        }
-    }
-    // The map picture
-    const [mm, g] = makeCanvas(200, 200), k = 200 / W;
-    g.fillStyle = theme === 'forest' ? '#3f6e34' : theme === 'canyon' ? '#b9784a' : '#7d828a'; g.fillRect(0, 0, 200, 200);
-    for (const o of obstacles) {
-        if (o.type === 'tree') { g.fillStyle = '#244a20'; g.beginPath(); g.arc(o.x * k, o.y * k, Math.max(0.8, o.canopy * 0.5 * k), 0, TAU); g.fill(); }
-        else if (o.type === 'rock') { g.fillStyle = o.cliff ? '#6a3f26' : '#8f7a66'; g.beginPath(); g.arc(o.x * k, o.y * k, Math.max(0.8, o.r * k), 0, TAU); g.fill(); }
-        else if (o.hw) { g.fillStyle = '#4a4d55'; g.fillRect((o.x - o.hw) * k, (o.y - o.hh) * k, Math.max(1, o.hw * 2 * k), Math.max(1, o.hh * 2 * k)); }
-    }
-    g.fillStyle = 'rgba(61,139,255,0.5)'; g.fillRect(blueBase.x0 * k, blueBase.y0 * k, (blueBase.x1 - blueBase.x0) * k, (blueBase.y1 - blueBase.y0) * k);
-    g.fillStyle = 'rgba(255,75,75,0.5)'; g.fillRect(redBase.x0 * k, redBase.y0 * k, (redBase.x1 - redBase.x0) * k, (redBase.y1 - redBase.y0) * k);
-    g.strokeStyle = '#f2e3b8'; g.lineWidth = 2; g.beginPath(); for (const q of track) g.lineTo(q.x * k, q.y * k); g.stroke();
-    const decorGrid = new Grid(512, 900);
-    for (const d of decor) decorGrid.insert(d);
-    // Launch pads on the track (launch site only): the cart flies over the next stretch
-    const pads = theme === 'launchpad' ? [0.22, 0.5, 0.78].map(f => track[track.length - 1].s * f) : [];
-    return { obstacles, grid, decorGrid, buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'payload', theme, payload: { track, blueBase, redBase, spots, rockets, pads, art: payloadArt(theme, track, blueBase, redBase, rockets) } };
-}
-// The ground, painted once at a quarter of the size (the track itself is drawn sharp on top every frame)
-function payloadArt(theme, track, bb, rb, rockets) {
-    if (theme === 'forest') return null;
-    const W = PAYLOAD.W, k = 0.25, [cv, g] = makeCanvas(W * k, W * k), rnd = seededRand(theme.length * 131);
-    g.scale(k, k);
-    if (theme === 'canyon') {
-        g.fillStyle = '#c4874f'; g.fillRect(0, 0, W, W);
-        for (let i = 0; i < 1400; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '120,70,40' : '230,180,120'},${0.08 + rnd() * 0.12})`; g.beginPath(); g.arc(rnd() * W, rnd() * W, 30 + rnd() * 160, 0, TAU); g.fill(); }
-        // the canyon floor along the track: darker, cooler sand
-        g.strokeStyle = 'rgba(110,62,36,0.35)'; g.lineWidth = 640; g.lineCap = 'round'; g.lineJoin = 'round';
-        g.beginPath(); for (const q of track) g.lineTo(q.x, q.y); g.stroke();
-        g.strokeStyle = 'rgba(160,96,58,0.4)'; g.lineWidth = 420; g.beginPath(); for (const q of track) g.lineTo(q.x, q.y); g.stroke();
-    } else {
-        g.fillStyle = '#8a8f96'; g.fillRect(0, 0, W, W);
-        // concrete slabs and painted lines
-        g.strokeStyle = 'rgba(60,64,70,0.35)'; g.lineWidth = 6;
-        for (let x = 0; x < W; x += 300) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, W); g.stroke(); g.beginPath(); g.moveTo(0, x); g.lineTo(W, x); g.stroke(); }
-        for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '50,52,56' : '200,204,210'},${0.06 + rnd() * 0.1})`; g.beginPath(); g.arc(rnd() * W, rnd() * W, 20 + rnd() * 90, 0, TAU); g.fill(); }
-        for (const r of rockets) {
-            g.fillStyle = '#5d6168'; g.beginPath(); g.arc(r.x, r.y, 260, 0, TAU); g.fill();
-            g.strokeStyle = '#e0b030'; g.lineWidth = 18; g.setLineDash([60, 40]); g.beginPath(); g.arc(r.x, r.y, 240, 0, TAU); g.stroke(); g.setLineDash([]);
-            g.fillStyle = 'rgba(20,20,22,0.5)'; g.beginPath(); g.arc(r.x, r.y, 150, 0, TAU); g.fill();
-        }
-    }
-    for (const [b, c] of [[bb, '61,139,255'], [rb, '255,75,75']]) { g.fillStyle = `rgba(${c},0.18)`; g.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
-    return cv;
-}
-function setupPayload(setup) {
-    const Wd = G.world.payload, P = G.payload = {
-        track: Wd.track, len: Wd.track[Wd.track.length - 1].s, s: 0, cart: { x: Wd.track[0].x, y: Wd.track[0].y, a: Wd.track[0].a, hop: 0, dead: false },
-        endAt: PAYLOAD.time, cps: [0.34, 0.67].map(f => ({ s: Wd.track[Wd.track.length - 1].s * f, hit: false })), lastPush: 0, queue: [], state: 'idle', spots: Wd.spots.map(s => ({ ...s, loot: null, next: 0 })), pushers: 0, overtime: false, safe: [payloadSafe(0), payloadSafe(1)]
-    };
-    const all = G.fighters.slice(), p = G.player;
-    const others = all.filter(f => f !== p).sort(() => Math.random() - 0.5);
-    const mySide = setup.side === 'red' ? 1 : 0;
-    const half = Math.ceil(all.length / 2);
-    const blues = new Set();
-    if (p && mySide === 0) blues.add(p);
-    for (const f of others) if (blues.size < (p && mySide === 1 ? Math.floor(all.length / 2) : half)) blues.add(f);
-    for (const f of all) {
-        f.team = blues.has(f) ? 0 : 1;
-        f.color = f.team ? PAYLOAD.red : PAYLOAD.blue; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
-        payloadSpawn(f);
-    }
-    if (p) { G.cam.x = p.x; G.cam.y = p.y; }
-}
-// Each side's safe zone, at the back of its base: you come back to life there, nobody can hurt you inside your own,
-// and an enemy who walks into it gets burned out
-function payloadSafe(team) {
-    const Wd = G.world.payload, b = team ? Wd.redBase : Wd.blueBase;
-    return team ? { x: b.x1 - PAYLOAD.safeR - 30, y: b.y } : { x: b.x0 + PAYLOAD.safeR + 30, y: b.y };
-}
-const inSafe = (f, team) => G.payload && Math.hypot(f.x - G.payload.safe[team].x, f.y - G.payload.safe[team].y) < PAYLOAD.safeR;
-function payloadSpawnPoint(team) {
-    const z = payloadSafe(team);
-    for (let i = 0; i < 40; i++) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (PAYLOAD.safeR - 40), x = z.x + Math.cos(a) * d, y = z.y + Math.sin(a) * d; if (!blockedAt(G.world.grid, x, y, 24)) return { x, y }; }
-    return z;
-}
-function payloadSpawn(f) {
-    const s = payloadSpawnPoint(f.team);
-    f.x = s.x; f.y = s.y; f.vx = f.vy = 0;
-    f.inv = [null, null]; f.slot = 0; f.ammo = {}; f.clip = {}; f.charge = null; f.reloadUntil = 0;
-    applyLoot(f, 'Dual Shock', -1); f.ammo['Dual Shock'] = Infinity;
-    f.hp = f.maxHp = CONFIG.MAX_HEALTH; f.armor = 0; f.items.bandage = 2;
-    f.protectUntil = G.time + PAYLOAD.protect;
-    f.mode = 'wander'; f.target = null; f.goal = null; f.nextThink = G.time;
-}
-// Someone's out: back at their base in a few seconds
-function payloadDeath(t, killer) {
-    G.payload.queue.push({ f: t, at: G.time + PAYLOAD.respawn });
-    if (t.isPlayer && G.mode === 'playing') { G.flash = 0.4; G.flashColor = '255,40,70'; Sound.death(); }
-}
-function payloadRespawn(f) {
-    const fresh = createFighter(f.x, f.y, { isPlayer: f.isPlayer, name: f.name, color: f.color, team: f.team });
-    Object.assign(f, fresh, { remote: f.remote, kills: f.kills, nextThink: G.time, cook: null, healing: null, car: null, up: null });
-    payloadSpawn(f);
-    G.fighters.push(f);
-    G.alive++;
-    if (f.isPlayer) { canvas.classList.remove('dead'); G.timeScale = 1; G.cam.x = f.x; G.cam.y = f.y; }
-}
-const onCart = f => { const c = G.payload.cart; return !f.dead && Math.hypot(f.x - c.x, f.y - c.y) < PAYLOAD.onR; };
-function updatePayload(dt) {
-    const P = G.payload, c = P.cart, p = G.player;
-    // Respawns
-    if (P.queue.length) { const due = P.queue.filter(q => G.time >= q.at); P.queue = P.queue.filter(q => G.time < q.at); for (const q of due) payloadRespawn(q.f); }
-    // Guns never run dry here; health comes back out of the fight
-    for (const f of G.fighters) {
-        if (f.dead) continue;
-        for (const k of f.inv) if (k && f.ammo[k] !== Infinity) f.ammo[k] = Infinity;
-        if (G.time - f.lastHurt > PAYLOAD.regenAfter && f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + PAYLOAD.regen * dt);
-        // (your own safe zone heals you fast; the enemy's burns you)
-        if (inSafe(f, f.team)) f.hp = Math.min(f.maxHp, f.hp + 40 * dt);
-        else if (inSafe(f, 1 - f.team) && G.mode === 'playing') damage(f, PAYLOAD.safeDmg * dt, null, 'safe zone');
-    }
-    // Weapon pickups come back after they're taken
-    for (const sp of P.spots) {
-        if (sp.loot && !sp.loot.gone) continue;
-        if (sp.loot) { sp.loot = null; sp.next = G.time + sp.every; }
-        if (G.time >= sp.next) sp.loot = spawnLoot(sp.x, sp.y, sp.key || pick(PAYLOAD.guns));
-    }
-    // The cart: who's on it and who's near it
-    let blue = 0, red = 0;
-    G.fgrid.query(c.x, c.y, PAYLOAD.contestR, f => { if (f.dead) return; const d = Math.hypot(f.x - c.x, f.y - c.y); if (f.team === 0 && d < PAYLOAD.onR) blue++; else if (f.team === 1 && d < PAYLOAD.contestR) red++; });
-    P.pushers = blue; P.red = red;
-    const here = trackAt(P.track, P.s);
-    let v = 0;
-    if (blue && red) P.state = 'contested';
-    else if (blue) {
-        P.state = 'moving'; P.lastPush = G.time;
-        v = PAYLOAD.speed * (1 + PAYLOAD.perPusher * (Math.min(blue, PAYLOAD.maxPushers) - 1));
-        // uphill slower, downhill faster
-        v *= clamp(1 - here.slope * 900, 0.45, 1.7);
-        if (c.hop > 0) v *= 1.8;
-    } else if (G.time - P.lastPush > PAYLOAD.rollAfter && P.s > 0) {
-        // left alone: it rolls back, but never past a checkpoint it reached
-        const floor = P.cps.filter(q => q.hit).reduce((m, q) => Math.max(m, q.s), 0);
-        if (P.s > floor) { v = -PAYLOAD.rollSpeed * clamp(1 + here.slope * 900, 0.5, 2); P.state = 'rolling'; }
-        else P.state = 'idle';
-    } else P.state = 'idle';
-    if (G.mode === 'playing' || G.mode === 'demo') {
-        const s0 = P.s;
-        P.s = clamp(P.s + v * dt, 0, P.len);
-        const q = trackAt(P.track, P.s), dx = q.x - c.x, dy = q.y - c.y;
-        // (whoever's on it rides along)
-        if (dx || dy) G.fgrid.query(c.x, c.y, PAYLOAD.onR + 10, f => { if (!f.dead && Math.hypot(f.x - c.x, f.y - c.y) < PAYLOAD.onR) { f.x += dx; f.y += dy; } });
-        c.x = q.x; c.y = q.y; c.a = q.a; c.h = q.h;
-        if (v > 0 && Math.random() < dt * 3 && inView(c.x, c.y, 100)) G.particles.push({ type: 'smoke', x: c.x - Math.cos(c.a) * 60 + rand(-20, 20), y: c.y - Math.sin(c.a) * 60 + rand(-20, 20), vx: 0, vy: 0, life: 0.7, max: 0.7, size: rand(6, 11), color: '170,160,140' });
-        // Launch pads: off it flies
-        for (const pad of G.world.payload.pads) if (s0 < pad && P.s >= pad) { c.hop = 1; if (inView(c.x, c.y, 200)) { burst(c.x, c.y, 26, '#ffb347', 300, 'glow'); G.shake = Math.max(G.shake, 8); } Sound.tone(140, 0.6, 'sawtooth', 0.1 * Sound.volAt(c.x, c.y), 600); }
-        if (c.hop > 0) c.hop = Math.max(0, c.hop - dt / 1.6);
-        // Checkpoints
-        for (const cp of P.cps) if (!cp.hit && P.s >= cp.s) {
-            cp.hit = true; P.endAt += PAYLOAD.cpBonus;
-            if (G.mode === 'playing') { showBanner('CHECKPOINT!', false, `+${PAYLOAD.cpBonus / 1000} seconds. ${p && p.team === 0 ? 'Keep pushing!' : 'Stop that cart!'}`); Sound.tone(660, 0.4, 'square', 0.08, 990); }
-        }
-    }
-    if (G.mode === 'demo') {
-        G.demoFollow = c;
-        if (P.s >= P.len || G.time > P.endAt) { P.s = 0; P.endAt = G.time + PAYLOAD.time; for (const cp of P.cps) cp.hit = false; }
-        return;
-    }
-    if (G.mode !== 'playing' || G.result || !p) return;
-    let won = null, title, sub;
-    if (P.s >= P.len) { won = p.team === 0; title = won ? 'PAYLOAD DELIVERED!' : 'THEY DELIVERED IT'; sub = 'Blue got the cart into the middle of Red\'s base.'; }
-    else if (G.time >= P.endAt) {
-        // (overtime while Blue is still on the cart)
-        if (blue) { if (!P.overtime) { P.overtime = true; showBanner('OVERTIME!', true, 'Blue is on the cart: the game goes on until they get off it'); } }
-        else { won = p.team === 1; title = won ? 'DEFENDED!' : 'OUT OF TIME'; sub = `The cart got ${Math.round(P.s / P.len * 100)}% of the way.`; }
-    }
-    if (won === null) return;
-    G.result = { won, place: won ? 1 : 2, title, sub };
-    G.overAt = G.time + 2600;
-    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
-}
-// Bots: Blue gets on the cart, Red heads for it and fights round it; anyone with only the starting pistols grabs a gun nearby first
-function payloadBotPlan(b) {
-    const P = G.payload, c = P.cart;
-    if (b.inv.filter(Boolean).length < 2) {
-        // (Blue only grabs a gun that's right on the way; Red will go further for one)
-        const l = nearestLoot(b.x, b.y, b.team === 0 ? 260 : 600, q => WEAPONS[q.key] && !b.inv.includes(q.key) && !claimedByOther(q, b));
-        if (l) { b.mode = 'loot'; b.goal = l; l.claim = b; return true; }
-    }
-    if (b.team === 0) {
-        const q = payloadSpotFor(b);
-        if (dist(b, q) < 30) { b.mode = 'rest'; return true; }
-        b.mode = 'zone'; b.goal = q;
-        return true;
-    }
-    // Red: stand in the way, a little ahead of the cart
-    if (b.guardOff === undefined) b.guardOff = Math.random() < 0.5 ? { ahead: rand(30, 160), side: rand(-90, 90) } : { ahead: rand(150, 450), side: rand(-220, 220) };
-    const q = trackAt(P.track, Math.min(P.len, P.s + b.guardOff.ahead));
-    const g = { x: q.x + Math.cos(q.a + Math.PI / 2) * b.guardOff.side, y: q.y + Math.sin(q.a + Math.PI / 2) * b.guardOff.side };
-    if (dist(b, g) < 60) { b.mode = 'rest'; return true; }
-    b.mode = 'zone'; b.goal = g;
-    return true;
-}
-// Where on the platform this Blue bot stands
-function payloadSpotFor(b) {
-    const c = G.payload.cart;
-    if (b.cartOff === undefined) b.cartOff = { a: rand(0, TAU), r: rand(10, 70) };
-    return { x: c.x + Math.cos(b.cartOff.a) * b.cartOff.r, y: c.y + Math.sin(b.cartOff.a) * b.cartOff.r };
-}
-// Drawing: the ground, the track, the checkpoints and the end
-function drawPayloadGround(L, T, R, B) {
-    const Wd = G.world.payload, W = PAYLOAD.W, track = Wd.track, now = performance.now() / 1000;
-    if (Wd.art) ctx.drawImage(Wd.art, 0, 0, W, W);
-    else {
-        ctx.fillStyle = SPR.grass; ctx.fillRect(0, 0, W, W);
-        G.world.decorGrid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2, d => { const s = 128 * d.s; ctx.drawImage(SPR.patches[d.spr], d.x - s, d.y - s, s * 2, s * 2); });
-    }
-    // Which stretch of the track is on screen
-    const vis = [];
-    for (let i = 0; i < track.length; i++) { const q = track[i]; vis[i] = q.x > L - 120 && q.x < R + 120 && q.y > T - 120 && q.y < B + 120; }
-    const run = (fn) => { let open = false; for (let i = 0; i < track.length; i++) { const on = vis[i] || vis[i + 1] || vis[i - 1]; if (on) { if (!open) { ctx.beginPath(); ctx.moveTo(track[i].x, track[i].y); open = true; } else ctx.lineTo(track[i].x, track[i].y); } else if (open) { fn(); open = false; } } if (open) fn(); };
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const theme = G.world.theme;
-    // the bed of gravel or packed earth
-    ctx.strokeStyle = theme === 'forest' ? '#7a6244' : theme === 'canyon' ? '#8e6a48' : '#5e6168'; ctx.lineWidth = 92; run(() => ctx.stroke());
-    ctx.strokeStyle = theme === 'forest' ? '#927754' : theme === 'canyon' ? '#a88058' : '#6c7078'; ctx.lineWidth = 76; run(() => ctx.stroke());
-    // Sleepers, lighter on the high ground and darker in the dips, with arrows on the climbs
-    for (let i = 0; i < track.length; i += 2) {
-        if (!vis[i]) continue;
-        const q = track[i], sh = Math.round(70 + q.h * 70);
-        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.a);
-        ctx.fillStyle = `rgb(${sh + 30},${sh + 8},${sh - 20})`; ctx.fillRect(-6, -30, 12, 60);
-        ctx.restore();
-    }
-    for (const side of [-1, 1]) {
-        ctx.strokeStyle = '#3a3d44'; ctx.lineWidth = 6;
-        ctx.beginPath(); let open = false;
-        for (let i = 0; i < track.length; i++) { const q = track[i]; if (!vis[i]) { open = false; continue; } const x = q.x + Math.cos(q.a + Math.PI / 2) * 19 * side, y = q.y + Math.sin(q.a + Math.PI / 2) * 19 * side; if (!open) { ctx.moveTo(x, y); open = true; } else ctx.lineTo(x, y); }
-        ctx.stroke();
-        ctx.strokeStyle = '#c9ccd2'; ctx.lineWidth = 2.5; ctx.stroke();
-    }
-    for (let i = 10; i < track.length; i += 14) {
-        const q = track[i];
-        if (!vis[i] || Math.abs(q.slope) < 0.00012) continue;
-        const up = q.slope > 0;
-        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.a);
-        ctx.fillStyle = up ? 'rgba(255,209,102,0.75)' : 'rgba(126,249,255,0.7)';
-        ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-4, -12); ctx.lineTo(-4, 12); ctx.closePath(); ctx.fill();
-        ctx.restore();
-    }
-    // Launch pads on the track
-    for (const s of Wd.pads) {
-        const q = trackAt(track, s);
-        if (!inView(q.x, q.y, 120)) continue;
-        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.a);
-        ctx.fillStyle = '#2a2d33'; roundRect(ctx, -50, -50, 100, 100, 12); ctx.fill();
-        ctx.fillStyle = `rgba(255,140,40,${0.55 + Math.sin(now * 6) * 0.25})`;
-        for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(-26 + k * 22, -30); ctx.lineTo(-10 + k * 22, 0); ctx.lineTo(-26 + k * 22, 30); ctx.lineTo(-34 + k * 22, 30); ctx.lineTo(-18 + k * 22, 0); ctx.lineTo(-34 + k * 22, -30); ctx.closePath(); ctx.fill(); }
-        ctx.restore();
-    }
-    // Checkpoints: a line across the track with flags
-    const P = G.payload;
-    if (P) for (const cp of P.cps) {
-        const q = trackAt(track, cp.s);
-        if (!inView(q.x, q.y, 120)) continue;
-        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.a);
-        ctx.fillStyle = cp.hit ? 'rgba(61,139,255,0.8)' : 'rgba(255,255,255,0.75)'; ctx.fillRect(-5, -55, 10, 110);
-        for (const y of [-58, 58]) { ctx.fillStyle = '#2a2d33'; ctx.fillRect(-2, y - 2, 4, 4); ctx.fillStyle = cp.hit ? PAYLOAD.blue : '#ffd166'; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(22, y - 8); ctx.lineTo(0, y - 16); ctx.closePath(); ctx.fill(); }
-        ctx.restore();
-    }
-    // The end: a target in the middle of Red's base
-    const e = track[track.length - 1];
-    if (inView(e.x, e.y, 160)) {
-        ctx.save(); ctx.globalAlpha = 0.85;
-        for (let k = 3; k > 0; k--) { ctx.fillStyle = k % 2 ? PAYLOAD.red : '#fff7ec'; ctx.beginPath(); ctx.arc(e.x, e.y, k * 34, 0, TAU); ctx.fill(); }
-        ctx.restore();
-    }
-}
-// The rockets on their pads (over the blast walls), and the cart itself
-function drawPayloadProps(now) {
-    const Wd = G.world.payload, P = G.payload;
-    for (const r of Wd.rockets) {
-        if (!inView(r.x, r.y, 200)) continue;
-        ctx.save(); ctx.translate(r.x, r.y); ctx.scale(r.h, r.h);
-        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(18, 22, 70, 62, 0, 0, TAU); ctx.fill();
-        for (const a of [0, 2.09, 4.19]) { ctx.save(); ctx.rotate(a); ctx.fillStyle = '#b8323a'; ctx.beginPath(); ctx.moveTo(30, -12); ctx.lineTo(78, 0); ctx.lineTo(30, 12); ctx.closePath(); ctx.fill(); ctx.restore(); }
-        ctx.fillStyle = '#e9ecf0'; ctx.beginPath(); ctx.arc(0, 0, 46, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#cdd2d8'; ctx.beginPath(); ctx.arc(0, 0, 36, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#b8323a'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, TAU); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(-14, -14, 10, 0, TAU); ctx.fill();
-        ctx.restore();
-    }
-    if (!P) return;
-    // The safe zones: a dome of light in each base
-    for (const t of [0, 1]) {
-        const z = P.safe[t];
-        if (!inView(z.x, z.y, PAYLOAD.safeR + 20)) continue;
-        const col = t ? '255,75,75' : '61,139,255';
-        ctx.fillStyle = `rgba(${col},0.12)`; ctx.beginPath(); ctx.arc(z.x, z.y, PAYLOAD.safeR, 0, TAU); ctx.fill();
-        ctx.strokeStyle = `rgba(${col},${0.55 + Math.sin(now * 3) * 0.2})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(z.x, z.y, PAYLOAD.safeR, 0, TAU); ctx.stroke();
-        ctx.font = '800 26px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = `rgba(${col},0.7)`;
-        ctx.fillText('SAFE ZONE', z.x, z.y);
-    }
-    const c = P.cart, hop = c.hop > 0 ? Math.sin((1 - c.hop) * Math.PI) : 0, sc = 1 + hop * 0.45;
-    // a ring on the ground: blue while it moves, red while it's blocked
-    const col = P.state === 'moving' ? '61,139,255' : P.state === 'contested' ? '255,75,75' : P.state === 'rolling' ? '255,209,102' : '220,220,230';
-    ctx.strokeStyle = `rgba(${col},${0.45 + Math.sin(now * 5) * 0.15})`; ctx.lineWidth = 4; ctx.setLineDash([14, 10]);
-    ctx.beginPath(); ctx.arc(c.x, c.y, PAYLOAD.onR, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
-    ctx.save(); ctx.translate(c.x, c.y);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(8 + hop * 30, 12 + hop * 40, 74, 46, c.a, 0, TAU); ctx.fill();
-    ctx.rotate(c.a); ctx.scale(sc, sc);
-    // The platform: a wide flat deck on rail wheels, with hazard stripes round the edge and a glowing core
-    ctx.fillStyle = '#1c1d21';
-    for (const [x, y] of [[-52, -19], [52, -19], [-52, 19], [52, 19]]) { ctx.beginPath(); ctx.arc(x, y, 9, 0, TAU); ctx.fill(); }
-    ctx.fillStyle = '#3a404b'; roundRect(ctx, -78, -64, 150, 128, 16); ctx.fill();
-    ctx.save(); roundRect(ctx, -78, -64, 150, 128, 16); ctx.clip();
-    ctx.fillStyle = '#e0b030';
-    for (let k = -10; k < 12; k++) { ctx.beginPath(); ctx.moveTo(-90 + k * 18, -70); ctx.lineTo(-80 + k * 18, -70); ctx.lineTo(-120 + k * 18, 70); ctx.lineTo(-130 + k * 18, 70); ctx.closePath(); ctx.fill(); }
-    ctx.restore();
-    ctx.fillStyle = '#56606e'; roundRect(ctx, -70, -56, 134, 112, 12); ctx.fill();
-    ctx.strokeStyle = 'rgba(30,34,40,0.5)'; ctx.lineWidth = 2;
-    for (let x = -50; x < 64; x += 22) { ctx.beginPath(); ctx.moveTo(x, -56); ctx.lineTo(x, 56); ctx.stroke(); }
-    const pulse = 0.6 + Math.sin(now * 4) * 0.25;
-    ctx.fillStyle = '#1f2533'; ctx.beginPath(); ctx.arc(-14, 0, 20, 0, TAU); ctx.fill();
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `rgba(95,212,255,${0.35 * pulse})`; ctx.beginPath(); ctx.arc(-14, 0, 30, 0, TAU); ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = '#5fd4ff'; ctx.beginPath(); ctx.arc(-14, 0, 11, 0, TAU); ctx.fill();
-    // The shield across the front: a curved wall of glowing energy on two posts
-    const hitK = clamp(1 - (G.time - (c.shieldHit || -1e9)) / 250, 0, 1), R = PAYLOAD.shieldR / sc, A = PAYLOAD.shieldArc;
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(95,212,255,${0.25 + 0.2 * pulse + hitK * 0.4})`; ctx.lineWidth = 16; ctx.beginPath(); ctx.arc(0, 0, R, -A, A); ctx.stroke();
-    ctx.strokeStyle = `rgba(200,245,255,${0.6 + hitK * 0.4})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, R, -A, A); ctx.stroke();
-    ctx.restore();
-    for (const s2 of [-1, 1]) { ctx.fillStyle = '#2a2f38'; ctx.beginPath(); ctx.arc(Math.cos(A * s2) * R, Math.sin(A * s2) * R, 7, 0, TAU); ctx.fill(); ctx.fillStyle = '#5fd4ff'; ctx.beginPath(); ctx.arc(Math.cos(A * s2) * R, Math.sin(A * s2) * R, 3, 0, TAU); ctx.fill(); }
-    ctx.restore();
-}
-// On the screen: how far along the cart is, the time, an arrow to the cart when it's off screen, and the respawn countdown
-function drawPayloadOverlay() {
-    const P = G.payload, p = G.player;
-    if (!P || G.mode !== 'playing' || !p) return;
-    const w = Math.min(360, viewW - 40), x = viewW / 2 - w / 2, y = viewW < 600 ? 200 : 74;
-    ctx.save();
-    ctx.fillStyle = 'rgba(14,10,28,0.72)'; roundRect(ctx, x - 10, y - 12, w + 20, 34, 10); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(x, y + 2, w, 6);
-    ctx.fillStyle = PAYLOAD.blue; ctx.fillRect(x, y + 2, w * P.s / P.len, 6);
-    for (const cp of P.cps) { ctx.fillStyle = cp.hit ? PAYLOAD.blue : '#ffd166'; ctx.fillRect(x + w * cp.s / P.len - 2, y - 3, 4, 16); }
-    ctx.fillStyle = PAYLOAD.red; ctx.beginPath(); ctx.arc(x + w, y + 5, 7, 0, TAU); ctx.fill();
-    const cx = x + w * P.s / P.len;
-    ctx.fillStyle = P.state === 'contested' ? PAYLOAD.red : P.state === 'moving' ? '#e8fbff' : '#c9c3dd';
-    roundRect(ctx, cx - 10, y - 6, 20, 18, 4); ctx.fill();
-    ctx.font = '700 12px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1f2533';
-    ctx.fillText(P.state === 'contested' ? '!' : P.pushers ? `×${P.pushers}` : '', cx, y + 3);
-    ctx.restore();
-    // where the cart is, when you can't see it
-    const c = P.cart, sx = (c.x - G.cam.x) * G.zoom + viewW / 2, sy = (c.y - G.cam.y) * G.zoom + viewH / 2;
-    if (!p.dead && (sx < 0 || sy < 0 || sx > viewW || sy > viewH)) {
-        const a = Math.atan2(sy - viewH / 2, sx - viewW / 2), R = Math.min(viewW, viewH) / 2 - 50;
-        const ax = viewW / 2 + Math.cos(a) * R, ay = viewH / 2 + Math.sin(a) * R;
-        ctx.save(); ctx.translate(ax, ay); ctx.rotate(a);
-        ctx.fillStyle = 'rgba(95,212,255,0.9)'; ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-10, -13); ctx.lineTo(-4, 0); ctx.lineTo(-10, 13); ctx.closePath(); ctx.fill();
-        ctx.restore();
-        ctx.font = '700 13px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8fbff';
-        ctx.fillText(`CART ${Math.round(Math.hypot(c.x - p.x, c.y - p.y) / 10)}m`, ax - Math.cos(a) * 30, ay - Math.sin(a) * 30);
-    }
-    if (p.dead) {
-        const q = P.queue.find(q => q.f === p);
-        ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(10,6,20,0.45)'; ctx.fillRect(0, viewH * 0.36, viewW, viewH * 0.18);
-        ctx.font = '900 46px "Black Ops One", sans-serif'; ctx.fillStyle = '#ffd166';
-        ctx.fillText(`RESPAWNING IN ${q ? Math.max(1, Math.ceil((q.at - G.time) / 1000)) : ''}`, viewW / 2, viewH * 0.43);
-        ctx.font = '600 19px Rajdhani, sans-serif'; ctx.fillStyle = '#fff7ec';
-        ctx.fillText('You come back in your safe zone', viewW / 2, viewH * 0.5);
-        ctx.restore();
-    }
-}
-function payloadStatus(p) {
-    const P = G.payload, left = fmtTime(Math.max(0, (P.endAt - G.time) / 1000)), pct = Math.round(P.s / P.len * 100);
-    const slope = trackAt(P.track, P.s).slope, hill = slope > 0.00012 ? ' · uphill' : slope < -0.00012 ? ' · downhill' : '';
-    const st = P.state === 'contested' ? 'blocked!' : P.state === 'moving' ? `moving${hill}` : P.state === 'rolling' ? 'rolling back' : 'stopped';
-    return `${p.team === 0 ? 'Push the cart' : 'Stop the cart'} · ${pct}% · ${st} · ${P.overtime ? 'OVERTIME' : left}`;
-}
-
-// ----- The Payload guns -----
+// ---------- Charged and steered guns: the Energy Gun and the Guided Rocket ----------
 // Energy Gun: hold to charge. Let go early for a small blast, or charge it up for a big glowing ball that bursts
 function chargeGun(f, down, dt) {
     const name = held(f), w = WEAPONS[name];
@@ -5816,16 +4939,6 @@ function energyBlast(x, y, R, owner, dmg) {
         burst(x, y, 18, '#4a7bff', 260, 'glow');
     }
     Sound.tone(180, 0.3, 'sine', 0.1 * Sound.volAt(x, y), 60);
-}
-// The platform's shield: a curved wall across its front that stops any shot coming at it from ahead
-function payloadShieldHit(b) {
-    const c = G.payload.cart, dx = b.x - c.x, dy = b.y - c.y, d = Math.hypot(dx, dy);
-    if (d < PAYLOAD.shieldR - 10 || d > PAYLOAD.shieldR + 10) return false;
-    if (Math.abs(angleDiff(c.a, Math.atan2(dy, dx))) > PAYLOAD.shieldArc) return false;
-    if (b.vx * dx + b.vy * dy > 0) return false;  // (shots from the platform go out through it)
-    if (inView(b.x, b.y, 60)) { burst(b.x, b.y, 6, '#7ee6ff', 160, 'glow'); G.particles.push({ type: 'ring', x: b.x, y: b.y, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 16, color: '#7ee6ff' }); }
-    c.shieldHit = G.time;
-    return true;
 }
 // Guided Rocket: it turns toward wherever its shooter is aiming now, so you can steer it round corners
 function steerGuided(b, dt) {
@@ -6866,7 +5979,7 @@ const navyLx = (s, x, y) => (x - s.x) * s.ca + (y - s.y) * s.sa;
 const navyLy = (s, x, y) => -(x - s.x) * s.sa + (y - s.y) * s.ca;
 const navyWx = (s, lx, ly) => s.x + lx * s.ca - ly * s.sa;
 const navyWy = (s, lx, ly) => s.y + lx * s.sa + ly * s.ca;
-const navyIsland = (x, y, m = 0) => G.chase ? !chaseWet(x, y, m) : G.navy.islands.some(q => (q.x - x) ** 2 + (q.y - y) ** 2 < (q.r + m) ** 2);
+const navyIsland = (x, y, m = 0) => G.navy.islands.some(q => (q.x - x) ** 2 + (q.y - y) ** 2 < (q.r + m) ** 2);
 // Afloat, somebody on it, and on the other side
 const navyHostile = (s, team) => !s.sinkAt && s.team !== team && s.crewN > 0;
 
@@ -7136,7 +6249,7 @@ function navyAction(p) {
         }
         return best;
     }
-    if (!s.helm.crew || (G.chase && s.team === p.team && !isHuman(s.helm.crew))) {
+    if (!s.helm.crew) {
         const d = Math.hypot(lx - s.helm.lx, ly - s.helm.ly);
         if (d < s.helm.r + 60) consider(d, { st: s.helm, text: s.team === p.team ? 'Take the wheel' : `Take the wheel: capture the ${s.name}` });
     }
@@ -7174,7 +6287,6 @@ const navyLabel = p => { const a = G.navy && !p.car ? navyAction(p) : null; retu
 // How far out the camera sits: the big guns and the wheel need to see the whole fight
 function navyZoomK(f) {
     if (!f) return 0.75;
-    if (G.chase && !f.ship && !f.car) return 0.9;
     if (f.car) return 0.6;
     if (f.station) return f.station.helm ? 0.42 : f.station.D.zoom;
     return 0.75;
@@ -7246,14 +6358,14 @@ function navyStep(s, dt) {
     const C = s.C, h = s.helm.crew;
     if (s.sinkAt) { s.throttle = 0; s.rudder = 0; }
     else if (h && !isHuman(h)) {
-        if (G.time >= s.nextOrder) { s.nextOrder = G.time + 500; if (G.chase) chaseShipOrders(s); else navyOrders(s); }
+        if (G.time >= s.nextOrder) { s.nextOrder = G.time + 500; navyOrders(s); }
         s.throttle += clamp(s.wantThrottle - s.throttle, -dt * 0.4, dt * 0.4);
-        s.rudder = clamp(angleDiff(s.a, s.want) * 3, -1, 1) * (G.chase && s.speed < 0 ? -1 : 1);
+        s.rudder = clamp(angleDiff(s.a, s.want) * 3, -1, 1);
     } else if (!h) {
         // Nobody at the wheel: she holds her helm dead ahead and slowly loses way
         s.rudder *= Math.exp(-dt);
         s.throttle = Math.max(0.12, s.throttle - dt * 0.1);
-        if (s.crewN === 0 || G.chase) s.throttle = 0;  // (in Chase an empty wheel means she's anchored)
+        if (s.crewN === 0) s.throttle = 0;
     }
     const top = C.speed * s.throttle * (0.55 + 0.45 * Math.max(0, s.hp / s.maxHp));
     s.speed += clamp(top - s.speed, -C.accel * dt, C.accel * dt);
@@ -7310,7 +6422,6 @@ function navyCollide(dt) {
             const lx = clamp(navyLx(a, q.x, q.y), -aH, aH), px = a.x + ac * lx, py = a.y + as * lx, d = Math.hypot(px - q.x, py - q.y), min = q.r + a.C.beam / 2;
             if (d < min) { const nx = (px - q.x) / (d || 1), ny = (py - q.y) / (d || 1); a.x += nx * (min - d); a.y += ny * (min - d); if (Math.abs(a.speed) > 40) { navyHurt(a, Math.abs(a.speed) * dt * 12, null); a.speed *= Math.exp(-dt * 2); } }
         }
-        if (G.chase) chaseKeepAfloat(a, dt);
         const m = a.C.len / 2 + 60;
         a.x = clamp(a.x, m, W - m); a.y = clamp(a.y, m, W - m);
     }
@@ -7592,7 +6703,6 @@ function navyCheck() {
     const left = new Array(G.war ? G.war.teams : 2).fill(0);
     for (const s of N.ships) if (!s.sinkAt && s.crewN > 0) left[s.team]++;
     N.left = left;
-    if (N.chase) return;
     // Ships sinking doesn't end it on its own: crew can still be swimming, ashore on an island,
     // flying a helicopter, or standing aboard a ship they've boarded. Only a wholly dead team ends it.
     if (G.mode === 'demo') { if (!G.teamAlive[0] || !G.teamAlive[1]) N.over = true; return; }
@@ -7952,7 +7062,6 @@ function navyThink(b) {
     if (enemy && b.target !== enemy) b.engageAt = G.time + rand(150, 500) * AIK().react;
     b.target = enemy;
     b.nGoal = null; b.nStation = null;
-    if (!s && G.chase) { b.nSwimTo = chaseSwimGoal(b); return; }
     if (!s) {
         // In the water: the nearest hull, your own side's if it isn't much further
         let best = null, bq = Infinity;
@@ -7965,22 +7074,6 @@ function navyThink(b) {
         return;
     }
     b.nSwimTo = null;
-    if (s.team !== b.team && G.chase && !b.soldier) {
-        // Chase: one of the squad on a soldier boat goes back over to ours if she's alongside, or jumps for it
-        const home = chaseBoat(b), pl = home && !home.sinkAt && s.planks.find(q => q.other === home);
-        if (pl) { const ly = navyLy(s, home.x, home.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, home.x, home.y), -s.C.len * 0.4, s.C.len * 0.4); b.nGoal = { lx, ly: ly * (navyHw(s.C, lx) + 30), over: true }; return; }
-        if (b.station) navyLeave(b);
-        const side = home && navyLy(s, home.x, home.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, b.x, b.y), -s.C.len * 0.4, s.C.len * 0.4);
-        b.x = navyWx(s, lx, side * (navyHw(s.C, lx) + 60)); b.y = navyWy(s, lx, side * (navyHw(s.C, lx) + 60));
-        b.ship = null; b.room = null; b.swim = true; b.noClimb = G.time + 1500;
-        return;
-    }
-    if (s.team !== b.team && G.chase) {
-        // Chase: soldiers who get aboard the runaways' boat fight whoever's on deck (they don't steal her)
-        const e = enemy && enemy.ship === s ? enemy : null;
-        b.nGoal = e ? { lx: navyLx(s, e.x, e.y), ly: navyLy(s, e.x, e.y) } : { lx: navyLx(s, b.x, b.y), ly: navyLy(s, b.x, b.y) };
-        return;
-    }
     if (s.team !== b.team) {
         // On an enemy ship: the wheel is the prize
         if (!s.helm.crew) { b.nStation = s.helm; if (!s.helm.claim || s.helm.claim.dead) s.helm.claim = b; }
@@ -8044,7 +7137,6 @@ function navyRepairStep(f, dt) {
 }
 function navyBot(b, dt) {
     if (b.fixing) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
-    if (G.chase && b.ship && (b.ship.chase === 'squad' || b.ship.chase === 'mini') && !b.soldier && chaseDisembark(b)) return;
     if (b.station) {
         b.vx = b.vy = 0; b._wantSpeed = 0;
         if (b.station.gun) {
@@ -8696,7 +7788,7 @@ function spawnNear(c, r, pad = 40, outdoors = false) {
     for (let tries = 0; tries < 40; tries++) {
         const a = rand(0, TAU), d = Math.sqrt(Math.random()) * r;
         const x = clamp(c.x + Math.cos(a) * d, 200, W - 200), y = clamp(c.y + Math.sin(a) * d, 200, W - 200);
-        if (!blockedAt(G.world.grid, x, y, pad) && !(outdoors && buildingAt(x, y, 40)) && (!G.world.cave || G.world.cave.inside(x, y, 150)) && !(G.world.chase && chaseBad(x, y))) return { x, y };
+        if (!blockedAt(G.world.grid, x, y, pad) && !(outdoors && buildingAt(x, y, 40)) && (!G.world.cave || G.world.cave.inside(x, y, 150))) return { x, y };
     }
     return { x: c.x, y: c.y };
 }
@@ -8765,1274 +7857,6 @@ function updateTeamCenters() {
     w.nextCenter = G.time + 1000;
 }
 
-// ---------- Chase ----------
-// A squad of 20 breaks out of a facility whose soldiers want them gone, crosses a desert of broken, abandoned buildings
-// while helicopters search for them, takes a mini ship down a river through a mountain range (or walks the banks to
-// dodge the soldier boats), crosses the ocean, and finds land with a giant airship waiting to fly them out.
-// It's meant to be a long game (on a world three times the size, with day and night): the squad has 500 health each, the soldiers 45.
-const CHASE = {
-    people: 20, hp: 500, soldierHp: 45, armor: 100, scale: 3, dayDark: 0, nightDark: 0.87,
-    oceanY: 3400, mountY: 7500, river: 1020, bank: 430,
-    fac: { x0: 600, y0: 9300, x1: 3300, y1: 11500 },
-    island: { x: 10350, y: 1500, r: 1250 },
-    airship: { x: 10500, y: 1150, board: 230 },
-    // (the river winds back and forth across the whole mountain range on its way to the sea)
-    riverPts: [[10900, 8350], [10860, 7350], [10300, 6850], [9300, 6900], [8500, 6450], [8700, 5650], [9500, 5100], [9300, 4350], [8300, 4050], [7300, 4450], [7000, 5300], [7400, 6150], [6900, 6850], [5900, 6850], [5200, 6250], [5500, 5400], [5000, 4550], [4100, 4200], [3200, 4600], [3000, 5500], [3400, 6350], [2700, 6850], [1850, 6600], [1500, 5850], [1900, 5050], [1600, 4300], [1500, 3500], [1550, 2800]],
-    seaPts: [[1550, 2800], [2600, 2300], [4500, 2000], [6500, 1800], [8650, 1600]],
-    guns: ['Assault Rifle', 'Assault Rifle', 'Mac10', 'Shotgun', 'Machine Gun', 'Sniper', 'Vector'],
-    desertSquads: 16, bankSquads: 14, helis: 3, riverShips: 7, seaShips: 3, shipCrew: 6, shipHp: 500, sailors: 80,
-    reinforce: [70000, 100000], heliSight: 520, blimp: { count: 7, max: 9, speed: 75, scan: 760, hp: 2600, drop: 22000, len: 640, wid: 210 }, desert: { dmg: 1.7, reinforce: [25000, 40000], waves: 2, sight: 720, helis: 10 }, shipHull: 36000, art: 12, soldierDmg: 0.45, alertR: 2600
-};
-// Everything is laid out on the normal map's 12000 and then stretched 3 times over (the river and the banks stay
-// the same width; there's just three times as far to go)
-(() => {
-    const k = CHASE.scale, W = CHASE.world = 12000 * k;
-    CHASE.oceanY *= k; CHASE.mountY *= k;
-    CHASE.riverPts = CHASE.riverPts.map(([x, y], i, a) => [x * k, (i < 2 || i > a.length - 3 ? y : 4500 + (y - 4050) * 2050 / 2850) * k]);
-    // (across the ocean the boat sails into the mouth of the far land's river, where the mini ships are waiting)
-    CHASE.seaPts = [[4650, 8400], [7800, 6900], [11000, 5900], [14000, 5100], [16800, 4700]];
-    CHASE.fac = { x0: 1200, y0: W - 5300, x1: 7200, y1: W - 500 };
-    for (const key of ['desertSquads', 'bankSquads', 'riverShips', 'seaShips']) CHASE[key] = Math.round(CHASE[key] * (key === 'seaShips' ? 2 : k * 0.8));
-    CHASE.helis = CHASE.desert.helis;
-})();
-// The far land, across the ocean: a forest with a long river through it (you take two mini ships up it), then high
-// mountains full of caves where the river splits into channels round rocky islands, and the airship at the very end
-CHASE.far = {
-    x: 17500, y: 8300, mx: 26500, river: 560, branch: 330, bank: 380, mouth: 1150, lake: 950,
-    pts: [[19400, 4700], [21000, 4680], [22400, 4600], [23500, 5600], [25000, 6600], [26400, 5900], [26600, 4300], [25700, 3000], [25900, 1700], [27200, 1100], [28700, 1500], [29400, 2900], [29700, 4400], [30500, 5800], [32000, 6500], [33500, 5800], [33900, 4300], [33300, 3000], [33500, 1900]],
-    minis: 2, miniHull: 12000, miniS: 3000, ships: 9, bankSquads: 20, patrols: 10, blimps: 3, clear: { x: 33750, y: 1650, r: 1500 }
-};
-// (laid out for a coast at 21000, then stretched west to give the forest and the mountains more room)
-CHASE.far.pts = CHASE.far.pts.map(([x, y]) => [CHASE.far.x + (x - 21000) * (36000 - CHASE.far.x) / 15000, y]);
-CHASE.airship = { x: 34250, y: 1350, board: 230 };
-const chaseFarX = y => CHASE.far.x + Math.sin(y / 800) * 220 + Math.sin(y / 290 + 1) * 80;     // its west shore
-const chaseFarY = x => CHASE.far.y + Math.sin(x / 760) * 200 + Math.sin(x / 270 + 2) * 70;     // its south shore
-const chaseFarMX = y => CHASE.far.mx + Math.sin(y / 700) * 300 + Math.sin(y / 230) * 90;       // where the mountains start
-const chaseInFar = (x, y, m = 0) => x > chaseFarX(y) + m && y < chaseFarY(x) - m;
-const chaseCoast = x => CHASE.oceanY + Math.sin(x / 700) * 110 + Math.sin(x / 260 + 2) * 40;
-const chaseMount = x => CHASE.mountY + Math.sin(x / 900) * 150 + Math.sin(x / 310 + 1) * 70;
-function chaseSpline(pts, step) {
-    const out = [];
-    for (let i = 0; i < pts.length - 1; i++) {
-        const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
-        const n = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / step));
-        for (let k = 0; k < n; k++) {
-            const t = k / n, t2 = t * t, t3 = t2 * t;
-            const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
-            out.push({ x: f(p0[0], p1[0], p2[0], p3[0]), y: f(p0[1], p1[1], p2[1], p3[1]) });
-        }
-    }
-    const L = pts[pts.length - 1];
-    out.push({ x: L[0], y: L[1] });
-    return out;
-}
-// The nearest bit of river to a point (through a coarse lookup grid, so it's cheap enough to ask every frame)
-function chaseNearIn(C, x, y) {
-    const list = C.hash[Math.floor(x / C.cell) + Math.floor(y / C.cell) * C.cols];
-    let bd = Infinity, bi = -1;
-    if (list && x >= 0 && y >= 0) for (const i of list) { const q = C.river[i], d = (q.x - x) ** 2 + (q.y - y) ** 2; if (d < bd) { bd = d; bi = i; } }
-    return { d: Math.sqrt(bd), i: bi };
-}
-const chaseRiverNear = (x, y) => chaseNearIn(G.world.chase, x, y);
-// The far land's river is a whole network of channels of different widths: how far a point is from being in one
-// (e < 0 means in the water), and which bit of channel that is
-function chaseFarNearIn(C, x, y) {
-    const list = C.farHash[Math.floor(x / C.cell) + Math.floor(y / C.cell) * C.cols];
-    let be = Infinity, bi = -1, bd = 0;
-    if (list && x >= 0 && y >= 0) for (const i of list) { const q = C.far[i], d = Math.sqrt((q.x - x) ** 2 + (q.y - y) ** 2), e = d - q.w; if (e < be) { be = e; bi = i; bd = d; } }
-    return { e: be, i: bi, d: bd };
-}
-const chaseFarNear = (x, y) => chaseFarNearIn(G.world.chase, x, y);
-// Water at least m away from any shore (the ocean, the rivers); the piers count as land
-function chaseWet(x, y, m = 0) {
-    for (const p of G.world.chase.piers) if (x > p.x0 - m && x < p.x1 + m && y > p.y0 - m && y < p.y1 + m) return false;
-    if (y < chaseCoast(x) - m) return x < chaseFarX(y) - m || y > chaseFarY(x) + m || chaseFarNear(x, y).e < -m;
-    return chaseRiverNear(x, y).d < CHASE.river - m;
-}
-// Mountain you can't walk through: everything in the range except the river and its banks (and, over in the far
-// land's mountains, the caves and the airship's clearing)
-function chaseFarRockIn(C, x, y) {
-    if (x < chaseFarMX(y) || y > chaseFarY(x)) return false;
-    const n = chaseFarNearIn(C, x, y);
-    if (n.i >= 0 && n.e < C.far[n.i].bank) return false;
-    const K = CHASE.far.clear;
-    if ((x - K.x) ** 2 + (y - K.y) ** 2 < K.r * K.r) return false;
-    for (const c of C.farCaves) if ((x - c.x) ** 2 + (y - c.y) ** 2 < c.r * c.r) return false;
-    return true;
-}
-function chaseRock(x, y) {
-    if (y >= chaseMount(x)) return false;
-    if (y <= chaseCoast(x)) return chaseFarRockIn(G.world.chase, x, y);
-    const n = chaseRiverNear(x, y);
-    return n.i < 0 || n.d > CHASE.river + G.world.chase.river[n.i].bank;
-}
-const chaseBad = (x, y) => chaseRock(x, y) || chaseWet(x, y, -30);
-
-function generateChase() {
-    const W = CONFIG.WORLD_SIZE, grid = new Grid(256, 90), obstacles = [], lootSpots = [], F = CHASE.fac, FL = CHASE.far;
-    const addCircle = o => { obstacles.push(o); grid.insert(o); }, addBox = o => { obstacles.push(o); grid.insertBox(o); };
-    // The river, and the whole route the boat takes (down the river, then across the sea to the landing)
-    const river = chaseSpline(CHASE.riverPts, 50);
-    river.forEach((q, i) => { q.bank = CHASE.bank + Math.sin(i * 0.09) * 130 + Math.sin(i * 0.031 + 1) * 90; });
-    const route = river.map(q => ({ x: q.x, y: q.y })).concat(chaseSpline(CHASE.seaPts, 100).slice(1));
-    let s = 0;
-    route.forEach((q, i) => { if (i) s += Math.hypot(q.x - route[i - 1].x, q.y - route[i - 1].y); q.s = s; });
-    const cell = 400, cols = Math.ceil(W / cell), hash = new Array(cols * cols);
-    river.forEach((q, i) => {
-        const R = CHASE.river + q.bank + 150;
-        for (let cy = Math.max(0, Math.floor((q.y - R) / cell)); cy <= Math.min(cols - 1, Math.floor((q.y + R) / cell)); cy++)
-            for (let cx = Math.max(0, Math.floor((q.x - R) / cell)); cx <= Math.min(cols - 1, Math.floor((q.x + R) / cell)); cx++)
-                (hash[cx + cy * cols] || (hash[cx + cy * cols] = [])).push(i);
-    });
-    // The boat waits at a pier where the river starts, at the edge of the desert
-    const di = river.findIndex(q => q.y < CHASE.riverPts[0][1] - 1250), d0 = river[di], d1 = river[di + 1];
-    const dock = { x: d0.x, y: d0.y, a: Math.atan2(d1.y - d0.y, d1.x - d0.x) };
-    const hb = NAVY.ships.battleship.beam / 2, piers = [{ x0: dock.x - CHASE.river - 120, x1: dock.x - hb + 10, y0: dock.y - 70, y1: dock.y + 70 }, { x0: dock.x - CHASE.river - 120, x1: dock.x - hb + 10, y0: dock.y + 500, y1: dock.y + 640 }];
-    const C = { river, route, hash, cell, cols, piers, dock, mouthS: route[river.length - 1].s, endS: s, ruins: [], gates: [], start: null, buildings: [] };
-    // The far land's river: a wide mouth where the mini ships wait, then the main channel up through the forest and
-    // into the mountains, ending in a lake by the airship. Along the way it splits into channels round islands
-    // (a delta at the mouth, and braids of channels between the cliffs), and every channel is water you can sail.
-    const main = chaseSpline(FL.pts, 50), nm = main.length;
-    main.forEach((q, i) => { q.w = i < 60 ? FL.mouth + (FL.river - FL.mouth) * (i / 60) : i > nm - 22 ? FL.river + (FL.lake - FL.river) * ((i - (nm - 22)) / 21) : FL.river; q.bank = FL.bank + Math.sin(i * 0.07) * 120 + Math.sin(i * 0.023 + 2) * 80; q.main = true; });
-    const route2 = main.map(q => ({ x: q.x, y: q.y }));
-    let s2 = 0;
-    route2.forEach((q, i) => { if (i) s2 += Math.hypot(q.x - route2[i - 1].x, q.y - route2[i - 1].y); q.s = s2; });
-    const far = main.slice(), inLand = (x, y, m) => chaseInFar(x, y, m) && y > m && x < W - m;
-    const nrm = i => { const q = main[Math.max(0, i - 1)], q2 = main[Math.min(nm - 1, i + 1)], tl = Math.hypot(q2.x - q.x, q2.y - q.y) || 1; return [-(q2.y - q.y) / tl, (q2.x - q.x) / tl]; };
-    // a channel that splits off the main one and joins it again further on, round an island
-    const braid = (f0, f1, amp, w) => {
-        const i0 = Math.floor(nm * f0), i1 = Math.floor(nm * f1), im = (i0 + i1) >> 1, [nx, ny] = nrm(im);
-        let side = Math.random() < 0.5 ? 1 : -1;
-        if (!inLand(main[im].x + nx * side * amp, main[im].y + ny * side * amp, 900)) side = -side;
-        if (!inLand(main[im].x + nx * side * amp, main[im].y + ny * side * amp, 900)) amp *= 0.55;
-        for (let i = i0; i <= i1; i++) {
-            const t = (i - i0) / (i1 - i0), [ax, ay] = nrm(i), o = side * amp * Math.sin(Math.PI * t) * (1 + 0.12 * Math.sin(t * 11));
-            for (let k = 0; k < 3; k++) {  // (a few points per step, so the channel stays unbroken where it swings out)
-                const j = Math.min(nm - 1, i + k / 3), qa = main[Math.floor(j)], tt = (j - i0) / (i1 - i0), oo = side * amp * Math.sin(Math.PI * Math.min(1, tt)) * (1 + 0.12 * Math.sin(tt * 11));
-                far.push({ x: qa.x + ax * oo, y: qa.y + ay * oo, w: w * (0.75 + 0.25 * Math.sin(Math.PI * Math.min(1, tt))), bank: FL.bank * 0.85 });
-            }
-        }
-    };
-    // a channel that splits off and runs its own way out to the sea (the delta at the mouth)
-    const toSea = (i0, ex, ey, w) => {
-        const q = main[i0], mx = (q.x + ex) / 2 + rand(-500, 500), my = (q.y + ey) / 2 + rand(-500, 500);
-        for (const p of chaseSpline([[q.x, q.y], [mx, my], [ex, ey]], 40)) far.push({ x: p.x, y: p.y, w, bank: FL.bank * 0.7 });
-    };
-    toSea(Math.floor(nm * 0.09), chaseFarX(6600) - 400, 6600, 330);
-    toSea(Math.floor(nm * 0.07), chaseFarX(2700) - 400, 2700, 300);
-    toSea(Math.floor(nm * 0.13), FL.x + 2600, chaseFarY(FL.x + 2600) + 400, 280);
-    braid(0.22, 0.3, 1100, FL.branch);
-    braid(0.38, 0.45, 950, FL.branch * 0.9);
-    braid(0.56, 0.63, 950, FL.branch);
-    braid(0.69, 0.76, 1000, FL.branch * 0.9);
-    braid(0.83, 0.9, 900, FL.branch);
-    const farHash = new Array(cols * cols);
-    far.forEach((q, i) => {
-        const R = q.w + q.bank + 150;
-        for (let cy = Math.max(0, Math.floor((q.y - R) / cell)); cy <= Math.min(cols - 1, Math.floor((q.y + R) / cell)); cy++)
-            for (let cx = Math.max(0, Math.floor((q.x - R) / cell)); cx <= Math.min(cols - 1, Math.floor((q.x + R) / cell)); cx++)
-                (farHash[cx + cy * cols] || (farHash[cx + cy * cols] = [])).push(i);
-    });
-    Object.assign(C, { far, farHash, farCaves: [], route2, endS2: s2, miniS: FL.miniS, farMount: route2[main.findIndex(q => q.x > chaseFarMX(q.y))].s });
-    const farEnd = route2[route2.length - 1];
-    C.farEnd = { x: farEnd.x, y: farEnd.y };
-    const rockAt = (x, y) => { if (y <= chaseCoast(x) || y >= chaseMount(x)) return false; const n = chaseNearIn(C, x, y); return n.i < 0 || n.d > CHASE.river + river[n.i].bank; };
-    const nearRiver = (x, y, r) => chaseNearIn(C, x, y).d < r;
-    const clearAt = (x, y, r) => !blockedAt(grid, x, y, r);
-    const mouth = river[river.length - 1];
-    C.mouth = { x: river[river.length - 8].x, y: river[river.length - 8].y };
-    C.landing = { x: route[route.length - 1].x, y: route[route.length - 1].y };
-
-    // --- The facility: a big walled base. A fenced prison yard with the cell block on the west side, and beyond the
-    // fence barracks, an armory, a mess hall, a garage, the HQ and watchtowers, with gates out to the east and north ---
-    const T = 34, gy = (F.y0 + F.y1) / 2, gx = F.x0 + (F.x1 - F.x0) * 0.7, wallCol = '#6d7076';
-    const at = (x, y) => [F.x0 + x, F.y0 + y];
-    const wall = (x0, y0, x1, y1, col = wallCol, extra = {}) => { if (x1 - x0 > 2 && y1 - y0 > 2) addBox({ type: 'wall', x: (x0 + x1) / 2, y: (y0 + y1) / 2, hw: (x1 - x0) / 2, hh: (y1 - y0) / 2, color: col, ...extra }); };
-    wall(F.x0, F.y0, gx - 160, F.y0 + T); wall(gx + 160, F.y0, F.x1, F.y0 + T);          // north wall, with a gate
-    wall(F.x0, F.y1 - T, F.x1, F.y1);                                                      // south wall
-    wall(F.x0, F.y0, F.x0 + T, F.y1);                                                      // west wall
-    wall(F.x1 - T, F.y0, F.x1, gy - 160); wall(F.x1 - T, gy + 160, F.x1, F.y1);           // east wall, with a gate
-    C.gates = [{ x: F.x1 + 60, y: gy }, { x: gx, y: F.y0 - 60 }];
-    // the prison yard's fence, with two gaps
-    const fx = F.x0 + 1750;
-    wall(fx, F.y0, fx + 20, F.y0 + 1100, '#5a5d63'); wall(fx, F.y0 + 1400, fx + 20, F.y0 + 3500, '#5a5d63'); wall(fx, F.y0 + 3800, fx + 20, F.y1, '#5a5d63');
-    for (const [x, y] of [[F.x0, F.y0], [F.x1, F.y0], [F.x0, F.y1], [F.x1, F.y1], [(F.x0 + F.x1) / 2, F.y0], [(F.x0 + F.x1) / 2, F.y1], [F.x0, gy], [fx + 10, F.y0 + 2450]]) wall(x - 50, y - 50, x + 50, y + 50, '#4f5257');
-    const building = (x0, y0, x1, y1, door, label) => {
-        [x0, y0] = at(x0, y0); [x1, y1] = at(x1, y1);
-        const t = 24, dw = 140, cxm = (x0 + x1) / 2, cym = (y0 + y1) / 2;
-        if (door === 'n') { wall(x0, y0, cxm - dw / 2, y0 + t); wall(cxm + dw / 2, y0, x1, y0 + t); } else wall(x0, y0, x1, y0 + t);
-        if (door === 's') { wall(x0, y1 - t, cxm - dw / 2, y1); wall(cxm + dw / 2, y1 - t, x1, y1); } else wall(x0, y1 - t, x1, y1);
-        if (door === 'w') { wall(x0, y0, x0 + t, cym - dw / 2); wall(x0, cym + dw / 2, x0 + t, y1); } else wall(x0, y0, x0 + t, y1);
-        if (door === 'e') { wall(x1 - t, y0, x1, cym - dw / 2); wall(x1 - t, cym + dw / 2, x1, y1); } else wall(x1 - t, y0, x1, y1);
-        C.buildings.push({ x0, y0, x1, y1, label });
-        return { x0, y0, x1, y1 };
-    };
-    const cb = building(300, 1600, 1450, 3300, 'e', 'CELL BLOCK');
-    for (let y = cb.y0 + 160; y < cb.y1 - 100; y += 180) { wall(cb.x0 + 20, y, cb.x0 + 420, y + 12, '#5a5d63'); wall(cb.x0 + 20, y, cb.x0 + 32, y + 120, '#5a5d63'); }
-    building(2100, 300, 3500, 1000, 's', 'BARRACKS');
-    building(3900, 300, 5300, 1000, 's', 'BARRACKS');
-    const ar = building(2200, 1700, 2950, 2500, 'e', 'ARMORY');
-    const gr = building(3500, 1500, 4900, 2600, 'w', 'GARAGE');
-    building(2100, 3300, 3300, 4200, 'n', 'MESS HALL');
-    const hq = building(3800, 3200, 5500, 4300, 'n', 'HQ');
-    wall(hq.x0 + 600, hq.y0 + 24, hq.x0 + 624, hq.y1 - 300, wallCol); wall(hq.x0 + 1100, hq.y0 + 300, hq.x0 + 1124, hq.y1 - 24, wallCol);
-    // trucks parked in the garage, and racks of supplies
-    for (let k = 0; k < 4; k++) addBox({ type: 'crate', car: true, rust: true, x: gr.x0 + 300 + k * 280, y: (gr.y0 + gr.y1) / 2 + (k % 2 ? 160 : -160), hw: 19, hh: 40, color: pick(['#4b5535', '#5a5f3a', '#3d4430']), horiz: false, seed: randInt(1, 1e9) });
-    C.start = { x: cb.x1 - 160, y: (cb.y0 + cb.y1) / 2 };
-    for (let k = 0; k < 4; k++) lootSpots.push({ x: ar.x0 + 150 + (k % 2) * 400, y: ar.y0 + 200 + Math.floor(k / 2) * 380, box: true });
-    for (const [x, y] of [[2500, 600], [3100, 650], [4300, 600], [4900, 650], [4200, 3800], [5100, 3900], [2600, 3800]]) { const [px, py] = at(x, y); lootSpots.push({ x: px, y: py, box: true }); }
-    for (let i = 0; i < 90; i++) {
-        const x = rand(fx + 150, F.x1 - 150), y = rand(F.y0 + 150, F.y1 - 150);
-        if (C.buildings.some(b => x > b.x0 - 60 && x < b.x1 + 60 && y > b.y0 - 60 && y < b.y1 + 60) || !clearAt(x, y, 50)) continue;
-        const r = Math.random();
-        if (r < 0.4) addBox({ type: 'crate', barrel: true, x, y, hw: 14, hh: 14, color: pick(['#5a5f3a', '#3b4a5a', '#7a3b22']) });
-        else if (r < 0.75) { const horiz = Math.random() < 0.5; addBox({ type: 'wall', sandbags: true, x, y, hw: horiz ? 50 : 13, hh: horiz ? 13 : 50, color: '#8d7d5a' }); }
-        else addBox({ type: 'crate', x, y, hw: 20, hh: 20 });
-    }
-
-    // --- The desert: not the same everywhere. Ruined towns, the odd huge broken building, lone ruins, and fields of
-    // boulders (all of it cover from the searching helicopters) ---
-    const inFac = (x, y, m) => x > F.x0 - m && x < F.x1 + m && y > F.y0 - m && y < F.y1 + m;
-    const desertOk = (x, y, m) => y - m > chaseMount(x) + 250 && y + m < W - 300 && x - m > 300 && x + m < W - 300 && !inFac(x, y, 500 + m) && Math.hypot(x - dock.x, y - dock.y) > 900 + m && !nearRiver(x, y, 900 + m) && Math.hypot(x - C.start.x, y - C.start.y) > 2500;
-    const ruin = (x, y, w, h, big, ok = desertOk) => {
-        if (!ok(x, y, Math.max(w, h) / 2)) return false;
-        if (C.ruins.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + 160 && Math.abs(r.y - y) < (r.h + h) / 2 + 160)) return false;
-        const col = pick(['#9b8f7e', '#8a7f70', '#a39580', '#857868', '#9a8a72']), t = big ? 24 : 18, x0 = x - w / 2, y0 = y - h / 2;
-        C.ruins.push({ x, y, w, h, col });
-        // what's left of the roof: slabs over most of it, with holes where it's fallen in
-        const roofCol = pick(['#5b4c3e', '#6a5a48', '#4e4a46', '#5e5650', '#6b5040']), tiles = [], ts = big ? 110 : 80, roofKeep = rand(0.55, 0.85);
-        for (let ty = -h / 2; ty < h / 2 - 10; ty += ts) for (let tx = -w / 2; tx < w / 2 - 10; tx += ts) {
-            if (Math.random() > roofKeep) continue;
-            const tw = Math.min(ts, w / 2 - tx), th = Math.min(ts, h / 2 - ty);
-            tiles.push({ x: tx, y: ty, w: tw, h: th, c: shade(roofCol, rand(-0.12, 0.1)), crack: Math.random() < 0.3 });
-        }
-        C.roofs.push({ x, y, w, h, tiles, a: 1 });
-        const side = (ax, ay, bx, by, keep) => {
-            const len = Math.hypot(bx - ax, by - ay), n = Math.max(2, Math.round(len / 90));
-            for (let k = 0; k < n; k++) {
-                if (Math.random() > keep) continue;
-                const a = k / n, b = (k + rand(0.55, 1)) / n, horiz = ay === by;
-                const sx = ax + (bx - ax) * a, sy = ay + (by - ay) * a, ex = ax + (bx - ax) * b, ey = ay + (by - ay) * b;
-                const o = { type: 'wall', ruinWall: true, color: col, x: (sx + ex) / 2, y: (sy + ey) / 2, hw: horiz ? Math.abs(ex - sx) / 2 : t / 2, hh: horiz ? t / 2 : Math.abs(ey - sy) / 2, seed: randInt(1, 1e9) };
-                if (o.hw > 4 && o.hh > 4) addBox(o);
-            }
-        };
-        const keep = big ? 0.68 : 0.55;
-        side(x0, y0, x0 + w, y0, keep); side(x0, y0 + h, x0 + w, y0 + h, keep); side(x0, y0, x0, y0 + h, keep); side(x0 + w, y0, x0 + w, y0 + h, keep);
-        if (big) {
-            // what's left of the rooms inside
-            for (let rx = x0 + rand(250, 340); rx < x0 + w - 150; rx += rand(250, 360)) side(rx, y0, rx, y0 + h, 0.4);
-            for (let ry = y0 + rand(250, 340); ry < y0 + h - 150; ry += rand(250, 360)) side(x0, ry, x0 + w, ry, 0.4);
-        } else if (Math.random() < 0.6) side(x0 + w * 0.5, y0, x0 + w * 0.5, y0 + h, keep);
-        const n = big ? randInt(10, 18) : randInt(3, 6);
-        for (let k = n; k > 0; k--) { const q = makeWreck(x + rand(-w / 2 + 40, w / 2 - 40), y + rand(-h / 2 + 40, h / 2 - 40)); if (clearAt(q.x, q.y, Math.max(q.hw, q.hh) + 10)) addBox(q); }
-        for (let k = randInt(0, big ? 5 : 2); k > 0; k--) { const q = makeWreck(x + rand(-w, w), y + rand(-h, h)); if (clearAt(q.x, q.y, Math.max(q.hw, q.hh) + 10)) addBox(q); }
-        for (let k = big ? randInt(2, 4) : Math.random() < 0.75 ? 1 : 0; k > 0; k--) lootSpots.push({ x: x + rand(-w / 3, w / 3), y: y + rand(-h / 3, h / 3), box: true });
-        return true;
-    };
-    const boulders = (cx, cy, R) => {
-        for (let k = Math.round(R / 14); k > 0; k--) {
-            const a = rand(0, TAU), d = Math.sqrt(Math.random()) * R, x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d, r = Math.random() < 0.2 ? rand(90, 160) : rand(28, 80);
-            if (!desertOk(x, y, r) || !clearAt(x, y, r + 25)) continue;
-            addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU) });
-        }
-        C.rockFields.push({ x: cx, y: cy, r: R });
-    };
-    C.rockFields = []; C.roofs = []; C.caves = [];
-    // A cave: a ring of huge boulders with a way in, and a rock roof over the hollow inside. Nobody sees you in there.
-    const cave = (cx, cy, R, gap = rand(0, TAU)) => {
-        const n = Math.round(R / 30);
-        for (let k = 0; k < n; k++) {
-            const a = (k / n) * TAU;
-            if (Math.abs(angleDiff(a, gap)) < 0.45) continue;  // (the entrance)
-            const r = rand(70, 110), x = cx + Math.cos(a) * (R + r * 0.55), y = cy + Math.sin(a) * (R + r * 0.55);
-            addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU) });
-        }
-        C.caves.push({ x: cx, y: cy, r: R, gap });
-        C.roofs.push({ x: cx, y: cy, r: R + 60, cave: true, gap, a: 1, seed: randInt(1, 1e9) });
-        lootSpots.push({ x: cx + rand(-R / 3, R / 3), y: cy + rand(-R / 3, R / 3), box: true });
-    };
-    const spot = () => ({ x: rand(800, W - 800), y: rand(chaseMount(0) + 800, W - 800) });
-    // giant boulder areas: a maze of huge rocks with caves to hide in
-    C.bigRocks = [];
-    for (let i = 0, tries = 0; i < 8 && tries < 300; tries++) {
-        const c = spot(), R = rand(1700, 2500);
-        if (!desertOk(c.x, c.y, R * 0.6) || C.ruins.some(r => Math.hypot(r.x - c.x, r.y - c.y) < R + 300) || C.rockFields.some(q => Math.hypot(q.x - c.x, q.y - c.y) < q.r + R + 600)) continue;
-        const caves = [];
-        for (let k = 0, t2 = 0; k < randInt(3, 5) && t2 < 40; t2++) {
-            const a = rand(0, TAU), d = rand(0, R * 0.7), x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d, cr = rand(200, 300);
-            if (!desertOk(x, y, cr + 150) || caves.some(q => Math.hypot(q.x - x, q.y - y) < q.r + cr + 450)) continue;
-            cave(x, y, cr); caves.push({ x, y, r: cr }); k++;
-        }
-        for (let k = Math.round(R / 7); k > 0; k--) {
-            const a = rand(0, TAU), d = Math.sqrt(Math.random()) * R, x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d, r = Math.random() < 0.35 ? rand(110, 210) : rand(40, 100);
-            if (!desertOk(x, y, r) || caves.some(q => Math.hypot(q.x - x, q.y - y) < q.r + r + 160) || !clearAt(x, y, r + 30)) continue;
-            addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU) });
-        }
-        C.rockFields.push({ x: c.x, y: c.y, r: R }); C.bigRocks.push({ x: c.x, y: c.y, r: R });
-        i++;
-    }
-    // ruined towns: a cluster of buildings, big and small, round what was once a crossroads
-    for (let i = 0, tries = 0; i < 16 && tries < 400; tries++) {
-        const c = spot();
-        if (!desertOk(c.x, c.y, 1200) || C.ruins.some(r => Math.hypot(r.x - c.x, r.y - c.y) < 2400)) continue;
-        for (let k = randInt(7, 13), t2 = 0; k > 0 && t2 < 80; t2++) {
-            const big = Math.random() < 0.15, w = big ? rand(600, 900) : rand(220, 480), h = big ? rand(500, 800) : rand(200, 440);
-            if (ruin(c.x + rand(-1300, 1300), c.y + rand(-1100, 1100), w, h, big)) k--;
-        }
-        i++;
-    }
-    // huge broken buildings standing on their own
-    for (let i = 0, tries = 0; i < 14 && tries < 400; tries++) {
-        const c = spot();
-        if (ruin(c.x, c.y, rand(900, 1500), rand(800, 1300), true)) i++;
-    }
-    // boulder fields
-    for (let i = 0, tries = 0; i < 18 && tries < 300; tries++) {
-        const c = spot(), R = rand(600, 1300);
-        if (!desertOk(c.x, c.y, R * 0.5) || C.ruins.some(r => Math.hypot(r.x - c.x, r.y - c.y) < R + 400) || C.rockFields.some(q => Math.hypot(q.x - c.x, q.y - c.y) < q.r + R + 800)) continue;
-        boulders(c.x, c.y, R); i++;
-    }
-    // lone ruins scattered in between (some stretches stay open sand)
-    for (let i = 0, tries = 0; i < 70 && tries < 3000; tries++) {
-        const c = spot();
-        if (Math.sin(c.x / 4100) + Math.sin(c.y / 3300 + 2) < -0.6) continue;  // (wide empty stretches of open desert)
-        if (ruin(c.x, c.y, rand(220, 460), rand(200, 420), false)) i++;
-    }
-    for (let i = 0; i < 700; i++) {
-        const x = rand(300, W - 300), y = rand(chaseMount(0) + 300, W - 300);
-        if (!desertOk(x, y, 0) || !clearAt(x, y, 60)) continue;
-        addCircle({ type: 'rock', x, y, r: rand(18, 42), spr: randInt(0, 5), rot: rand(0, TAU) });
-    }
-
-    // --- Life in the desert: oases with palms and scrub, dead trees and bushes, and treasure chests to find ---
-    const tree = (x, y, dead) => { const canopy = dead ? rand(80, 130) : rand(75, 115), o = { type: 'tree', dead, x, y, r: canopy * (dead ? 0.16 : 0.27), canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999, seed: randInt(1, 1e9) }; addCircle(o); };
-    const bush = (x, y) => addCircle({ type: 'bush', x, y, r: rand(30, 44), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999 });
-    const chest = (x, y, armory) => { if (clearAt(x, y, 45)) addBox({ type: 'box', chest: true, armory, x, y, hw: 26, hh: 18, hp: 60, maxHp: 60, hitAt: -9999, rot: 0, seed: randInt(1, 1e9) }); };
-    C.oases = [];
-    for (let i = 0, tries = 0; i < 12 && tries < 300; tries++) {
-        const c = spot(), R = rand(450, 800);
-        if (!desertOk(c.x, c.y, R) || C.ruins.some(r => Math.hypot(r.x - c.x, r.y - c.y) < R + 300) || C.rockFields.some(q => Math.hypot(q.x - c.x, q.y - c.y) < q.r + R)) continue;
-        C.oases.push({ x: c.x, y: c.y, r: R });
-        for (let k = Math.round(R / 30); k > 0; k--) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * R, x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d; if (clearAt(x, y, 70)) (Math.random() < 0.6 ? tree : bush)(x, y, false); }
-        chest(c.x + rand(-80, 80), c.y + rand(-80, 80), Math.random() < 0.4);
-        i++;
-    }
-    for (let i = 0; i < 900; i++) {
-        const x = rand(300, W - 300), y = rand(chaseMount(0) + 300, W - 300);
-        if (!desertOk(x, y, 0) || !clearAt(x, y, 70)) continue;
-        if (i % 3 === 0) tree(x, y, true); else bush(x, y);
-    }
-    // chests: in the big ruins, round the towns, and here and there out in the open
-    for (const r of C.ruins) if (r.w > 550 ? true : Math.random() < 0.2) chest(r.x + rand(-r.w / 3, r.w / 3), r.y + rand(-r.h / 3, r.h / 3), r.w > 550 && Math.random() < 0.5);
-    for (let i = 0; i < 70; i++) { const c = spot(); if (desertOk(c.x, c.y, 0)) chest(c.x, c.y, false); }
-    for (const [x, y] of [[ar.x0 + 120, ar.y1 - 120], [ar.x1 - 160, ar.y1 - 120], [hq.x1 - 200, hq.y1 - 150]]) chest(x, y, true);
-
-    // --- The mountains: boulders along the edge of the banks, and big rocks all over the range ---
-    for (let i = 2; i < river.length - 2; i += 2) {
-        const q = river[i], q2 = river[i + 1], tl = Math.hypot(q2.x - q.x, q2.y - q.y) || 1, nx = -(q2.y - q.y) / tl, ny = (q2.x - q.x) / tl;
-        for (const side of [-1, 1]) {
-            const d = CHASE.river + q.bank + rand(20, 150), x = q.x + nx * side * d, y = q.y + ny * side * d;
-            if (!rockAt(x, y)) continue;
-            addCircle({ type: 'rock', x, y, r: rand(45, 95), spr: randInt(0, 5), rot: rand(0, TAU) });
-        }
-    }
-    // trees and bushes along the river banks, and a chest now and then
-    for (let i = 3; i < river.length - 3; i++) {
-        const q = river[i], q2 = river[i + 1], tl = Math.hypot(q2.x - q.x, q2.y - q.y) || 1, nx = -(q2.y - q.y) / tl, ny = (q2.x - q.x) / tl;
-        for (const side of [-1, 1]) {
-            if (Math.random() < 0.45) continue;
-            const d = CHASE.river + rand(90, q.bank - 30), x = q.x + nx * side * d, y = q.y + ny * side * d;
-            if (rockAt(x, y) || !clearAt(x, y, 60) || Math.hypot(x - dock.x, y - dock.y) < 500) continue;
-            if (Math.random() < 0.03) chest(x, y, Math.random() < 0.3); else if (Math.random() < 0.6) tree(x, y, false); else bush(x, y);
-        }
-    }
-    for (let i = 0; i < 1600; i++) {
-        const x = rand(200, W - 200), y = rand(CHASE.oceanY, CHASE.mountY + 200);
-        if (!rockAt(x, y) || nearRiver(x, y, CHASE.river + 700)) continue;
-        addCircle({ type: 'rock', x, y, r: rand(60, 150), spr: randInt(0, 5), rot: rand(0, TAU) });
-    }
-
-    // --- The far land. The forest first: trees everywhere, thickest along the river, a fishing village gone to ruin,
-    // and chests to find. Then the mountains: cliffs right down to the banks, caves cut into them all the way along
-    // (soldiers wait in plenty of them), and a clearing at the end where the airship is moored ---
-    const farWater = (x, y, m) => chaseFarNearIn(C, x, y).e < m;
-    const K = FL.clear, inClear = (x, y, m) => Math.hypot(x - K.x, y - K.y) < K.r + m;
-    const moor = chaseRoutePt(FL.miniS, route2);
-    C.moor = moor;
-    const lowOk = (x, y, m) => inLand(x, y, 250 + m) && x + m < chaseFarMX(y) - 150 && !farWater(x, y, 140 + m) && Math.hypot(x - moor.x, y - moor.y) > 1500 + m;
-    for (let i = 0, tries = 0; i < 18 && tries < 900; tries++) {  // (the old fishing village by the mouth, and huts up the banks)
-        const k = Math.floor(nm * (0.08 + 0.3 * Math.random())), q = main[k], [nx, ny] = nrm(k), side = Math.random() < 0.5 ? 1 : -1, d = q.w + rand(350, 900);
-        if (ruin(q.x + nx * side * d, q.y + ny * side * d, rand(200, 380), rand(180, 340), false, lowOk)) i++;
-    }
-    for (let i = 0, tries = 0; i < 4 && tries < 300; tries++) {
-        const x = rand(FL.x + 800, FL.mx - 300), y = rand(800, 7800);
-        if (ruin(x, y, rand(700, 1000), rand(600, 850), true, lowOk)) i++;
-    }
-    for (let i = 0; i < 5200; i++) {
-        const x = rand(FL.x + 300, FL.mx + 700), y = rand(300, 8400);
-        if (!lowOk(x, y, 0) || !clearAt(x, y, 70)) continue;
-        const nearW = farWater(x, y, 900);
-        if (!nearW && Math.random() < 0.35) continue;
-        const r = Math.random();
-        if (r < 0.6) tree(x, y, false); else if (r < 0.97) bush(x, y); else chest(x, y, Math.random() < 0.25);
-    }
-    // the mountains: boulders along the foot of the cliffs
-    for (let i = 0; i < far.length; i += 2) {
-        const q = far[i];
-        if (q.x < chaseFarMX(q.y) - 200) continue;
-        for (let k = 0; k < 2; k++) {
-            const a = rand(0, TAU), d = q.w + q.bank + rand(10, 140), x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d;
-            if (!chaseFarRockIn(C, x, y) || farWater(x, y, q.bank * 0.6)) continue;
-            addCircle({ type: 'rock', x, y, r: rand(45, 100), spr: randInt(0, 5), rot: rand(0, TAU) });
-        }
-    }
-    // caves cut into the cliffs, opening onto the banks (and a few huge caverns)
-    C.farCaveList = [];
-    for (let i = 0, tries = 0; i < 46 && tries < 8000; tries++) {
-        const q = far[randInt(0, far.length - 1)];
-        if (q.x < chaseFarMX(q.y) + 150) continue;
-        const ang = rand(0, TAU), R = Math.random() < 0.18 ? rand(420, 540) : rand(210, 330);
-        const cx = q.x + Math.cos(ang) * (q.w + q.bank + R * 0.55), cy = q.y + Math.sin(ang) * (q.w + q.bank + R * 0.55);
-        const n = chaseFarNearIn(C, cx, cy);
-        if (n.e < q.bank + R * 0.35 || !inLand(cx, cy, R + 300) || cx < chaseFarMX(cy) + R || inClear(cx, cy, R + 200)) continue;
-        if (C.farCaves.some(c => Math.hypot(c.x - cx, c.y - cy) < c.r + R + 260)) continue;
-        // (the mouth faces the nearest water)
-        const w = far[n.i], gap = Math.atan2(w.y - cy, w.x - cx);
-        C.farCaves.push({ x: cx, y: cy, r: R + 40 });
-        cave(cx, cy, R, gap);
-        C.farCaveList.push({ x: cx, y: cy, r: R });
-        if (Math.random() < 0.6) chest(cx + rand(-R / 3, R / 3), cy + rand(-R / 3, R / 3), Math.random() < 0.4);
-        i++;
-    }
-    for (let i = 0; i < 900; i++) {
-        const x = rand(chaseFarMX(0), W - 200), y = rand(200, 8400);
-        if (!chaseFarRockIn(C, x, y) || farWater(x, y, 700)) continue;
-        addCircle({ type: 'rock', x, y, r: rand(60, 150), spr: randInt(0, 5), rot: rand(0, TAU) });
-    }
-    // the clearing: a few trees round the edge, and supplies
-    for (let k = 0; k < 60; k++) {
-        const a = rand(0, TAU), d = rand(K.r * 0.6, K.r - 80), x = K.x + Math.cos(a) * d, y = K.y + Math.sin(a) * d;
-        if (Math.hypot(x - CHASE.airship.x, y - CHASE.airship.y) < 800 || farWater(x, y, 80) || !clearAt(x, y, 70)) continue;
-        tree(x, y, false);
-    }
-    for (let k = 0; k < 3; k++) chest(K.x + rand(-500, 0), K.y + rand(300, 700), true);
-
-    // --- The painted ground, at 1/6 scale ---
-    const S = CHASE.art, N = Math.ceil(W / S), [cv, g] = makeCanvas(N, N), rnd = seededRand(9090);
-    g.scale(1 / S, 1 / S);
-    g.fillStyle = '#d8b878'; g.fillRect(0, 0, W, W);
-    for (let i = 0; i < 5000; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(150,108,58,0.07)' : 'rgba(255,236,190,0.08)'; g.beginPath(); g.ellipse(rnd() * W, CHASE.mountY + rnd() * (W - CHASE.mountY), 120 + rnd() * 380, 40 + rnd() * 110, rnd() * 0.6 - 0.3, 0, TAU); g.fill(); }
-    g.strokeStyle = 'rgba(160,120,70,0.16)'; g.lineWidth = 10;
-    for (let i = 0; i < 1500; i++) { const x = rnd() * W, y = CHASE.mountY + rnd() * (W - CHASE.mountY), w = 150 + rnd() * 300; g.beginPath(); g.moveTo(x - w, y); g.quadraticCurveTo(x, y - 50, x + w, y); g.stroke(); }
-    for (const r of C.ruins) { g.fillStyle = shade(r.col, 0.28); g.fillRect(r.x - r.w / 2, r.y - r.h / 2, r.w, r.h); g.fillStyle = 'rgba(40,30,20,0.18)'; for (let k = 0; k < 6; k++) { g.beginPath(); g.arc(r.x + (rnd() - 0.5) * r.w, r.y + (rnd() - 0.5) * r.h, 20 + rnd() * 50, 0, TAU); g.fill(); } }
-    for (const q of C.oases) { g.fillStyle = '#9aa35a'; g.beginPath(); g.arc(q.x, q.y, q.r * 1.1, 0, TAU); g.fill(); g.fillStyle = '#6f9a46'; g.beginPath(); g.arc(q.x, q.y, q.r * 0.85, 0, TAU); g.fill(); for (let k = 0; k < 8; k++) { g.fillStyle = 'rgba(80,130,50,0.6)'; g.beginPath(); g.arc(q.x + (rnd() - 0.5) * q.r * 1.4, q.y + (rnd() - 0.5) * q.r * 1.4, q.r * (0.2 + rnd() * 0.3), 0, TAU); g.fill(); } }
-    for (const q of C.caves) { g.fillStyle = '#3a332c'; g.beginPath(); g.arc(q.x, q.y, q.r + 40, 0, TAU); g.fill(); g.fillStyle = '#4a4238'; g.beginPath(); g.arc(q.x, q.y, q.r, 0, TAU); g.fill(); }
-    for (const q of C.rockFields) { g.fillStyle = 'rgba(120,96,66,0.22)'; g.beginPath(); g.arc(q.x, q.y, q.r * 1.15, 0, TAU); g.fill(); }
-    g.fillStyle = '#8f8d87'; g.fillRect(F.x0, F.y0, F.x1 - F.x0, F.y1 - F.y0);
-    g.strokeStyle = 'rgba(255,214,90,0.5)'; g.lineWidth = 12; g.setLineDash([60, 50]);
-    g.beginPath(); g.moveTo(F.x0 + 1750, gy); g.lineTo(F.x1, gy); g.moveTo(gx, F.y0); g.lineTo(gx, gy); g.moveTo(F.x0 + 1750, F.y0 + 1250); g.lineTo(gx, F.y0 + 1250); g.stroke(); g.setLineDash([]);
-    g.fillStyle = '#7d7b74'; g.fillRect(F.x0, F.y0, 1750, F.y1 - F.y0);  // (the prison yard: bare dirt)
-    for (const b of C.buildings) { g.fillStyle = '#a7a59e'; g.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
-    g.fillStyle = 'rgba(30,30,30,0.5)'; g.font = '900 70px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (const b of C.buildings) g.fillText(b.label, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
-    // the mountain range
-    g.fillStyle = '#6f665c';
-    g.beginPath(); g.moveTo(0, chaseCoast(0) - 50);
-    for (let x = 0; x <= W; x += 100) g.lineTo(x, chaseCoast(x) - 50);
-    for (let x = W; x >= 0; x -= 100) g.lineTo(x, chaseMount(x));
-    g.closePath(); g.fill();
-    g.save(); g.clip();
-    for (let i = 0; i < 14000; i++) { const x = rnd() * W, y = CHASE.oceanY - 100 + rnd() * (CHASE.mountY - CHASE.oceanY + 400), r = 40 + rnd() * 220; g.fillStyle = pick(['rgba(84,76,67,0.55)', 'rgba(128,118,104,0.5)', 'rgba(98,90,80,0.5)', 'rgba(60,54,48,0.4)']); g.beginPath(); g.ellipse(x, y, r, r * (0.4 + rnd() * 0.5), rnd() * TAU, 0, TAU); g.fill(); }
-    g.strokeStyle = 'rgba(40,34,30,0.35)'; g.lineWidth = 14;
-    for (let i = 0; i < 1600; i++) { const x = rnd() * W, y = CHASE.oceanY + rnd() * (CHASE.mountY - CHASE.oceanY), l = 200 + rnd() * 500, a = rnd() * TAU; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l * 0.5); g.stroke(); }
-    // snow on the peaks, well away from the river
-    for (let i = 0; i < 1600; i++) {
-        const x = rnd() * W, y = CHASE.oceanY + 300 + rnd() * (CHASE.mountY - CHASE.oceanY - 600);
-        if (nearRiver(x, y, CHASE.river + 1100)) continue;
-        const r = 120 + rnd() * 300;
-        g.fillStyle = 'rgba(232,238,242,0.9)'; g.beginPath(); g.ellipse(x, y, r, r * 0.7, rnd() * TAU, 0, TAU); g.fill();
-        g.fillStyle = 'rgba(180,196,210,0.5)'; g.beginPath(); g.ellipse(x + r * 0.2, y + r * 0.15, r * 0.6, r * 0.35, rnd() * TAU, 0, TAU); g.fill();
-    }
-    g.restore();
-    // the banks, then the river itself
-    g.fillStyle = '#6a6650'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river + q.bank + 30, 0, TAU); g.fill(); }
-    g.fillStyle = '#8c8a62'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river + q.bank, 0, TAU); g.fill(); }
-    g.fillStyle = '#7d8a55'; for (let i = 0; i < 2700; i++) { const q = river[Math.floor(rnd() * river.length)], a = rnd() * TAU, d = CHASE.river + 40 + rnd() * q.bank * 0.9; g.beginPath(); g.arc(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, 20 + rnd() * 50, 0, TAU); g.fill(); }
-    g.fillStyle = '#b9ad84'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river + 30, 0, TAU); g.fill(); }
-    // the ocean
-    const coastPath = off => { g.beginPath(); g.moveTo(0, 0); g.lineTo(W, 0); for (let x = W; x >= 0; x -= 100) g.lineTo(x, chaseCoast(x) + off); g.closePath(); };
-    g.fillStyle = '#4fa6c2'; coastPath(30); g.fill();
-    g.fillStyle = '#2a7fa3'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river, 0, TAU); g.fill(); }
-    g.fillStyle = '#2f8ab0'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river * 0.55, 0, TAU); g.fill(); }
-    g.fillStyle = '#1c6e93'; coastPath(-40); g.fill();
-    // the far land: beaches, the forest, and the mountains beyond it
-    const outline = mx => {
-        const pts = [];
-        for (let y = -100; y <= 9000; y += 80) { const x = mx(y); if (y > chaseFarY(x)) break; pts.push([x, y]); }
-        for (let x = pts[pts.length - 1][0]; x <= W + 100; x += 80) pts.push([x, chaseFarY(x)]);
-        pts.push([W + 100, -100]);
-        return pts;
-    };
-    const landPts = outline(chaseFarX), mountPts = outline(chaseFarMX), poly = (pts, ox = 0, oy = 0) => { g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x + ox, y + oy) : g.moveTo(x + ox, y + oy)); g.closePath(); };
-    C.farPoly = landPts;
-    g.strokeStyle = '#4fa6c2'; g.lineWidth = 200; g.lineJoin = 'round'; poly(landPts); g.stroke();
-    g.fillStyle = '#e4cf97'; poly(landPts); g.fill();
-    g.fillStyle = '#4f8a3e'; poly(landPts, 120, -120); g.fill();
-    g.save(); poly(landPts, 120, -120); g.clip();
-    for (let i = 0; i < 4500; i++) { const x = FL.x + rnd() * (W - FL.x), y = rnd() * FL.y, r = 60 + rnd() * 260; g.fillStyle = pick(['rgba(92,154,72,0.5)', 'rgba(60,112,48,0.5)', 'rgba(110,160,80,0.35)', 'rgba(50,95,40,0.45)']); g.beginPath(); g.ellipse(x, y, r, r * (0.5 + rnd() * 0.5), rnd() * TAU, 0, TAU); g.fill(); }
-    g.fillStyle = '#6f665c'; poly(mountPts); g.fill();
-    poly(mountPts); g.clip();
-    for (let i = 0; i < 7000; i++) { const x = FL.mx - 400 + rnd() * (W - FL.mx + 400), y = rnd() * FL.y, r = 40 + rnd() * 220; g.fillStyle = pick(['rgba(84,76,67,0.55)', 'rgba(128,118,104,0.5)', 'rgba(98,90,80,0.5)', 'rgba(60,54,48,0.4)']); g.beginPath(); g.ellipse(x, y, r, r * (0.4 + rnd() * 0.5), rnd() * TAU, 0, TAU); g.fill(); }
-    g.strokeStyle = 'rgba(40,34,30,0.35)'; g.lineWidth = 14;
-    for (let i = 0; i < 900; i++) { const x = FL.mx + rnd() * (W - FL.mx), y = rnd() * FL.y, l = 200 + rnd() * 500, a = rnd() * TAU; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l * 0.5); g.stroke(); }
-    for (let i = 0; i < 900; i++) {
-        const x = FL.mx + rnd() * (W - FL.mx), y = rnd() * FL.y;
-        if (farWater(x, y, 1100) || inClear(x, y, 500) || C.farCaves.some(c => Math.hypot(c.x - x, c.y - y) < c.r + 400)) continue;
-        const r = 120 + rnd() * 300;
-        g.fillStyle = 'rgba(232,238,242,0.9)'; g.beginPath(); g.ellipse(x, y, r, r * 0.7, rnd() * TAU, 0, TAU); g.fill();
-        g.fillStyle = 'rgba(180,196,210,0.5)'; g.beginPath(); g.ellipse(x + r * 0.2, y + r * 0.15, r * 0.6, r * 0.35, rnd() * TAU, 0, TAU); g.fill();
-    }
-    g.restore();
-    // the clearing at the end
-    g.fillStyle = '#6a7a4c'; g.beginPath(); g.arc(K.x, K.y, K.r + 40, 0, TAU); g.fill();
-    g.fillStyle = '#7f8f58'; g.beginPath(); g.arc(K.x, K.y, K.r - 30, 0, TAU); g.fill();
-    // the caves' floors
-    for (const q of C.farCaveList) { g.fillStyle = '#3a332c'; g.beginPath(); g.arc(q.x, q.y, q.r + 40, 0, TAU); g.fill(); g.fillStyle = '#4a4238'; g.beginPath(); g.arc(q.x, q.y, q.r, 0, TAU); g.fill(); }
-    // the river's banks (grassy in the forest, stony in the mountains), then all its channels
-    const inM = q => q.x > chaseFarMX(q.y);
-    g.save(); poly(landPts, 60, -60); g.clip();
-    for (const q of far) { g.fillStyle = inM(q) ? '#6a6650' : '#456f35'; g.beginPath(); g.arc(q.x, q.y, q.w + q.bank + 30, 0, TAU); g.fill(); }
-    for (const q of far) { g.fillStyle = inM(q) ? '#8c8a62' : '#6f9a4a'; g.beginPath(); g.arc(q.x, q.y, q.w + q.bank, 0, TAU); g.fill(); }
-    g.fillStyle = '#7d8a55'; for (let i = 0; i < 2500; i++) { const q = far[Math.floor(rnd() * far.length)], a = rnd() * TAU, d = q.w + 40 + rnd() * q.bank * 0.9; g.beginPath(); g.arc(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, 20 + rnd() * 50, 0, TAU); g.fill(); }
-    g.fillStyle = '#b9ad84'; for (const q of far) { g.beginPath(); g.arc(q.x, q.y, q.w + 30, 0, TAU); g.fill(); }
-    g.fillStyle = '#2a7fa3'; for (const q of far) { g.beginPath(); g.arc(q.x, q.y, q.w, 0, TAU); g.fill(); }
-    g.fillStyle = '#2f8ab0'; for (const q of far) { g.beginPath(); g.arc(q.x, q.y, q.w * 0.55, 0, TAU); g.fill(); }
-    g.restore();
-    for (const r of C.ruins) if (r.y < CHASE.oceanY) { g.fillStyle = shade(r.col, 0.2); g.fillRect(r.x - r.w / 2, r.y - r.h / 2, r.w, r.h); }
-    g.fillStyle = '#a99a7a'; g.beginPath(); g.ellipse(CHASE.airship.x, CHASE.airship.y + 60, 700, 330, 0, 0, TAU); g.fill();
-    // the pier
-    for (const p of piers) { g.fillStyle = '#6b4c2c'; g.fillRect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0); g.fillStyle = '#8a6440'; for (let x = p.x0; x < p.x1; x += 22) g.fillRect(x, p.y0 + 4, 16, p.y1 - p.y0 - 8); }
-    const [mm, mg] = makeCanvas(200, 200);
-    mg.drawImage(cv, 0, 0, 200, 200);
-    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'chase', islands: [], chase: C, chaseArt: cv };
-}
-function drawChaseGround(L, T, R, B, now) {
-    const W = CONFIG.WORLD_SIZE, S = CHASE.art, cv = G.world.chaseArt;
-    ctx.fillStyle = '#1c6e93'; ctx.fillRect(L - 10, T - 10, R - L + 20, B - T + 20);
-    const x0 = clamp(L, 0, W), y0 = clamp(T, 0, W), x1 = clamp(R, 0, W), y1 = clamp(B, 0, W);
-    if (x1 > x0 && y1 > y0) ctx.drawImage(cv, x0 / S, y0 / S, (x1 - x0) / S, (y1 - y0) / S, x0, y0, x1 - x0, y1 - y0);
-    // waves rolling over the open sea
-    if (T < CHASE.oceanY && !lowDetail) {
-        if (!navySeaPat) drawSea(0, 0, 0, 0, now);
-        const pat = ctx.createPattern(navySeaPat, 'repeat'), P = G.world.chase.farPoly;
-        if (pat) {
-            ctx.save(); ctx.beginPath(); ctx.rect(L, T, R - L, Math.min(B, CHASE.oceanY - 170) - T);
-            if (R > CHASE.far.x - 400) { P.forEach(([x, y], i) => i ? ctx.lineTo(x - 110, y + 110) : ctx.moveTo(x - 110, y + 110)); ctx.closePath(); }
-            ctx.clip('evenodd');
-            const ox = (now * 9) % 512, oy = (now * 4) % 512;
-            ctx.translate(ox, oy); ctx.fillStyle = pat; ctx.fillRect(L - ox - 20, T - oy - 20, R - L + 40, B - T + 40); ctx.restore();
-        }
-    }
-    for (const q of G.navy.islands) for (const sp of q.supply) {
-        if (!inView(sp.x, sp.y, 60)) continue;
-        ctx.fillStyle = '#2f9e5b'; roundRect(ctx, sp.x - 30, sp.y - 30, 60, 60, 8); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.fillRect(sp.x - 19, sp.y - 6, 38, 12); ctx.fillRect(sp.x - 6, sp.y - 19, 12, 38);
-    }
-}
-
-// --- Setting off ---
-function chaseSoldier(s, i, guard) {
-    addSoldier(s, i, guard);
-    return G.fighters[G.fighters.length - 1];
-}
-function chaseAddHeli(x, y) {
-    const c = spawnVehicle('gunship', x, y);
-    c.color = '#4b5535';
-    const f = chaseSoldier({ x, y }, 500 + G.chase.helis.length, false);
-    enterCar(f, c);
-    f.driveUntil = Infinity;
-    G.chase.helis.push(c);
-    return c;
-}
-function chaseNoSubs(s) {
-    for (const bay of s.subbays) if (bay.car) bay.car.dead = true;
-    s.subbays = [];
-    G.world.cars = G.world.cars.filter(c => !c.dead);
-}
-function chaseSoldierShip(x, y, a, home) {
-    const s = addShip('mini', 1, x, y, a);
-    s.speed = 0; s.throttle = 0; s.chase = 'soldier'; s.home = home; s.hp = s.maxHp = CHASE.shipHp;
-    chaseNoSubs(s);
-    for (let i = 0; i < CHASE.shipCrew; i++) {
-        const o = navyDeckSpot(s), f = chaseSoldier({ x: navyWx(s, o.lx, o.ly), y: navyWy(s, o.lx, o.ly) }, 700 + i, false);
-        f.ship = s; f.swim = false; f.station = null; f.boarder = false; f.room = null;
-        f.postX = rand(-0.42, 0.42) * s.C.len; f.postY = rand(0.35, 1); f.nextThink = rand(0, 500); f.worker = i === CHASE.shipCrew - 1;
-        if (f.worker) continue;
-        const st = navyVacant(s, f);
-        if (st && !st.sub && !st.heli) navyMan(f, st);
-    }
-    return s;
-}
-function setupChase() {
-    const Cw = G.world.chase, F = CHASE.fac;
-    G.navy = { ships: [], wrecks: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n: 1, crew: 0, wake: 0, mini: true, chase: true, out: [] };
-    G.chase = { stage: 0, seen: null, alertAt: -1e9, nextReinf: 80000, helis: [], blimps: [], ship: null, minis: [], arrived: false, leg2: false, arrived2: false };
-    G.extract = { x: CHASE.airship.x, y: CHASE.airship.y + 270 };
-    G.world.cars = [];
-    // The squad: you and 19 others, tough (450 health each) and armed
-    for (let i = 0; i < CHASE.people; i++) {
-        const s = spawnNear(Cw.start, 170, 30);
-        if (i === 0 && G.mode === 'playing') { addPlayer(s, 0); continue; }
-        G.fighters.push(createFighter(s.x, s.y, { name: botName(i), color: pick(BOT_COLORS), team: 0 }));
-    }
-    let slot = 0;
-    for (const f of G.fighters) {
-        if (f.team !== 0) continue;
-        if (!f.isPlayer) { f.boat = slot % 2; giveSlot(f, slot++, CHASE.people - 1); }
-        f.hp = f.maxHp = CHASE.hp; f.armor = CHASE.armor;
-        f.items.bandage = 3; f.items.medkit = 1; f.items.grenade = 2;
-        f.inv[1] = null;
-        // Everyone has a main gun and the electric Shock Pistol, and the squad's ammo never runs out
-        const gun = f.isPlayer ? 'Assault Rifle' : pick(CHASE.guns);
-        f.inv = f.inv.map(k => (k === 'Pistol' ? null : k));
-        applyLoot(f, gun, -1);
-        applyLoot(f, 'Shock Pistol', -1);
-        for (const k of [gun, 'Shock Pistol']) f.ammo[k] = Infinity;
-        switchSlot(f, Math.max(0, f.inv.indexOf(gun)), true);
-        f.likesCars = false;
-        f.postX = rand(-0.38, 0.38) * NAVY.ships.mini.len; f.postY = rand(0.1, 0.55); f.boarder = false;  // (well in from the rail, so a boat alongside doesn't sweep them off)
-    }
-    // The facility's soldiers: guards at both gates and round the yard, and a squad hunting you down inside
-    let n = 0;
-    for (const gate of Cw.gates) for (let i = 0; i < 6; i++) chaseSoldier(spawnNear({ x: gate.x - (gate === Cw.gates[0] ? 200 : 0), y: gate.y + (gate === Cw.gates[1] ? 200 : 0) }, 220, 30), n++, true);
-    for (let i = 0; i < 20; i++) chaseSoldier(spawnNear({ x: rand(F.x0 + 1950, F.x1 - 200), y: rand(F.y0 + 200, F.y1 - 200) }, 120, 30), n++, true);
-    for (let i = 0; i < 4; i++) chaseSoldier(spawnNear({ x: F.x0 + 1850, y: F.y0 + (i < 2 ? 1250 : 3650) }, 80, 30), n++, true);  // (at the gaps in the fence)
-    spawnSquad(spawnNear({ x: F.x0 + 2600, y: F.y0 + 2900 }, 150, 30), 6, n, true); n += 6;
-    spawnSquad(spawnNear({ x: F.x0 + 4300, y: F.y0 + 1250 }, 150, 30), 6, n, false); n += 6;
-    // Out in the desert: patrols among the ruins
-    for (let k = 0, tries = 0; k < CHASE.desertSquads && tries < 200; tries++) {
-        const W = CONFIG.WORLD_SIZE, c = spawnNear({ x: rand(W * 0.15, W * 0.95), y: rand(chaseMount(0) + 500, W - 500) }, 300, 30, true);
-        if (chaseBad(c.x, c.y) || c.y < chaseMount(c.x) + 300 || dist(c, Cw.start) < 4000) continue;
-        const size = randInt(4, 6);
-        spawnSquad(c, size, n, Math.random() < 0.2); n += size; k++;
-    }
-    // Ambushes: squads lying in wait in the ruined towns, the big ruins and the boulder fields, who jump out at you
-    const lairs = [...Cw.ruins.filter(r => r.w > 550), ...Cw.rockFields, ...Cw.rockFields, ...Cw.ruins.filter(r => r.w <= 550 && Math.random() < 0.15)];
-    for (const q of lairs) {
-        const c = spawnNear({ x: q.x, y: q.y }, 250, 30, true);
-        if (chaseBad(c.x, c.y) || dist(c, Cw.start) < 3500 || chaseStageOf(c) === 0) continue;
-        const size = randInt(4, 6);
-        spawnSquad(c, size, n, false); n += size;
-        G.squads[G.squads.length - 1].ambush = true;
-    }
-    // On the river banks: ambushes waiting along the way
-    const R = Cw.river;
-    for (let k = 0; k < CHASE.bankSquads; k++) {
-        const i = Math.floor(R.length * (0.15 + 0.72 * (k + 0.5) / CHASE.bankSquads)), q = R[i], q2 = R[i + 1], tl = Math.hypot(q2.x - q.x, q2.y - q.y) || 1, side = k % 2 ? 1 : -1;
-        const c = { x: q.x - (q2.y - q.y) / tl * side * (CHASE.river + q.bank * 0.5), y: q.y + (q2.x - q.x) / tl * side * (CHASE.river + q.bank * 0.5) };
-        if (chaseBad(c.x, c.y)) continue;
-        const size = randInt(4, 6);
-        spawnSquad(c, size, n, false); n += size;
-    }
-    // Helicopters searching the desert
-    // Giant airships drift slowly over the desert, sweeping the ground with their scanners
-    for (let k = 0; k < CHASE.blimp.count; k++) chaseAddBlimp(rand(CONFIG.WORLD_SIZE * 0.2, CONFIG.WORLD_SIZE * 0.92), rand(chaseMount(0) + 1500, CONFIG.WORLD_SIZE - 1500));
-    // The boat, waiting at the pier, and the soldier boats on the river and out at sea
-    // Your team's ship: a battleship, crewed by 80 sailors who'll man every gun (100 aboard with your squad)
-    const d = Cw.dock, ss = addShip('battleship', 0, d.x, d.y, d.a);
-    ss.C = { ...ss.C, speed: 210, accel: 26, turn: 0.17 };  // (a bit quicker and handier than a battleship at sea, for the river)
-    ss.hp = ss.maxHp = CHASE.shipHull; ss.name = 'Runaway'; ss.chase = 'squad'; ss.speed = 0; ss.throttle = 0;
-    chaseNoSubs(ss);
-    for (let i = 0; i < CHASE.sailors; i++) {
-        const o = navyDeckSpot(ss), f = createFighter(navyWx(ss, o.lx, o.ly), navyWy(ss, o.lx, o.ly), { name: `Sailor ${i + 1}`, color: '#3a6ea5', team: 0 });
-        G.fighters.push(f);
-        f.sailor = true; f.ship = ss; f.swim = false; f.station = null; f.room = null; f.likesCars = false;
-        f.inv = [weightedPick(NAVY_GUNS), 'Pistol']; f.slot = 0; f.ammo = { [f.inv[0]]: Infinity, Pistol: Infinity };
-        f.hp = f.maxHp = 150; f.armor = 100; f.boarder = false; f.worker = i < 8;
-        f.postX = rand(-0.42, 0.42) * ss.C.len; f.postY = rand(0.1, 0.55); f.nextThink = rand(0, 500);
-        if (f.worker) continue;
-        const st = navyVacant(ss, f);
-        if (st && !st.sub) { if (st.heli) navyBoardHeli(f, st.heli); else { f.room = st.room || null; navyMan(f, st); } }
-    }
-    G.chase.ship = ss;  // (your boat is the only way across the sea, so she's much tougher than any other ship)
-    for (let k = 0; k < CHASE.riverShips; k++) {
-        const s0 = Cw.mouthS * (0.4 + 0.5 * k / Math.max(1, CHASE.riverShips - 1)), P = chaseRoutePt(s0), P2 = chaseRoutePt(s0 - 30);
-        chaseSoldierShip(P.x, P.y, Math.atan2(P2.y - P.y, P2.x - P.x), s0);
-    }
-    for (let k = 0, tries = 0; k < CHASE.seaShips && tries < 200; tries++) {
-        const x = 7000 + (CHASE.far.x - 9500) * (k + Math.random()) / CHASE.seaShips, y = rand(1500, CHASE.oceanY - 1500);
-        if (!chaseWet(x, y, 600)) continue;
-        chaseSoldierShip(x, y, Math.PI, null); k++;
-    }
-    // The far land. Two mini ships moored side by side in the river mouth, waiting for the squad (half of you each)
-    const FL = CHASE.far, R2 = Cw.route2;
-    for (let k = 0; k < FL.minis; k++) {
-        const P = chaseRoutePt(FL.miniS, R2), P2 = chaseRoutePt(FL.miniS + 30, R2), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1, side = k ? 1 : -1;
-        const m = addShip('mini', 0, P.x - (P2.y - P.y) / tl * side * 260, P.y + (P2.x - P.x) / tl * side * 260, Math.atan2(P2.y - P.y, P2.x - P.x));
-        m.hp = m.maxHp = FL.miniHull; m.name = k ? 'Kestrel' : 'Swift'; m.chase = 'mini'; m.leg = 2; m.speed = 0; m.throttle = 0;
-        chaseNoSubs(m);
-        G.chase.minis.push(m);
-    }
-    // soldier boats all the way up the river (bows pointed down it, at you)
-    for (let k = 0; k < FL.ships; k++) {
-        const s0 = Cw.endS2 * (0.2 + 0.72 * k / Math.max(1, FL.ships - 1)), P = chaseRoutePt(s0, R2), P2 = chaseRoutePt(s0 - 30, R2);
-        chaseSoldierShip(P.x, P.y, Math.atan2(P2.y - P.y, P2.x - P.x), s0).leg = 2;
-    }
-    // soldiers on the banks, patrols in the forest, and ambushes waiting in the caves
-    for (let k = 0; k < FL.bankSquads; k++) {
-        const s0 = Cw.endS2 * (0.12 + 0.84 * (k + 0.5) / FL.bankSquads), P = chaseRoutePt(s0, R2), P2 = chaseRoutePt(s0 + 20, R2), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1, side = k % 2 ? 1 : -1, d = FL.river + rand(120, 300);
-        const c = { x: P.x - (P2.y - P.y) / tl * side * d, y: P.y + (P2.x - P.x) / tl * side * d };
-        if (chaseBad(c.x, c.y)) continue;
-        const size = randInt(4, 6);
-        spawnSquad(c, size, n, false); n += size;
-    }
-    for (let k = 0, tries = 0; k < FL.patrols && tries < 300; tries++) {
-        const c = { x: rand(FL.x + 1500, FL.mx - 300), y: rand(800, 7800) };
-        if (chaseBad(c.x, c.y) || !chaseInFar(c.x, c.y, 300) || Math.hypot(c.x - Cw.moor.x, c.y - Cw.moor.y) < 3000) continue;
-        const size = randInt(4, 6);
-        spawnSquad(c, size, n, Math.random() < 0.3); n += size; k++;
-    }
-    for (const q of Cw.farCaveList) {
-        if (Math.random() > 0.6) continue;
-        const c = spawnNear({ x: q.x, y: q.y }, q.r * 0.5, 30, true);
-        if (chaseBad(c.x, c.y)) continue;
-        const size = q.r > 400 ? randInt(6, 8) : randInt(3, 5);
-        spawnSquad(c, size, n, false); n += size;
-        G.squads[G.squads.length - 1].ambush = true;
-    }
-    for (let k = 0; k < FL.blimps; k++) { chaseAddBlimp(rand(FL.x + 2500, 33000), rand(1500, 7000)); G.chase.blimps[G.chase.blimps.length - 1].far = true; }
-    for (const s of G.navy.ships) s.crewN = s.chase === 'mini' ? 0 : 1;
-    if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
-}
-
-// --- The route: how far along it something is, and the point a given distance along ---
-function chaseRoutePt(s, R = G.world.chase.route) {
-    s = clamp(s, 0, R[R.length - 1].s);
-    let lo = 0, hi = R.length - 1;
-    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (R[m].s <= s) lo = m; else hi = m; }
-    const a = R[lo], b = R[hi], t = (s - a.s) / ((b.s - a.s) || 1);
-    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-}
-function chaseRouteS(x, y, R = G.world.chase.route) {
-    let bd = Infinity, bs = 0;
-    for (const q of R) { const d = (q.x - x) ** 2 + (q.y - y) ** 2; if (d < bd) { bd = d; bs = q.s; } }
-    return bs;
-}
-const chaseLeader = () => G.player && !G.player.dead ? G.player : G.fighters.find(f => !f.dead && !f.soldier && f.team === 0) || null;
-
-// The boats' captains: ours sails the route (waiting for you, or keeping pace with you on the bank);
-// the soldier boats come up the river at it, bow first, and back down after it once it's past
-function chaseShipOrders(s) {
-    const Cw = G.world.chase, Ch = G.chase, R = s.leg === 2 ? Cw.route2 : Cw.route, endS = R[R.length - 1].s, here = chaseRouteS(s.x, s.y, R);
-    s.routeS = here;
-    let target = here, off = 0, bowDown = true;
-    const ours = s.chase === 'squad' || s.chase === 'mini';
-    if (ours) {
-        const p = chaseLeader(), mini = s.chase === 'mini', mine = q => q && (mini ? q.chase === 'mini' : q === s);
-        if (mini && !Ch.leg2) target = here;  // (moored in the river mouth till you get there)
-        else if (!p) target = endS;
-        else if (mine(p.ship)) {
-            // (a moment for everyone to climb aboard)
-            if (!s.boardedAt) s.boardedAt = G.time;
-            const waiting = G.time - s.boardedAt < 45000 && G.fighters.some(f => !f.dead && !f.soldier && !f.sailor && f.team === 0 && (!f.ship || (mini && f.ship.chase === 'squad')) && !f.car && !f.chaseOff && dist(f, s) < 5000);
-            target = waiting ? here : endS;
-            // (someone of ours in the water close by: ease off so they can catch up)
-            if (!waiting && G.fighters.some(f => f.swim && !f.dead && !f.soldier && f.team === 0 && !f.chaseOff && dist(f, s) < 1500)) s.slowFor = G.time + 1000;
-        } else if (!p.ship && (mini ? chaseInFar(p.x, p.y) : p.y < chaseMount(p.x) + 200 && p.y > chaseCoast(p.x))) {
-            const ps = chaseRouteS(p.x, p.y, R);
-            if (ps > here + 250) target = Math.min(ps, mini ? endS - 400 : Cw.mouthS - 400);
-        }
-        // (the second mini ship keeps a little way behind the one in front)
-        if (mini) {
-            const o = Ch.minis.find(q => q !== s && !q.sinkAt), follow = p && p.ship === o ? true : p && p.ship === s ? false : Ch.minis[1] === s;
-            if (o && follow) target = Math.min(target, (o.routeS || 0) - 950);
-        }
-    } else if (s.home === null) {
-        // Out at sea: the normal captain's plan (go for the nearest enemy ship) works fine in open water
-        const q = Ch.ship;
-        if (q && !q.sinkAt && (q.routeS || 0) > Cw.mouthS - 900 && !Ch.leg2) { navyOrders(s); return; }
-        s.wantThrottle = 0; s.want = s.a; return;
-    } else {
-        const q = s.leg === 2 ? chaseLeadMini() : Ch.ship, qs = q && q.leg === s.leg ? q.routeS || 0 : -1e9;
-        target = q && !q.sinkAt && (s.leg !== 2 || Ch.leg2) && Math.abs(qs - here) < 4500 && qs > 300 ? qs : s.home + Math.sin(G.time / 9000 + s.home) * 500;
-        off = 150; bowDown = false;
-    }
-    if (s.chase === 'squad' && here > endS - 250) Ch.arrived = true;
-    if (s.chase === 'mini' && Ch.leg2 && here > endS - 300) Ch.arrived2 = true;
-    const gap = target - here, ad = Math.abs(gap), dir = gap >= 0 ? 1 : -1;
-    if (ad < 140 || (ours && gap < 0)) { s.wantThrottle = 0; s.want = s.a; return; }
-    const at = here + dir * 600, P = chaseRoutePt(at, R), P2 = chaseRoutePt(at + 20, R), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1;
-    if (off) { P.x += -(P2.y - P.y) / tl * off; P.y += (P2.x - P.x) / tl * off; }
-    const bowFirst = bowDown ? dir > 0 : dir < 0;
-    s.want = bowFirst ? Math.atan2(P.y - s.y, P.x - s.x) : Math.atan2(s.y - P.y, s.x - P.x);
-    const th = clamp(ad / 900, 0.25, 1) * clamp(Math.cos(angleDiff(s.a, s.want)), 0.3, 1) * (G.time < (s.slowFor || 0) ? 0.3 : 1);
-    s.wantThrottle = bowFirst ? th : -th * 0.6;
-}
-const chaseLeadMini = () => { let b = null; for (const q of G.chase.minis || []) if (!q.sinkAt && (!b || (q.routeS || 0) > (b.routeS || 0))) b = q; return b; };
-// Which boat one of the squad belongs on: the battleship, then (once you've reached the far land) their own mini ship
-function chaseBoat(b) {
-    const Ch = G.chase;
-    if (!Ch.leg2 || b.sailor) return Ch.ship;
-    const m = Ch.minis, k = b.boat || 0, a = m[k], o = m[1 - k];
-    return a && !a.sinkAt ? a : o && !o.sinkAt ? o : null;
-}
-// Is the leader aboard (the battleship, or either mini ship once we've switched to them)?
-const chaseAboard = L => !!(L && L.ship && (G.chase.leg2 ? L.ship.chase === 'mini' : L.ship === G.chase.ship));
-// Hulls stay in the water: any part of a ship over the bank or the beach is pushed back toward deep water
-function chaseKeepAfloat(s, dt) {
-    const C = s.C, h = C.len / 2 - C.beam / 2, rr = C.beam / 2, ca = Math.cos(s.a), sa = Math.sin(s.a);
-    let mx = 0, my = 0, n = 0, rot = 0, rl = 0;
-    for (let k = -2; k <= 2; k++) {
-        const lx = (k / 2) * h, x = s.x + ca * lx, y = s.y + sa * lx;
-        if (chaseWet(x, y, rr)) continue;
-        let px = 0, py = 0, best = Infinity;
-        const coast = chaseCoast(x) - rr, e0 = y - coast;
-        if (e0 > 0 && e0 < 1500) { best = e0; py = -e0; }
-        const nr = chaseRiverNear(x, y);
-        if (nr.i >= 0) { const q = G.world.chase.river[nr.i], e = nr.d - (CHASE.river - rr); if (e > 0 && e < best) { best = e; px = (q.x - x) / (nr.d || 1) * e; py = (q.y - y) / (nr.d || 1) * e; } }
-        if (y < chaseCoast(x)) {
-            // (the far land: back out to sea, or in toward the middle of the channel)
-            const ew = x - (chaseFarX(y) - rr), es = chaseFarY(x) + rr - y;
-            if (ew > 0 && ew < best) { best = ew; px = -ew; py = 0; }
-            if (es > 0 && es < best) { best = es; px = 0; py = es; }
-            const nf = chaseFarNear(x, y);
-            if (nf.i >= 0) { const q = G.world.chase.far[nf.i], e = nf.d - (q.w - rr); if (e > 0 && e < best) { best = e; px = (q.x - x) / (nf.d || 1) * e; py = (q.y - y) / (nf.d || 1) * e; } }
-        }
-        if (best === Infinity) continue;
-        mx += px; my += py; n++;
-        rot += (-px * sa + py * ca) * lx; rl += lx * lx;
-    }
-    if (!n) return;
-    s.x += mx / n; s.y += my / n;
-    if (rl > 0) s.a += clamp(rot / rl, -0.04, 0.04);
-    if (Math.hypot(mx, my) / n > 3) s.speed *= Math.exp(-dt * 1.2);
-}
-
-// --- The squad's bots ---
-function chaseRunnerGoal(b) {
-    const s = chaseBoat(b), L = b.lead, Ch = G.chase;
-    if (!s || s.sinkAt || b.chaseOff || !L || dist(b, s) > 9000) return null;
-    // (once you're aboard, or right by the boats, the whole squad heads for them: walking, then swimming out)
-    const near = Ch.leg2 ? Ch.minis.some(q => !q.sinkAt && dist(L, q) < 900) : dist(L, s) < 900;
-    if (!chaseAboard(L) && !(near && dist(b, s) < 2500)) return null;
-    return { x: s.x, y: s.y };
-}
-// Someone in the water swims for our boat (if that's where the group is) or for the nearest dry land
-function chaseSwimGoal(b) {
-    const s = chaseBoat(b), L = chaseLeader(), Ch = G.chase;
-    if (!b.soldier && s && !s.sinkAt && !b.chaseOff) {
-        if (dist(b, s) < 1200 || chaseAboard(L) || (b.y < chaseCoast(b.x) - 600 && !chaseInFar(b.x, b.y))) return s;
-        if (Ch.leg2 && !Ch.arrived2 && L && dist(L, s) < 3000) return s;
-    }
-    return chaseLandNear(b.x, b.y);
-}
-function chaseLandNear(x, y) {
-    const Cw = G.world.chase;
-    if (y < chaseCoast(x)) {
-        // in the far land's river: the nearest bank
-        const nf = chaseFarNear(x, y);
-        if (nf.i >= 0 && nf.e < 0 && chaseInFar(x, y, -300)) {
-            const q = Cw.far[nf.i], d = nf.d || 1;
-            return { x: q.x + (x - q.x) / d * (q.w + 110), y: q.y + (y - q.y) / d * (q.w + 110) };
-        }
-        // out at sea: the mountains' shore, or the far land's, whichever's closer
-        let best = { x, y: chaseCoast(x) + 160 }, bd = chaseCoast(x) - y;
-        const dw = chaseFarX(y) - x, ds = y - chaseFarY(x);
-        if (y < chaseFarY(chaseFarX(y)) && dw > 0 && dw < bd) { bd = dw; best = { x: chaseFarX(y) + 200, y }; }
-        if (x > chaseFarX(chaseFarY(x)) && ds > 0 && ds < bd) { bd = ds; best = { x, y: chaseFarY(x) - 200 }; }
-        return best;
-    }
-    const n = chaseRiverNear(x, y), R = Cw.river;
-    if (n.i < 0) return { x, y };
-    const q = R[n.i];
-    let dx = x - q.x, dy = y - q.y, d = Math.hypot(dx, dy);
-    if (d < 20) { const q2 = R[Math.min(n.i + 1, R.length - 1)]; dx = -(q2.y - q.y); dy = q2.x - q.x; d = Math.hypot(dx, dy) || 1; }
-    return { x: q.x + dx / d * (CHASE.river + 110), y: q.y + dy / d * (CHASE.river + 110) };
-}
-// Getting off. At the far land, the squad goes over the side of the battleship once you have, and swims for the mini
-// ships (the sailors stay with her). At the end of the river, everyone climbs off the minis toward the airship.
-function chaseDisembark(b) {
-    const s = b.ship, L = chaseLeader(), Ch = G.chase;
-    if (s.chase === 'squad') {
-        if (!Ch.arrived || b.sailor || (L && L.ship === s)) return false;
-        const t = chaseBoat(b) || G.world.chase.farEnd;
-        if (b.station) navyLeave(b);
-        const lx = clamp(navyLx(s, t.x, t.y), -s.C.len * 0.45, s.C.len * 0.45), side = navyLy(s, t.x, t.y) >= 0 ? 1 : -1, hw = navyHw(s.C, lx);
-        b.x = navyWx(s, lx, side * (hw + 50)); b.y = navyWy(s, lx, side * (hw + 50));
-        b.ship = null; b.room = null; b.swim = true; b.noClimb = G.time + 2500; b.nGoal = null; b.nStation = null;
-        return true;
-    }
-    if (!Ch.arrived2 || chaseAboard(L)) return false;
-    if (b.station) navyLeave(b);
-    const A = CHASE.airship, side = navyLy(s, A.x, A.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, A.x, A.y), -s.C.len * 0.4, s.C.len * 0.4), hw = navyHw(s.C, lx);
-    b.x = navyWx(s, lx, side * (hw + 50)); b.y = navyWy(s, lx, side * (hw + 50));
-    b.ship = null; b.room = null; b.swim = true; b.noClimb = G.time + 1e9; b.chaseOff = true; b.nGoal = null; b.nStation = null;
-    return true;
-}
-
-// --- The helicopters: sweep the ground near where you were last seen, light you up, and open fire ---
-// --- The airships: giant, slow, and hard to miss. Their scanners sweep the ground below; walk into one in the open
-// and it locks on, follows you, sounds the alarm and drops soldiers on you. Hide in a building or a cave. You can
-// shoot one down, but it takes a lot.
-function chaseAddBlimp(x, y) {
-    const B = CHASE.blimp;
-    G.chase.blimps.push({ x, y, a: rand(0, TAU), goal: null, goalAt: 0, hp: B.hp, maxHp: B.hp, sweep: rand(0, TAU), lock: null, lockAt: 0, dropAt: 0, hitAt: -1e9, prop: 0 });
-}
-function chaseBlimpTick(dt) {
-    const Ch = G.chase, B = CHASE.blimp, W = CONFIG.WORLD_SIZE, L = chaseLeader();
-    for (const z of Ch.blimps) {
-        z.sweep += dt * 1.4; z.prop += dt * 20;
-        if (G.time >= (z.thinkAt || 0)) {
-            z.thinkAt = G.time + 400;
-            // anyone of the squad out in the open under the scanner?
-            let prey = null, bd = B.scan;
-            for (const f of G.fighters) {
-                if (f.dead || f.soldier || f.team !== 0 || f.car || f.ship) continue;
-                const d = Math.hypot(f.x - z.x, f.y - z.y);
-                if (d < bd && !chaseCovered(f)) { bd = d; prey = f; }
-            }
-            if (prey && !z.lock) { chaseAlert(true); z.dropAt = Math.max(z.dropAt, G.time + 4000); }
-            z.lock = prey;
-            if (prey) { Ch.seen = { x: prey.x, y: prey.y, t: G.time }; z.lockAt = G.time; }
-            if (!prey && (!z.goal || Math.hypot(z.goal.x - z.x, z.goal.y - z.y) < 300 || G.time > z.goalAt)) {
-                const seen = Ch.seen && G.time - Ch.seen.t < 30000 ? Ch.seen : null;
-                const mine = L && (z.far ? Ch.stage >= 4 : Ch.stage > 0 && Ch.stage < 4), bx0 = z.far ? CHASE.far.x + 800 : 600, by0 = z.far ? 800 : chaseMount(0) + 600, by1 = z.far ? CHASE.far.y - 800 : W - 600;
-                const base = (seen && chaseInFar(seen.x, seen.y) === !!z.far ? seen : null) || (mine ? { x: L.x + rand(-3500, 3500), y: L.y + rand(-3500, 3500) } : { x: rand(bx0, W - 600), y: rand(by0, by1) });
-                z.goal = { x: clamp(base.x + rand(-900, 900), bx0, W - 600), y: clamp(base.y + rand(-900, 900), by0, by1) };
-                z.goalAt = G.time + rand(15000, 25000);
-            }
-            // while it has you, soldiers come down on ropes nearby
-            if (z.lock && G.time >= z.dropAt && G.mode === 'playing') {
-                z.dropAt = G.time + B.drop;
-                const a = rand(0, TAU), c = spawnNear({ x: z.lock.x + Math.cos(a) * 700, y: z.lock.y + Math.sin(a) * 700 }, 250, 30, true);
-                if (!chaseBad(c.x, c.y)) { spawnSquad(c, randInt(4, 6), 0, true); burst(c.x, c.y, 20, '#d8cfc0', 200); }
-            }
-        }
-        const g = z.lock && !z.lock.dead ? z.lock : z.goal;
-        if (g) {
-            const want = Math.atan2(g.y - z.y, g.x - z.x), d = Math.hypot(g.x - z.x, g.y - z.y);
-            z.a += clamp(angleDiff(z.a, want), -0.35 * dt, 0.35 * dt);
-            const sp = B.speed * (d < 200 ? d / 200 : 1) * (z.lock ? 1.3 : 1);
-            z.x += Math.cos(z.a) * sp * dt; z.y += Math.sin(z.a) * sp * dt;
-        }
-    }
-}
-// Shots that hit an airship (it's big, and low enough to hit from the ground)
-function chaseBlimpHit(b) {
-    if (!b.owner || b.owner.team !== 0) return false;
-    const B = CHASE.blimp;
-    for (const z of G.chase.blimps) {
-        const dx = b.x - z.x, dy = b.y - (z.y - 60), lx = dx * Math.cos(z.a) + dy * Math.sin(z.a), ly = -dx * Math.sin(z.a) + dy * Math.cos(z.a);
-        if ((lx / (B.len / 2)) ** 2 + (ly / (B.wid / 2)) ** 2 > 1) continue;
-        z.hp -= b.dmg * (b.rocket ? 3 : 1); z.hitAt = G.time;
-        if (b.owner.isPlayer) G.hitMarker = 1;
-        burst(b.x, b.y, 4, '#ffe08a', 200, 'glow');
-        if (z.hp <= 0 && !z.down) chaseBlimpDown(z, b.owner);
-        return true;
-    }
-    return false;
-}
-function chaseBlimpDown(z, by) {
-    z.down = true;
-    G.chase.blimps = G.chase.blimps.filter(q => q !== z);
-    for (let k = 0; k < 6; k++) { const a = rand(0, TAU), d = rand(0, 250); G.particles.push({ type: 'boom', x: z.x + Math.cos(a) * d, y: z.y + Math.sin(a) * d * 0.5, vx: 0, vy: 0, life: 0.7, max: 0.7, size: rand(110, 200) }); }
-    for (let k = 0; k < 4; k++) addFire(z.x + rand(-250, 250), z.y + rand(-90, 90), 70, 40000);
-    G.shake = Math.max(G.shake, 14); Sound.thud(Sound.volAt(z.x, z.y)); Sound.tone(60, 1.6, 'sawtooth', 0.12 * Sound.volAt(z.x, z.y) + 0.03, 30);
-    if (G.mode === 'playing') showBanner('AIRSHIP DOWN!', false, by && by.isPlayer ? 'You shot it out of the sky!' : 'One less pair of eyes in the sky.');
-}
-// The scanner on the ground: a wide pale circle with a bright beam sweeping round it (red once it has you)
-function drawChaseScans(now) {
-    const B = CHASE.blimp;
-    for (const z of G.chase.blimps) {
-        if (!inView(z.x, z.y, B.scan + 200)) continue;
-        const lit = !!z.lock, R = B.scan;
-        ctx.fillStyle = lit ? 'rgba(255,70,60,0.10)' : 'rgba(150,230,255,0.08)';
-        ctx.beginPath(); ctx.arc(z.x, z.y, R, 0, TAU); ctx.fill();
-        ctx.strokeStyle = lit ? 'rgba(255,90,70,0.55)' : 'rgba(150,230,255,0.4)'; ctx.lineWidth = 6; ctx.setLineDash([40, 30]);
-        ctx.beginPath(); ctx.arc(z.x, z.y, R, z.sweep * 0.3, z.sweep * 0.3 + TAU); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = lit ? 'rgba(255,80,60,0.25)' : 'rgba(170,240,255,0.22)';
-        ctx.beginPath(); ctx.moveTo(z.x, z.y); ctx.arc(z.x, z.y, R, z.sweep, z.sweep + 0.5); ctx.closePath(); ctx.fill();
-        if (lit && z.lock && !z.lock.dead) { ctx.strokeStyle = 'rgba(255,60,50,0.8)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(z.lock.x, z.lock.y, 46 + Math.sin(now * 10) * 6, 0, TAU); ctx.stroke(); }
-    }
-}
-// The airship itself, high above: a huge grey envelope with fins, a gondola, spinning propellers and blinking lights
-function drawChaseBlimps(now) {
-    const B = CHASE.blimp;
-    for (const z of G.chase.blimps) {
-        if (!inView(z.x, z.y, B.len)) continue;
-        ctx.save(); ctx.translate(z.x + 120, z.y + 140); ctx.rotate(z.a);
-        ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(0, 0, B.len / 2, B.wid / 2, 0, 0, TAU); ctx.fill(); ctx.restore();
-        ctx.save(); ctx.translate(z.x, z.y - 60); ctx.rotate(z.a);
-        const L2 = B.len / 2, W2 = B.wid / 2;
-        ctx.fillStyle = '#3e4650';
-        for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(-L2 * 0.72, sd * W2 * 0.3); ctx.lineTo(-L2 * 1.06, sd * W2 * 1.15); ctx.lineTo(-L2 * 0.95, sd * W2 * 0.2); ctx.closePath(); ctx.fill(); }
-        const hurt = G.time - z.hitAt < 120;
-        const gr = ctx.createLinearGradient(0, -W2, 0, W2);
-        gr.addColorStop(0, hurt ? '#ffffff' : '#c3cad2'); gr.addColorStop(0.5, '#8e98a3'); gr.addColorStop(1, '#5a636d');
-        ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(0, 0, L2, W2, 0, 0, TAU); ctx.fill();
-        ctx.strokeStyle = 'rgba(40,46,54,0.35)'; ctx.lineWidth = 4;
-        for (let k = -4; k <= 4; k++) { const xx = k * L2 / 5, hh = W2 * Math.sqrt(Math.max(0, 1 - (xx / L2) ** 2)); ctx.beginPath(); ctx.moveTo(xx, -hh); ctx.lineTo(xx, hh); ctx.stroke(); }
-        ctx.fillStyle = '#7a1f22'; ctx.fillRect(-L2 * 0.55, -W2 * 0.12, L2 * 1.1, W2 * 0.24);
-        ctx.fillStyle = '#2e333a'; roundRect(ctx, -70, -30, 170, 60, 14); ctx.fill();
-        ctx.fillStyle = z.lock ? '#ff5a4a' : '#9fe8ff'; for (let k = 0; k < 4; k++) ctx.fillRect(-55 + k * 38, -10, 22, 20);
-        for (const sd of [-1, 1]) { ctx.save(); ctx.translate(-L2 * 0.2, sd * (W2 + 18)); ctx.rotate(z.prop * sd); ctx.fillStyle = 'rgba(40,44,50,0.65)'; ctx.fillRect(-5, -34, 10, 68); ctx.restore(); }
-        const blink = Math.floor(now * 2) % 2 === 0;
-        ctx.fillStyle = blink ? '#ff3b30' : '#5a1a18'; ctx.beginPath(); ctx.arc(L2 * 0.92, 0, 9, 0, TAU); ctx.fill();
-        ctx.fillStyle = blink ? '#5aff7a' : '#1a4a24'; ctx.beginPath(); ctx.arc(-L2 * 0.92, 0, 9, 0, TAU); ctx.fill();
-        ctx.restore();
-        if (z.hp < z.maxHp) { const k = 1 / G.zoom, w = 180 * k, x = z.x - w / 2, y = z.y - 60 - W2 - 30 * k; ctx.fillStyle = 'rgba(8,12,18,0.7)'; ctx.fillRect(x - 2 * k, y - 2 * k, w + 4 * k, 10 * k); ctx.fillStyle = '#ff6a5a'; ctx.fillRect(x, y, w * z.hp / z.maxHp, 6 * k); }
-    }
-}
-// Roofs over the ruins (fallen in, here and there) and the rock over the caves: they fade while you're under them
-function drawChaseRoofs(p) {
-    for (const r of G.world.chase.roofs) {
-        const ext = r.cave ? r.r : Math.max(r.w, r.h) / 2;
-        if (!inView(r.x, r.y, ext + 40)) continue;
-        const inside = p && (r.cave ? (p.x - r.x) ** 2 + (p.y - r.y) ** 2 < (r.r - 30) ** 2 : Math.abs(p.x - r.x) < r.w / 2 + 6 && Math.abs(p.y - r.y) < r.h / 2 + 6);
-        r.a += ((inside ? 0.16 : 1) - r.a) * 0.15;
-        ctx.globalAlpha = r.a;
-        if (r.cave) {
-            const rnd = seededRand(r.seed), n = 26;
-            ctx.fillStyle = '#5d554b';
-            ctx.beginPath();
-            for (let k = 0; k <= n; k++) { const a = (k / n) * TAU, rr = r.r * (0.9 + rnd() * 0.16) * (Math.abs(angleDiff(a, r.gap)) < 0.35 ? 0.82 : 1); const x = r.x + Math.cos(a) * rr, y = r.y + Math.sin(a) * rr; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-            ctx.closePath(); ctx.fill();
-            const gr = ctx.createRadialGradient(r.x - r.r * 0.3, r.y - r.r * 0.3, 10, r.x, r.y, r.r);
-            gr.addColorStop(0, 'rgba(150,140,125,0.55)'); gr.addColorStop(1, 'rgba(30,26,22,0.45)');
-            ctx.fillStyle = gr; ctx.fill();
-            ctx.strokeStyle = 'rgba(30,26,22,0.5)'; ctx.lineWidth = 5;
-            for (let k = 0; k < 7; k++) { const a = rnd() * TAU, d = rnd() * r.r * 0.6; ctx.beginPath(); ctx.moveTo(r.x + Math.cos(a) * d, r.y + Math.sin(a) * d); ctx.lineTo(r.x + Math.cos(a + 0.4) * (d + 60), r.y + Math.sin(a + 0.4) * (d + 60)); ctx.stroke(); }
-        } else {
-            for (const t of r.tiles) {
-                ctx.fillStyle = t.c; ctx.fillRect(r.x + t.x, r.y + t.y, t.w - 2, t.h - 2);
-                ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(r.x + t.x, r.y + t.y + t.h - 8, t.w - 2, 6);
-                if (t.crack) { ctx.strokeStyle = 'rgba(20,16,12,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r.x + t.x + 8, r.y + t.y + 10); ctx.lineTo(r.x + t.x + t.w * 0.6, r.y + t.y + t.h * 0.7); ctx.stroke(); }
-            }
-        }
-        ctx.globalAlpha = 1;
-    }
-}
-const chaseCovered = f => G.world.chase.ruins.some(r => Math.abs(f.x - r.x) < r.w / 2 && Math.abs(f.y - r.y) < r.h / 2) || G.world.chase.caves.some(q => (f.x - q.x) ** 2 + (f.y - q.y) ** 2 < q.r * q.r);
-function chaseHeliBot(c, b, dt) {
-    const ctl = { up: false, down: false, left: false, right: false }, Ch = G.chase;
-    if (G.time >= (b.driveThink || 0)) {
-        b.driveThink = G.time + 500;
-        let prey = null, bd = Infinity;
-        for (const f of G.fighters) {
-            if (f.dead || f.car || !foe(b, f) || chaseStageOf(f) === 0) continue;
-            // (hiding inside a ruin, they only see you from right overhead)
-            const d = Math.hypot(f.x - c.x, f.y - c.y) * (chaseCovered(f) ? 2.6 : 1);
-            if (d < bd) { bd = d; prey = f; }
-        }
-        b.heliPrey = prey && (bd < (Ch.stage <= 1 ? CHASE.desert.sight : CHASE.heliSight) || (b.heliPrey === prey && bd < 1000)) ? prey : null;
-        if (b.heliPrey) { Ch.seen = { x: b.heliPrey.x, y: b.heliPrey.y, t: G.time }; chaseAlert(); }
-        if (!b.heliGoal || Math.hypot(b.heliGoal.x - c.x, b.heliGoal.y - c.y) < 250 || G.time > (b.heliGoalAt || 0)) {
-            const seen = Ch.seen && G.time - Ch.seen.t < 25000 ? Ch.seen : null, L = chaseLeader();
-            // (while you're still inside the facility they sweep the open desert, waiting for you to come out)
-            const base = seen || (L && Ch.stage > 0 ? { x: L.x + rand(-2000, 2000), y: L.y + rand(-2000, 2000) } : { x: rand(CONFIG.WORLD_SIZE * 0.35, CONFIG.WORLD_SIZE * 0.9), y: rand(chaseMount(0) + 800, CONFIG.WORLD_SIZE - 1000) });
-            b.heliGoal = { x: clamp(base.x + rand(-700, 700), 300, CONFIG.WORLD_SIZE - 300), y: clamp(base.y + rand(-700, 700), 300, CONFIG.WORLD_SIZE - 300) };
-            b.heliGoalAt = G.time + rand(6000, 10000);
-        }
-    }
-    const t = b.heliPrey && !b.heliPrey.dead ? b.heliPrey : null;
-    const g = t ? { x: t.x + Math.cos(G.time / 1500) * 320, y: t.y + Math.sin(G.time / 1500) * 320 } : b.heliGoal;
-    if (g) {
-        const want = Math.atan2(g.y - c.y, g.x - c.x), diff = angleDiff(c.a, want), d = Math.hypot(g.x - c.x, g.y - c.y);
-        if (diff > 0.1) ctl.right = true; else if (diff < -0.1) ctl.left = true;
-        ctl.up = d > 120 && Math.abs(diff) < 1.4 && (d > 500 || Math.abs(c.speed) < 240);
-    }
-    // (bursts from the machine gun only, no rockets: you've got to be able to run for cover)
-    if (t && G.time >= c.fireAt && dist(c, t) < 900) { c.rocketAt = G.time + 1e9; c.turret = Math.atan2(t.y - c.y, t.x - c.x) + rand(-0.12, 0.12) * AIK().aim; vehicleFire(c, b); c.fireAt = G.time + (Math.random() < 0.15 ? 1400 : 230); }
-    return ctl;
-}
-function chaseAlert(airship) {
-    const Ch = G.chase;
-    if (G.time - Ch.alertAt < 25000) return;
-    Ch.alertAt = G.time;
-    if (G.mode === 'playing') { showBanner('SPOTTED!', true, airship ? 'An airship\'s scanner has found you. Soldiers are coming down! Get under a roof or into a cave!' : 'A helicopter has found you. Soldiers are on their way. Hide in the ruins!'); Sound.tone(880, 0.25, 'square', 0.07, 660); }
-}
-function drawChaseLights() {
-    for (const c of G.chase.helis) {
-        if (c.dead || !c.driver || !inView(c.x, c.y, 800)) continue;
-        const b = c.driver, lit = b.heliPrey && !b.heliPrey.dead, x = lit ? b.heliPrey.x : c.x + Math.cos(c.a) * 170, y = lit ? b.heliPrey.y : c.y + Math.sin(c.a) * 170, R = CHASE.heliSight * 0.6;
-        ctx.fillStyle = lit ? 'rgba(255,120,90,0.07)' : 'rgba(255,248,210,0.07)';
-        ctx.beginPath(); ctx.moveTo(c.x, c.y - 24); ctx.lineTo(x - R * 0.55, y); ctx.lineTo(x + R * 0.55, y); ctx.closePath(); ctx.fill();
-        const gr = ctx.createRadialGradient(x, y, 0, x, y, R);
-        gr.addColorStop(0, lit ? 'rgba(255,110,80,0.32)' : 'rgba(255,248,210,0.3)'); gr.addColorStop(1, 'rgba(255,248,210,0)');
-        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.fill();
-    }
-}
-
-// --- The airship, moored on the far shore ---
-function drawAirship(now) {
-    const A = CHASE.airship, x = A.x, y = A.y, door = G.extract;
-    if (!inView(x, y, 1000)) return;
-    ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(x + 80, y + 150, 600, 180, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(70,56,40,0.75)'; ctx.lineWidth = 4;
-    for (const [ox, oy] of [[-460, 230], [460, 230], [-460, -260], [460, -260]]) { ctx.beginPath(); ctx.moveTo(x + ox * 0.75, y - 40 + oy * 0.45); ctx.lineTo(x + ox, y + oy); ctx.stroke(); ctx.fillStyle = '#5a4630'; ctx.fillRect(x + ox - 8, y + oy - 8, 16, 16); }
-    const pulse = 0.5 + Math.sin(now * 4) * 0.5;
-    ctx.strokeStyle = `rgba(125,255,176,${0.45 + pulse * 0.45})`; ctx.lineWidth = 7;
-    ctx.beginPath(); ctx.arc(door.x, door.y, A.board * 0.55 + pulse * 22, 0, TAU); ctx.stroke();
-    ctx.fillStyle = '#7a5c3a'; ctx.fillRect(door.x - 42, y + 130, 84, door.y - y - 130);
-    ctx.fillStyle = '#5e4630'; for (let yy = y + 140; yy < door.y; yy += 22) ctx.fillRect(door.x - 42, yy, 84, 5);
-    // tail fins, envelope, gondola
-    ctx.fillStyle = '#8a1f2a';
-    ctx.beginPath(); ctx.moveTo(x - 470, y - 40); ctx.lineTo(x - 690, y - 230); ctx.lineTo(x - 610, y - 40); ctx.lineTo(x - 690, y + 150); ctx.closePath(); ctx.fill();
-    const grd = ctx.createLinearGradient(0, y - 240, 0, y + 160);
-    grd.addColorStop(0, '#e4e8ec'); grd.addColorStop(0.55, '#aeb6bf'); grd.addColorStop(1, '#78818b');
-    ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(x, y - 40, 620, 200, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(60,70,80,0.25)'; ctx.lineWidth = 3;
-    for (let k = -5; k <= 5; k++) { const xx = x + k * 105, hh = 200 * Math.sqrt(Math.max(0, 1 - (k * 105 / 620) ** 2)); ctx.beginPath(); ctx.moveTo(xx, y - 40 - hh); ctx.lineTo(xx, y - 40 + hh); ctx.stroke(); }
-    ctx.fillStyle = '#b8342c'; ctx.fillRect(x - 600, y - 62, 1200, 44);
-    ctx.fillStyle = '#fff'; ctx.font = '900 62px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('FREEDOM', x, y - 38);
-    ctx.fillStyle = '#3d4450'; roundRect(ctx, x - 180, y + 40, 360, 100, 22); ctx.fill();
-    ctx.fillStyle = '#ffe9a8'; for (let i = 0; i < 7; i++) ctx.fillRect(x - 150 + i * 44, y + 72, 26, 22);
-    for (const px of [-260, 260]) {
-        ctx.fillStyle = '#4a515c'; ctx.fillRect(x + px - 30, y + 60, 60, 26);
-        ctx.save(); ctx.translate(x + px + (px > 0 ? 34 : -34), y + 73); ctx.rotate(now * 25);
-        ctx.fillStyle = 'rgba(40,44,50,0.6)'; ctx.fillRect(-6, -48, 12, 96); ctx.restore();
-    }
-}
-
-// --- How far you've got, and what's next ---
-function chaseStageOf(f) {
-    const F = CHASE.fac;
-    if (f.y < chaseCoast(f.x) && chaseInFar(f.x, f.y)) return Math.hypot(f.x - CHASE.far.clear.x, f.y - CHASE.far.clear.y) < CHASE.far.clear.r ? 6 : f.x > chaseFarMX(f.y) ? 5 : 4;
-    if (f.y < chaseCoast(f.x)) return 3;
-    if (f.y < chaseMount(f.x)) return 2;
-    if (f.x > F.x0 && f.x < F.x1 && f.y > F.y0 && f.y < F.y1) return 0;
-    return 1;
-}
-const CHASE_STAGES = [
-    null,
-    ['YOU\'RE OUT!', 'Cross the desert to the boat on the river, far to the north-east. Airships are scanning the ground: stay under roofs and in caves.'],
-    ['THE MOUNTAINS', 'Sail the boat down the river, or walk the banks to dodge the soldier boats. Ambushes wait along the way.'],
-    ['THE OCEAN', 'Head for the far land in the east. Enemy ships are out here.'],
-    ['THE FAR LAND', 'Take the two mini ships up the river through the forest, or walk the banks. Soldier boats patrol it and airships are watching.'],
-    ['THE HIGH MOUNTAINS', 'The river splits into channels between the cliffs. The caves are full of hiding places, and of soldiers waiting in ambush.'],
-    ['THE AIRSHIP!', 'It\'s waiting in the clearing. Get everyone aboard!']
-];
-function chaseNext() {
-    const Cw = G.world.chase, Ch = G.chase, st = Ch.stage;
-    if (st === 0) return { ...Cw.gates[0], label: 'Break out of the facility' };
-    if (st === 1) return { x: Cw.dock.x, y: Cw.dock.y, label: 'Cross the desert to the boat' };
-    if (st === 2) return { ...Cw.mouth, label: 'Follow the river to the sea' };
-    if (st === 3 && !Ch.arrived) return { ...Cw.landing, label: 'Cross the ocean to the far land' };
-    const m = Ch.minis.find(q => !q.sinkAt);
-    if (st <= 3 || (!Ch.minis.some(q => !q.sinkAt && G.player && G.player.ship === q) && m && !Ch.minis.some(q => q.boardedAt))) return { x: m ? m.x : Cw.farEnd.x, y: m ? m.y : Cw.farEnd.y, label: 'Jump overboard and swim to the mini ships' };
-    if (st === 4) { const P = chaseRoutePt(Cw.farMount, Cw.route2); return { x: P.x, y: P.y, label: 'Follow the river to the mountains' }; }
-    return { x: G.extract.x, y: G.extract.y, label: 'Follow the river to the airship' };
-}
-function chaseStatus(p) {
-    if (p.ship || p.car) return navyStatus(p);
-    const n = chaseNext();
-    return `${p.swim ? 'In the water! ' : ''}${n.label} · ${Math.round(dist(p, n) / 10)}m`;
-}
-function chaseTick(dt) {
-    const Ch = G.chase, p = G.player, L = chaseLeader();
-    if (L) {
-        const st = chaseStageOf(L);
-        if (st > Ch.stage) { Ch.stage = st; const b = CHASE_STAGES[st]; if (b) { showBanner(b[0], true, b[1]); Sound.tone(520, 0.4, 'triangle', 0.09, 780); } }
-    }
-    if (p && !p.dead && dist(p, G.extract) < CHASE.airship.board) { chaseWin(); return; }
-    // the battleship's reached the far land: over to the mini ships
-    if (Ch.arrived && !Ch.leg2) {
-        Ch.leg2 = true;
-        showBanner('LAND!', true, 'Jump overboard and swim to the two mini ships in the river mouth. The squad will follow you; the sailors stay with the battleship.');
-        Sound.tone(520, 0.4, 'triangle', 0.09, 780);
-    }
-    if (Ch.arrived2 && !Ch.endSaid) { Ch.endSaid = true; showBanner('END OF THE RIVER', true, 'Climb off and run for the airship in the clearing!'); }
-    if (L && G.time >= (Ch.nextCatch || 0)) {
-        Ch.nextCatch = G.time + 2000; chaseCatchUp(L);
-        for (const m of Ch.minis) m.crewN = G.fighters.reduce((n, f) => n + (!f.dead && f.ship === m ? 1 : 0), 0);  // (an empty, moored mini ship isn't a target)
-    }
-    chaseBlimpTick(dt);
-    if (G.time >= Ch.nextReinf) { chaseReinforce(); Ch.nextReinf = G.time + rand(...(Ch.stage <= 1 ? CHASE.desert.reinforce : CHASE.reinforce)); }
-}
-// Nobody gets hopelessly left behind: anyone of the squad who's fallen far back (and out of sight) catches up,
-// and if you're on the boat, they're aboard
-function chaseCatchUp(L) {
-    for (const f of G.fighters) {
-        if (f.dead || f.soldier || f.sailor || f.team !== 0 || isHuman(f) || f.car || f.chaseOff || f === L) continue;
-        const s = chaseBoat(f);
-        if (f.ship && (f.ship === s || f.ship.chase === 'squad')) continue;
-        if (dist(f, L) < 3500 || (G.player && dist(f, G.player) < 1400)) continue;
-        if (chaseAboard(L) && s && !s.sinkAt) {
-            if (f.station) navyLeave(f);
-            const o = navyDeckSpot(s);
-            f.ship = s; f.room = null; f.swim = false; f.x = navyWx(s, o.lx, o.ly); f.y = navyWy(s, o.lx, o.ly); f.nGoal = null; f.nextThink = 0;
-        } else if (!L.ship && !L.swim) {
-            const back = Math.atan2(f.y - L.y, f.x - L.x), c = spawnNear({ x: L.x + Math.cos(back) * 700, y: L.y + Math.sin(back) * 700 }, 300, 30, true);
-            if (chaseBad(c.x, c.y) || (G.player && dist(c, G.player) < 450)) continue;
-            if (f.ship) { if (f.station) navyLeave(f); f.ship = null; f.room = null; }
-            f.x = c.x; f.y = c.y; f.vx = f.vy = 0; f.swim = false; f.mode = 'wander'; f.goal = null; f.nextThink = 0;
-        }
-    }
-}
-function chaseWin() {
-    const riders = G.fighters.filter(f => !f.dead && !f.soldier && dist(f, G.extract) < 1600);
-    G.escaped = riders.length;
-    for (const f of riders) { f.escaped = true; f.dead = true; f.diedAt = G.time; burst(f.x, f.y, 16, '#7dffb0', 220, 'glow'); }
-    G.alive -= riders.length;
-    const mins = Math.floor(G.time / 60000);
-    G.result = { won: true, place: 1, title: 'ESCAPED!', sub: `The airship lifts off with you and ${riders.length - 1} other${riders.length === 2 ? '' : 's'} after ${mins} minute${mins === 1 ? '' : 's'} on the run. ${CHASE.people - riders.length} didn't make it.` };
-    G.overAt = G.time + 2600;
-    startVictory(G.result.sub);
-}
-function chaseReinforce() {
-    const L = chaseLeader();
-    if (!L) return;
-    const st = G.chase.stage, Cw = G.world.chase, W = CONFIG.WORLD_SIZE;
-    if (st <= 1) {
-        if (G.chase.blimps.length < CHASE.blimp.max && Math.random() < 0.5) {
-            const a = rand(0, TAU);
-            chaseAddBlimp(clamp(L.x + Math.cos(a) * 4000, 800, W - 800), clamp(L.y + Math.sin(a) * 4000, chaseMount(0) + 800, W - 800));
-            showBanner('ANOTHER AIRSHIP', true, 'Another one is joining the search.');
-        }
-        let sent = 0;
-        for (let k = 0; k < CHASE.desert.waves; k++) {
-            const a = rand(0, TAU), c = spawnNear({ x: clamp(L.x + Math.cos(a) * 1800, 400, W - 400), y: clamp(L.y + Math.sin(a) * 1800, 400, W - 400) }, 300, 30, true);
-            if (chaseBad(c.x, c.y)) continue;
-            spawnSquad(c, randInt(6, 8), 0, true); sent++;
-        }
-        if (sent) showBanner('SOLDIERS INBOUND', true, `${sent === 1 ? 'A squad is' : `${sent} squads are`} closing in. Keep moving!`);
-    } else if (st === 2) {
-        const s0 = (L.ship ? L.ship.routeS || 0 : chaseRouteS(L.x, L.y)) + rand(1500, 2300);
-        if (s0 > Cw.mouthS - 300) return;
-        const P = chaseRoutePt(s0), P2 = chaseRoutePt(s0 + 20), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1, side = Math.random() < 0.5 ? 1 : -1;
-        const c = { x: P.x - (P2.y - P.y) / tl * side * (CHASE.river + 200), y: P.y + (P2.x - P.x) / tl * side * (CHASE.river + 200) };
-        if (chaseBad(c.x, c.y)) return;
-        spawnSquad(c, randInt(4, 6), 0, true);
-        showBanner('AMBUSH AHEAD', true, 'Soldiers are waiting on the bank down the river.');
-    } else if (st === 3) {
-        if (G.chase.leg2 || G.navy.ships.filter(s => s.chase === "soldier" && !s.sinkAt && s.home === null).length >= 2) return;
-        const x = clamp(L.x + rand(2500, 3200), 1500, CHASE.far.x - 3000), y = rand(700, CHASE.oceanY - 1000);
-        if (!chaseWet(x, y, 500)) return;
-        chaseSoldierShip(x, y, Math.PI, null);
-        showBanner('ENEMY SHIP', true, 'Another soldier ship is coming after you.');
-    } else if (st >= 4 && st <= 5) {
-        // the far land: soldiers waiting on the banks ahead, and now and then another boat coming down the river
-        const R2 = Cw.route2, here = L.ship && L.ship.leg === 2 ? L.ship.routeS || 0 : chaseRouteS(L.x, L.y, R2);
-        if (Math.random() < 0.4 && G.navy.ships.filter(s => s.chase === 'soldier' && !s.sinkAt && s.leg === 2 && Math.abs((s.routeS || s.home) - here) < 5000).length < 3) {
-            const s0 = here + rand(3500, 4500);
-            if (s0 < Cw.endS2 - 1500) {
-                const P = chaseRoutePt(s0, R2), P2 = chaseRoutePt(s0 - 30, R2);
-                chaseSoldierShip(P.x, P.y, Math.atan2(P2.y - P.y, P2.x - P.x), s0).leg = 2;
-                showBanner('SOLDIER BOAT', true, 'Another boat is coming down the river at you.');
-                return;
-            }
-        }
-        const s0 = here + rand(1500, 2300);
-        if (s0 > Cw.endS2 - 600) return;
-        const P = chaseRoutePt(s0, R2), P2 = chaseRoutePt(s0 + 20, R2), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1, side = Math.random() < 0.5 ? 1 : -1;
-        const c = { x: P.x - (P2.y - P.y) / tl * side * (CHASE.far.river + 220), y: P.y + (P2.x - P.x) / tl * side * (CHASE.far.river + 220) };
-        if (chaseBad(c.x, c.y)) return;
-        spawnSquad(c, randInt(4, 6), 0, true);
-        showBanner('AMBUSH AHEAD', true, 'Soldiers are waiting on the bank up the river.');
-    }
-}
-
 // ---------- Zombies & Virus ----------
 // A survivor who goes down gets back up as one of the horde. hp: health for this zombie (patient zero is tougher).
 function turnZombie(f, hp = ZOMBIE.hp) {
@@ -10068,71 +7892,6 @@ function spawnHorde(n, avoid) {
 
 // Escape: the HQ is the hotel closest to a corner of the city, and the people start on the opposite side.
 // Soldiers hold the streets (none right at the start), with a squad guarding the HQ's doors.
-function spawnEscape(soldiers, people) {
-    const W = CONFIG.WORLD_SIZE, mid = { x: W / 2, y: W / 2 }, maze = G.world.terrain === 'maze', MZ = ESCAPE.maze;
-    let start, goal, hq = null;
-    if (maze) soldiers = Math.round(soldiers * MZ.soldiers);
-    if (G.world.terrain) {
-        // Maze or mountains: run from one corner to the helicopter waiting in the other
-        start = spawnNear(G.world.escapeStart, 200, 40, true);
-        goal = G.extract = { ...G.world.escapeEnd };
-    } else {
-        const towers = G.world.buildings.filter(b => b.kind === 'hotel' && !b.collapsed);
-        hq = towers.reduce((a, b) => (!a || dist({ x: b.cx, y: b.cy }, mid) > dist({ x: a.cx, y: a.cy }, mid) ? b : a), null);
-        Object.assign(hq, { kind: 'hq', hq: true, style: 'hq', floors: ESCAPE.hqFloors, roof: '#3c4238', roofDark: '#272b24' });
-        G.hq = hq;
-        goal = { x: hq.cx, y: hq.cy };
-        start = spawnNear({ x: W - hq.cx, y: W - hq.cy }, 300, 40, true);
-    }
-    for (let i = 0; i < people; i++) {
-        const s = spawnNear(start, 240, 30);
-        if (i === 0 && G.mode === 'playing') { addPlayer(s, 0); continue; }
-        G.fighters.push(createFighter(s.x, s.y, { name: botName(i), color: pick(BOT_COLORS), team: 0 }));
-    }
-    // Everyone breaking out is in heavy armor (triple the normal maximum) with a minigun, and has their own place in the group
-    let slot = 0;
-    for (const f of G.fighters) {
-        if (f.team !== 0) continue;
-        if (!f.isPlayer) giveSlot(f, slot++, people - 1);
-        f.armor = CONFIG.MAX_ARMOR * (maze ? MZ.armor : ESCAPE.armor);
-        f.items.bandage = 2;
-        f.inv[1] = null;
-        if (G.early) { applyLoot(f, 'Sword', -1); applyLoot(f, 'Bow', -1); }  // Early Warfare: a sword and a bow instead
-        else applyLoot(f, 'Minigun', -1);
-        switchSlot(f, 1, true);
-    }
-    // The HQ keeps its big guard at the doors; everyone else is out in squads of 5 to 8, spread over the city
-    const guards = Math.min(soldiers, ESCAPE.doorGuards);
-    for (let i = 0; i < guards; i++) addSoldier(spawnNear(goal, hq ? Math.max(hq.w, hq.h) * 0.5 + 260 : 420, 30, true), i, true);
-    const homes = [];
-    for (let left = soldiers - guards, n = guards; left > 0;) {
-        // Never leave a straggler group smaller than a squad at the end
-        let size = Math.min(left, randInt(ESCAPE.squad[0], ESCAPE.squad[1]));
-        if (left - size > 0 && left - size < ESCAPE.squad[0]) size = left <= ESCAPE.squad[1] ? left : left - ESCAPE.squad[0];
-        let c = null;
-        for (let tries = 0; tries < 40 && !c; tries++) {
-            const q = findSpawn(null, 0);
-            if (Math.hypot(q.x - start.x, q.y - start.y) > ESCAPE.clear && homes.every(h => dist(h, q) > 500)) c = q;
-        }
-        c = c || findSpawn([start], ESCAPE.clear);
-        homes.push(c);
-        spawnSquad(c, size, n, Math.random() < (maze ? MZ.hunters : ESCAPE.hunters));
-        left -= size;
-        n += size;
-    }
-    if (maze) {
-        // A machine gunner dug in at every nest, and minefields down the corridors
-        const extra = G.world.mazeExtra;
-        extra.nests.forEach((q, i) => {
-            addSoldier(q, 900 + i, true);
-            const f = G.fighters[G.fighters.length - 1];
-            f.inv[1] = null; applyLoot(f, 'Machine Gun', -1); switchSlot(f, 1, true);
-        });
-        const field = { name: 'Minefield', team: 1, soldier: true, isPlayer: false, dead: false, kills: 0, x: 0, y: 0, color: ESCAPE.soldier };
-        for (const m of extra.mines) if (Math.hypot(m.x - start.x, m.y - start.y) > 1200 && !blockedAt(G.world.grid, m.x, m.y, 20)) G.mines.push({ x: m.x, y: m.y, owner: field, armAt: 0, triggerAt: 0 });
-        drawMazeMap();
-    }
-}
 
 // A squad: soldiers that move as a unit, each holding its own spot around the squad's current waypoint.
 // Patrol squads wander their part of town; hunter squads go after the nearest runners.
@@ -10162,10 +7921,6 @@ function updateSquads() {
             if (G.mode === 'playing' && G.player && dist(lead, G.player) < 2200) { showBanner('AMBUSH!', true, 'Soldiers were waiting for you!'); Sound.tone(150, 0.5, 'sawtooth', 0.08, 90); }
         }
         let prey = sq.hunter && nearestPrey(lead);
-        // Chase: a helicopter's sighting brings every squad nearby; nobody wades into the river after a boat
-        const seen = G.chase && G.chase.seen && G.time - G.chase.seen.t < 15000 ? G.chase.seen : null;
-        if (!prey && seen && dist(lead, seen) < CHASE.alertR) prey = seen;
-        if (prey && G.chase && chaseWet(prey.x, prey.y, -60)) prey = chaseLandNear(prey.x, prey.y);
         // Hunters close in from their own side, so two squads don't merge into one big blob
         if (prey && dist(lead, prey) < 3000) { sq.goal = { x: prey.x + Math.cos(sq.flank) * 320, y: prey.y + Math.sin(sq.flank) * 320 }; continue; }
         // Next patrol stop: somewhere on our beat that isn't where another squad is heading
@@ -10188,21 +7943,6 @@ function giveSlot(f, i, n) {
 }
 
 // Title screen version: a small breakout in the middle of the arena, soldiers all around
-function spawnEscapeDemo(c) {
-    for (let i = 0; i < 20; i++) {
-        const s = spawnNear(c, 220, 30);
-        const f = createFighter(s.x, s.y, { name: botName(i), color: pick(BOT_COLORS), team: 0 });
-        f.inv[1] = null;
-        applyLoot(f, 'Mac10', -1);
-        if (i > 0) giveSlot(f, i - 1, 19);
-        G.fighters.push(f);
-    }
-    for (let i = 0, n = 0; n < 40; i++) {
-        const a = (i / 6) * TAU + rand(-0.3, 0.3), size = randInt(ESCAPE.squad[0], ESCAPE.squad[1]);
-        spawnSquad(spawnNear({ x: c.x + Math.cos(a) * 850, y: c.y + Math.sin(a) * 850 }, 200, 30), size, n, Math.random() < 0.5);
-        n += size;
-    }
-}
 
 // Escape: step on the stairs and everyone in your group (people within reach of you) goes with you
 function travel(st) {
@@ -10254,13 +7994,6 @@ function checkStairs(dt) {
 }
 
 // Squads of soldiers keep arriving while you're out on the streets
-function reinforce() {
-    const p = G.player, a = rand(0, TAU), d = rand(1300, 1700);
-    const c = spawnNear({ x: clamp(p.x + Math.cos(a) * d, 300, CONFIG.WORLD_SIZE - 300), y: clamp(p.y + Math.sin(a) * d, 300, CONFIG.WORLD_SIZE - 300) }, 200, 30, true);
-    spawnSquad(c, randInt(ESCAPE.squad[0], ESCAPE.squad[1]), 0, true);
-    showBanner('REINFORCEMENTS INBOUND', true, `A squad of ${G.squads[G.squads.length - 1].members.length} is hunting your group. Keep moving!`);
-    Sound.tone(80, 1.2, 'sawtooth', 0.06, 60);
-}
 
 function addSoldier(s, i, guard) {
     const f = createFighter(s.x, s.y, { name: `Soldier ${i + 1}`, color: ESCAPE.soldier, team: 1 });
@@ -10271,25 +8004,10 @@ function addSoldier(s, i, guard) {
     f.items.grenade = G.early ? 0 : 2;
     // Guards hold their pad; the rest patrol, and some sweep the city looking for the runners
     f.post = guard ? { x: s.x, y: s.y } : null;
-    if (G.chase) { f.hp = f.maxHp = CHASE.soldierHp; f.likesCars = false; f.dmgMul = CHASE.soldierDmg; }
     G.fighters.push(f);
 }
 
 // Escape: reaching the helicopter flies out you and everyone with you on the roof
-function boardHelicopter() {
-    const riders = G.fighters.filter(f => !f.dead && !f.soldier);
-    G.escaped = riders.length;
-    for (const f of riders) {
-        f.escaped = true;
-        f.dead = true;
-        f.diedAt = G.time;
-        burst(f.x, f.y, 16, '#7dffb0', 220, 'glow');
-    }
-    G.alive -= riders.length;
-    G.result = { won: true, place: 1, title: 'ESCAPED!', sub: `The helicopter lifts off with you and ${riders.length - 1} other${riders.length === 2 ? '' : 's'}. ${ESCAPE.people - riders.length} didn't make it.` };
-    G.overAt = G.time + 2600;
-    startVictory(G.result.sub);
-}
 
 const isPrey = f => (G.zombies ? !f.zombie : f.team === 0);
 
@@ -10307,7 +8025,7 @@ function updateOutbreak(dt) {
             if (f.zombie) { b++; f.hp = Math.min(f.maxHp, f.hp + ZOMBIE.regen * dt); } else a++;
         } else if (f.soldier || f.giant) b++;
         else {
-            if (!f.sailor) a++;  // (Chase: the battleship's sailors aren't counted as part of your squad)
+            if (!f.sailor) a++;
             // Out of the fight for a while, the group patches itself up
             if (G.escape && G.time - (f.lastHurt || 0) > ESCAPE.regen.after) f.hp = Math.min(f.maxHp, f.hp + ESCAPE.regen.rate * dt);
         }
@@ -10323,12 +8041,6 @@ function updateOutbreak(dt) {
         G.result = { won: true, place: 1, title: 'BOSS DEFEATED!', sub: G.bossF.killedBy === p ? 'You landed the final blow!' : 'Your team brought the giant down.' };
         G.overAt = G.time + 2600;
         startVictory(G.result.sub);
-    } else if (G.chase) {
-        chaseTick(dt);
-    } else if (G.escape) {
-        const heli = G.world.floor ? G.world.floor.heli : G.extract;
-        if (heli && !p.dead && dist(p, heli) < ESCAPE.heliR) boardHelicopter();
-        else if (!G.world.floor && G.time >= G.nextReinf) { reinforce(); G.nextReinf = G.time + rand(...(G.world.maze ? ESCAPE.maze.reinforce : ESCAPE.reinforceEvery)); }
     } else if (G.zombies && (a === 0 || b === 0)) {
         // You're on whichever side you're on now: the horde can win with you in it
         const zombieWin = a === 0;
@@ -10371,27 +8083,6 @@ function newDemo() {
         newState('demo', { type: 'temple', count: TEMPLE.players, map: 'temple' });
         G.alive = G.fighters.length;
         G.cam.x = TEMPLE.W / 2; G.cam.y = TEMPLE.W / 2;
-        return;
-    }
-    if (id === 'payload') {
-        newState('demo', { type: 'payload', count: PAYLOAD.players, map: pick(PAYLOAD_MAPS) });
-        G.alive = G.fighters.length;
-        G.cam.x = G.payload.cart.x; G.cam.y = G.payload.cart.y;
-        return;
-    }
-    if (id === 'prop') {
-        newState('demo', { type: 'prop', count: 24, map: 'ordinary' });
-        G.alive = G.fighters.length;
-        G.cam.x = c; G.cam.y = c;
-        return;
-    }
-    if (id === 'escape' || id === 'chase') {
-        // A small breakout: the people in the middle, soldiers around them, pads at the arena edge
-        newState('demo', { type: 'escape', count: 0 });
-        spawnEscapeDemo({ x: c, y: c });
-        G.alive = G.fighters.length;
-        G.cam.x = c;
-        G.cam.y = c;
         return;
     }
     newState('demo', { type: epic || zombies || id === 'survival' ? id : 'ffa', count: 0 });
@@ -10739,7 +8430,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.ghostMode || G.prop || G.payload || G.temple || G.duel || G.navy) return;
+    if (G.ghostMode || G.temple || G.duel || G.navy) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -10977,7 +8668,6 @@ function canShoot(f) {
 
 function tryAttack(f) {
     if (f.downed) return;
-    if (G.prop && (f.prop || (f.seeker && G.prop.phase === 'hide'))) return;  // (props can't shoot; seekers wait)
     if (f.cook || stunned(f) || f.car) return;
     const name = held(f), w = WEAPONS[name];
     if (G.time - f.lastShot < w.rate) return;
@@ -11052,7 +8742,7 @@ function tryAttack(f) {
         if (f.clip[name] <= 0) { f.clip[name] = w.clip; f.reloadUntil = G.time + w.reload; if (isHuman(f)) Sound.tone(300, 0.08, 'square', 0.06, 200); }
     }
 
-    if (f.ammo[name] !== Infinity && f.perk !== 'ammo' && !(G.chase && f.team === 0)) f.ammo[name]--;  // (Chase: the squad never runs out)  // (the ammo pack never runs dry)
+    if (f.ammo[name] !== Infinity && f.perk !== 'ammo') f.ammo[name]--;  // (the ammo pack never runs dry)
     f.lastShot = G.time;
     if (!w.silent) f.lastLoud = G.time;  // the crossbow fires without giving you away
     if (w.beam || w.sonic) {
@@ -11510,15 +9200,10 @@ function damage(t, amount, attacker, weapon) {
     if (G.duel && t.duel) { duelHit(t, attacker, weapon); return; }
     if (t.car && !t.car.dead) return;
     if (G.time < (t.protectUntil || 0)) return;  // just respawned
-    if (G.payload && inSafe(t, t.team)) return;
     if (G.temple && inCamp(t, t.team)) return;  // (nobody can hurt you at your own camp)  // (nobody can hurt you in your own safe zone)
     if (t.downed) { t.downHp -= amount * (G.war && attacker && attacker !== t ? closeGameMul(attacker.team, t.team) : 1); t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
     let dmg = amount;
     if (G.war && attacker && attacker !== t) dmg *= closeGameMul(attacker.team, t.team);
-    // Chase: the soldiers' ship guns and helicopter guns are fearsome, but not instant death
-    // (the desert is the hard part: its soldiers hit much harder)
-    if (G.chase && attacker && attacker.soldier && !attacker.station && attacker.y > chaseMount(attacker.x)) dmg *= CHASE.desert.dmg;
-    if (G.chase && attacker && attacker.soldier && (attacker.station || attacker.car)) dmg *= attacker.station && attacker.station.kind === 'mg' ? 0.02 : attacker.station ? 0.08 : 0.4;
     if (t.isPlayer && G.strikeCam) G.strikeCam = null;  // (watching a boss strike: getting hurt brings the camera back)
     // Escape: stray airstrikes, bombs and burning cars only half hurt the group
     if (G.escape && !attacker && !t.soldier) dmg *= ESCAPE.ambient;
@@ -11535,8 +9220,6 @@ function damage(t, amount, attacker, weapon) {
         dmg -= absorb;
     }
     t.hp -= dmg;
-    // (Prop Hunt: a hit on a real hider gives the seeker some health back, and the hider runs)
-    if (G.prop && t.prop) { if (attacker && attacker.seeker) attacker.hp = Math.min(attacker.maxHp, attacker.hp + dmg * 0.3); t.nextThink = G.time; }
     t.hitFlash = 1;
     t.resting = false;
     t.lastHurt = G.time;
@@ -11551,7 +9234,7 @@ function damage(t, amount, attacker, weapon) {
         Sound.hurt();
     }
     // Bots fight back against whoever hit them
-    if (!t.isPlayer && attacker && attacker !== t && !attacker.dead && !t.prop) {
+    if (!t.isPlayer && attacker && attacker !== t && !attacker.dead) {
         if (t.target !== attacker) t.engageAt = G.time + (t.boss ? rand(30, 80) : rand(150, 350));
         t.target = attacker;
         t.mode = 'fight';
@@ -11584,7 +9267,6 @@ function killFighter(t, killer, weapon) {
         }
         return;
     }
-    if (G.prop && t.prop) { propFound(t, killer); return; }
     if (t.decoy) { t.dead = true; burst(t.x, t.y, 20, '#ffd166', 220, 'glow'); if (killer && killer.isPlayer === false) killer.target = null; return; }
     // Team modes: you go down first, and a teammate has a chance to get you back up
     if (G.war && !G.revolution && !G.navy && !t.downed && !t.finishing && !t.vaporized && weapon !== 'zone' && weapon !== 'Collapse' && G.fighters.some(f => f !== t && !f.dead && !f.downed && f.team === t.team)) { goDown(t, killer, weapon); return; }
@@ -11598,7 +9280,7 @@ function killFighter(t, killer, weapon) {
 
     // (in the menu's background battle people fall as bodies; in a real game they're just gone, no effect)
     if (!t.escaped && !t.vaporized && G.mode === 'demo') addCorpse(t);
-    if (!G.payload && !G.temple) dropDeathWeapons(t);  // (Payload: guns come from the racks)
+    if (!G.temple) dropDeathWeapons(t);  // (Treasure Temple: guns come from the racks and chests)
     if (G.mode === 'demo' && inView(t.x, t.y, 100)) {
         burst(t.x, t.y, 22, t.color, 260, 'blood');
         burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
@@ -11608,7 +9290,6 @@ function killFighter(t, killer, weapon) {
     if (G.mode !== 'demo') addKillfeed(t, killer, weapon);
 
     if (G.war) { warDeath(t, killer, weapon); return; }
-    if (G.payload) { payloadDeath(t, killer); return; }
     if (G.temple) { templeDeath(t, killer); return; }
     if (t.isPlayer && G.result) return;
     if (t.isPlayer) {
@@ -11619,7 +9300,7 @@ function killFighter(t, killer, weapon) {
         G.flashColor = '255,40,70';
         canvas.classList.add('dead');
         Sound.death();
-    } else if (G.player && !G.player.dead && G.alive === 1 && !G.noZone && !G.prop) {
+    } else if (G.player && !G.player.dead && G.alive === 1 && !G.noZone) {
         G.result = { won: true, place: 1 };
         G.overAt = G.time + 2200;
         startVictory();
@@ -11947,7 +9628,6 @@ function updatePlayer(p, dt) {
     if (I === LOCAL_INPUT && TOUCH.move.on) { mx = TOUCH.move.x; my = TOUCH.move.y; len = 1; }
     // Driving: the car handles the controls (see updateCars)
     if (p.car) return;
-    if (G.prop && p.seeker && G.prop.phase === 'hide') { p.vx = p.vy = 0; return; }
     if (G.navy && navyPlayer(p, I, mx, my, dt)) return;
     autoPickup(p);
     // Survival: frozen on the platform until the countdown ends; resting until you move
@@ -12072,7 +9752,6 @@ function botThink(b) {
     if (b.zombie) { zombieThink(b); return; }
     if (G.duel && b.duel) { duelThink(b); return; }
     if (G.ghostMode && b.ghost) { ghostBot(b); return; }
-    if (G.prop) { propBot(b); return; }
     const K = AIK();
     b.nextThink = G.time + (b.boss ? rand(90, 160) : rand(220, 480) * K.think);
     // Escape: the group follows you (or, on the title screen, whoever's in front)
@@ -12181,7 +9860,6 @@ function botThink(b) {
         chooseBotWeapon(b, bestD);
         return;
     }
-    if (G.payload && payloadBotPlan(b)) return;
     if (G.temple && templeBotPlan(b)) return;
     if (outside) {
         b.mode = 'zone';
@@ -12194,45 +9872,6 @@ function botThink(b) {
     if (b.mode === 'loot' && b.goal && !b.goal.gone && !claimedByOther(b.goal, b)) return;
     if (b.mode === 'box' && b.goal && !b.goal.broken) return;
     if (b.mode === 'tocar' && b.goal && !b.goal.dead && !b.goal.driver) return;
-    // Escape: people stick with the group's leader (you), only stopping for loot that's right there;
-    // soldiers hold their post, patrol, or sweep toward where the runners are
-    if (G.escape) {
-        if (!b.soldier) {
-            const near = nearestLoot(b.x, b.y, 160, l => botWants(b, l.key) && !claimedByOther(l, b) && !gaveUpOn(b, l));
-            if (near) { b.mode = 'loot'; b.goal = near; near.claim = b; return; }
-            const cg = G.chase && chaseRunnerGoal(b);
-            if (cg) { b.mode = 'zone'; b.goal = cg; return; }
-            if (b.lead && b.lead !== b) {
-                b.mode = 'follow';
-                b.goal = b.lead;
-                // Where my spot is right now; if it's inside a wall or round a corner from the leader, tuck in closer
-                const t = b.lead, a0 = (t.moveHeading || 0) + (b.slotA || 0);
-                let pt = null, a = a0;
-                for (const off of [0, 0.5, -0.5, 1, -1]) {
-                    for (const k of [1, 0.6]) {
-                        const r = (b.slotR || 150) * k, q = { x: t.x + Math.cos(a0 + off) * r, y: t.y + Math.sin(a0 + off) * r };
-                        if (!blockedAt(G.world.grid, q.x, q.y, b.r + 2) && !(G.chase && chaseBad(q.x, q.y)) && lineOfSight(t, q)) { pt = q; a = a0 + off; break; }
-                    }
-                    if (pt) break;
-                }
-                // Nowhere sensible: hang back a little on my side of the leader rather than on top of them
-                if (!pt) { const d = dist(b, t) || 1; pt = { x: t.x + ((b.x - t.x) / d) * 90, y: t.y + ((b.y - t.y) / d) * 90 }; }
-                b.slotPt = pt;
-                b.slotDir = a;
-                return;
-            }
-        }
-        if (b.post && dist(b, b.post) > 260) { b.mode = 'zone'; b.goal = b.post; return; }
-        if (b.post) { b.mode = 'wander'; b.heading = Math.atan2(b.post.y - b.y, b.post.x - b.x) + rand(-2, 2); return; }
-        if (b.squad) {
-            // Keep my place in the squad around its waypoint; mill about once I'm there
-            const g = b.squad.goal, spot = { x: g.x + b.sqOff.x, y: g.y + b.sqOff.y };
-            if (dist(b, spot) > 70) { b.mode = 'zone'; b.goal = spot; return; }
-            b.mode = 'wander';
-            b.heading = rand(0, TAU);
-            return;
-        }
-    }
     const armed = b.inv.some(Boolean), march = armed && marchTarget(b);
     // A soldier with a gun picks up what's close at hand on the way, but doesn't go wandering off for it
     const loot = nearestLoot(b.x, b.y, march ? 220 : 450, l => botWants(b, l.key) && !claimedByOther(l, b) && !gaveUpOn(b, l));
@@ -12476,9 +10115,7 @@ function findPath(b, gx, gy, reach = 50, opt = PATH) {
 function updateBot(b, dt) {
     // Downed: lying there waiting for help
     if (b.downed) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
-    // (Chase: soldiers far away on land wait where they are until you get closer)
-    if (G.chase && b.soldier && !b.ship && !b.swim && G.player && Math.abs(b.x - G.player.x) + Math.abs(b.y - G.player.y) > 9000) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
-    if (G.navy && (!G.chase || b.ship || b.swim)) { navyBot(b, dt); return; }
+    if (G.navy) { navyBot(b, dt); return; }
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
     if (G.duel && b.duel && duelBotMove(b, dt)) return;
@@ -12495,10 +10132,6 @@ function updateBot(b, dt) {
             if (G.temple && G.temple.idol.carrier === b) {
                 // (carrying the idol: keep running for home, shooting on the way)
                 const c = templeCamp(b.team), wp = routeTo(b, c.x, c.y); dx = wp.x - b.x; dy = wp.y - b.y;
-            } else if (G.payload && b.team === 0 && !isHuman(b)) {
-                // (Payload: Blue keeps to the platform and shoots from it; chasing Red down is Red's job, not theirs)
-                const q = payloadSpotFor(b), dq = Math.hypot(q.x - b.x, q.y - b.y);
-                if (dq > 30) { const wp = dq > 160 ? routeTo(b, q.x, q.y) : q; dx = wp.x - b.x; dy = wp.y - b.y; }
             } else if (G.escape && b.lead && b.lead !== b && dist(b, b.lead) > 380) {
                 // The group shoots on the move: nobody gets left behind
                 const wp = routeTo(b, b.lead.x, b.lead.y);
@@ -12521,19 +10154,6 @@ function updateBot(b, dt) {
             const inRange = d < w.range + (w.melee ? t.r : 0);
             const unseen = t.ghost && !ghostSeen(t) && d > 60;  // (the ghost vanished again: hold fire)
             if (b.hasLOS && !unseen && G.time > b.engageAt && inRange && Math.abs(angleDiff(b.angle, want)) < 0.3) tryAttack(b);
-            break;
-        }
-        case 'propshoot': {
-            // Prop Hunt: test-firing at a prop that might be someone
-            const o = b.goal;
-            if (!o || o.dead || o.seeker || G.time > b.shootUntil) { b.mode = 'wander'; b.nextThink = G.time; break; }
-            const d = dist(b, o);
-            if (d > 230) { const wp = routeTo(b, o.x, o.y); dx = wp.x - b.x; dy = wp.y - b.y; b.shootUntil += dt * 1000; }
-            const want = Math.atan2(o.y - b.y, o.x - b.x);
-            b.angle += angleDiff(b.angle, want) * Math.min(1, dt * 10);
-            faceMove = false;
-            if (d < 320 && Math.abs(angleDiff(b.angle, want)) < 0.15) tryAttack(b);
-            if (o.prop && G.time - o.lastHurt < 250) { b.mode = 'fight'; b.target = o; b.hasLOS = true; b.lastSeen = G.time; }
             break;
         }
         case 'box': {
@@ -12711,40 +10331,6 @@ function initChaos() {
 // Where the chaos centers: you, or the camera on the title screen
 const chaosCenter = () => (G.player && !G.player.dead ? G.player : G.cam);
 
-function updateChaos(dt) {
-    const c = chaosCenter(), W = CONFIG.WORLD_SIZE;
-    // Missiles rain down around you; a third of them aim at buildings
-    if (G.time >= G.nextStrike) {
-        G.nextStrike = G.time + rand(...CHAOS.strikeEvery);
-        const towers = G.world.buildings.filter(b => !b.collapsed && !b.hq && Math.hypot(b.cx - c.x, b.cy - c.y) < 2000);
-        let x, y;
-        if (towers.length && Math.random() < 0.35) { const b = pick(towers); x = b.cx + rand(-0.3, 0.3) * b.w; y = b.cy + rand(-0.3, 0.3) * b.h; }
-        else { const a = rand(0, TAU), d = rand(750, 2200); x = clamp(c.x + Math.cos(a) * d, 100, W - 100); y = clamp(c.y + Math.sin(a) * d, 100, W - 100); }
-        if (!G.hq || !(x > G.hq.x0 - 200 && x < G.hq.x1 + 200 && y > G.hq.y0 - 200 && y < G.hq.y1 + 200)) callStrike(x, y, null, false);
-    }
-    // Now and then a jet screams over and drops a line of bombs
-    if (G.time >= G.nextJet) {
-        G.nextJet = G.time + rand(...CHAOS.jetEvery);
-        const a = rand(0, TAU), tx = c.x + rand(-700, 700), ty = c.y + rand(-700, 700);
-        G.jets.push({ x: tx - Math.cos(a) * 2600, y: ty - Math.sin(a) * 2600, vx: Math.cos(a) * 1100, vy: Math.sin(a) * 1100, tx, ty, bombs: randInt(4, 7), next: 0 });
-        Sound.tone(140, 2.4, 'sawtooth', 0.05, 60);
-    }
-    for (const j of G.jets) {
-        j.x += j.vx * dt; j.y += j.vy * dt;
-        if (j.bombs > 0 && Math.hypot(j.x - j.tx, j.y - j.ty) < 700 && G.time >= j.next) {
-            j.bombs--;
-            j.next = G.time + 160;
-            G.bombs.push({ x: j.x + rand(-30, 30), y: j.y + rand(-30, 30), t: 0, T: 0.7 });
-        }
-    }
-    G.jets = G.jets.filter(j => Math.hypot(j.x - j.tx, j.y - j.ty) < 3200);
-    for (const bm of G.bombs) {
-        bm.t += dt;
-        if (bm.t >= bm.T) { bm.done = true; blast(bm.x, bm.y, null, CHAOS.bomb.radius, CHAOS.bomb.damage, 'Bomb'); }
-    }
-    G.bombs = G.bombs.filter(bm => !bm.done);
-    updateTraffic(dt, c);
-}
 
 // Damage the world takes in every mode: delayed explosions, smoking and collapsing buildings, fires
 function updateWreckage(dt) {
@@ -13619,11 +11205,6 @@ const pitchDark = () => !!G && (G.zombies || G.ghostMode) && G.mode !== 'demo'; 
 function darkness() {
     if ((G.zombies || G.ghostMode) && G.mode !== 'demo') return ZOMBIE_DARK;
     if (G.world.terrain === 'cavern') return CAVERN.dark;
-    if (G.chase) {
-        // Chase: bright sunshine by day; at night very dark, but you can still make out the shapes of things
-        const t = dayT(), n = t < 0.45 ? 0 : t < 0.55 ? (t - 0.45) / 0.1 : t < 0.9 ? 1 : (1 - t) / 0.1;
-        return CHASE.dayDark + n * (CHASE.nightDark - CHASE.dayDark);
-    }
     if (!G.dayCycle || G.world.floor) return 0;
     const t = dayT();
     if (t < 0.45) return 0;
@@ -13717,24 +11298,7 @@ function drawLighting(camX, camY, zoom) {
         grad.addColorStop(0, 'rgba(0,0,0,0.85)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = grad;
         g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, len, p.angle - 0.35, p.angle + 0.35); g.closePath(); g.fill();
-        if (!pitch && !G.chase) for (const f of G.fighters) if (f !== p && !f.dead && f.team !== null && f.team === p.team && Math.abs(f.x - p.x) < 1400 && Math.abs(f.y - p.y) < 1000) light(f.x, f.y, 120, 0.5);
-    }
-    // Chase: everyone in the squad carries a flashlight too
-    if (G.chase && dark > 0.1) for (const f of G.fighters) {
-        if (f === p || f.dead || f.soldier || f.team !== 0 || f.car) continue;
-        const sx = (f.x - camX) * s, sy = (f.y - camY) * s, L = 650 * s;
-        if (sx < -L || sy < -L || sx > w + L || sy > h + L) continue;
-        const grad = g.createRadialGradient(sx, sy, 0, sx, sy, L);
-        grad.addColorStop(0, 'rgba(0,0,0,0.75)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
-        g.fillStyle = grad; g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, L, f.angle - 0.33, f.angle + 0.33); g.closePath(); g.fill();
-        light(f.x, f.y, 150, 0.6);
-    }
-    // Chase: the airships' scanners light up the ground
-    if (G.chase) for (const z of G.chase.blimps) { light(z.x, z.y, CHASE.blimp.scan * 1.1, 0.7); light(z.x + Math.cos(z.sweep + 0.25) * CHASE.blimp.scan * 0.55, z.y + Math.sin(z.sweep + 0.25) * CHASE.blimp.scan * 0.55, 260, 0.9); }
-    if (G.chase) for (const c of G.chase.helis) {
-        if (c.dead || !c.driver) continue;
-        const b = c.driver, lit = b.heliPrey && !b.heliPrey.dead;
-        light(lit ? b.heliPrey.x : c.x + Math.cos(c.a) * 170, lit ? b.heliPrey.y : c.y + Math.sin(c.a) * 170, CHASE.heliSight * 0.7, 0.95);
+        if (!pitch) for (const f of G.fighters) if (f !== p && !f.dead && f.team !== null && f.team === p.team && Math.abs(f.x - p.x) < 1400 && Math.abs(f.y - p.y) < 1000) light(f.x, f.y, 120, 0.5);
     }
     if (pitch) {
         // Everyone else carries a flashlight too (zombies don't): you see their beams sweep the dark
@@ -15457,19 +13021,6 @@ function paintTerrainBase(g, x0, y0, S) {
 }
 
 // Maze: the minimap only shows the corridors you've been through (and the ones opening off them)
-function updateMazeFog() {
-    const M = G.world.maze, p = G.player;
-    if (!M || G.world.floor || !p || p.dead) return;
-    const n = M.n, i = Math.floor(clamp(p.x / M.cs, 0, n - 1)), j = Math.floor(clamp(p.y / M.cs, 0, n - 1)), c = i + j * n;
-    if (M.seen[c] && M.lastCell === c) return;
-    M.lastCell = c;
-    let fresh = !M.seen[c];
-    M.seen[c] = 1;
-    for (const [a, b, open] of [[i + 1, j, i < n - 1 && !M.east[i][j]], [i - 1, j, i > 0 && !M.east[i - 1][j]], [i, j + 1, j < n - 1 && !M.south[i][j]], [i, j - 1, j > 0 && !M.south[i][j - 1]]]) {
-        if (open && !M.seen[a + b * n]) { M.seen[a + b * n] = 1; fresh = true; }
-    }
-    if (fresh) drawMazeMap();
-}
 
 function drawMazeMap() {
     const M = G.world.maze, n = M.n, cs = M.cs, k = 200 / CONFIG.WORLD_SIZE, g = G.world.minimap.getContext('2d');
@@ -15513,18 +13064,6 @@ function mazeRoute(b, gx, gy) {
 }
 
 // The extraction helicopter waiting at the end of the maze or on the summit
-function drawExtraction(now) {
-    if (G.chase) { drawAirship(now); return; }
-    const e = G.extract;
-    if (!e || G.world.floor || !inView(e.x, e.y, 300)) return;
-    ctx.fillStyle = '#2f3a33';
-    ctx.beginPath(); ctx.arc(e.x, e.y, 130, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 8;
-    ctx.beginPath(); ctx.arc(e.x, e.y, 116, 0, TAU); ctx.stroke();
-    ctx.fillStyle = '#fff7ec';
-    ctx.fillRect(e.x - 40, e.y - 45, 14, 90); ctx.fillRect(e.x + 26, e.y - 45, 14, 90); ctx.fillRect(e.x - 40, e.y - 7, 80, 14);
-    drawHelicopter(e.x, e.y, now);
-}
 
 // Snow drifting down once you're high on the mountain
 function drawSnowfall(now) {
@@ -16597,7 +14136,6 @@ const canDrive = b => !isHuman(b) && !b.zombie && !b.decoy && !b.riding && !b.up
 
 // Steer toward a point, swerving round anything in the way; back up and try again when stuck
 function botDrive(c, b, dt) {
-    if (G.chase && vt(c).fly) return chaseHeliBot(c, b, dt);
     if (G.navy) return navyPilot(c, b, dt);
     const T = vt(c);
     if (G.time >= (b.driveThink || 0)) {
@@ -17380,10 +14918,6 @@ function moveFighter(f, dt) {
             f.y = o.y + (dy / d) * min;
         }
     });
-    // Chase: the mountains are a wall, except along the river and its banks
-    // (and soldiers on dry land don't wade into the river after you: they shoot from the bank)
-    const chaseNo = (x, y) => chaseRock(x, y) || (f.soldier && !f.swim && chaseWet(x, y, 0));
-    if (G.chase && !f.ship && chaseNo(f.x, f.y)) { if (!chaseNo(f.x, oy)) f.y = oy; else if (!chaseNo(ox, f.y)) f.x = ox; else { f.x = ox; f.y = oy; } }
     const W = CONFIG.WORLD_SIZE;
     f.x = clamp(f.x, f.r, W - f.r);
     f.y = clamp(f.y, f.r, W - f.r);
@@ -17462,8 +14996,6 @@ function updateBullets(dt) {
                 G.particles.push({ type: 'glow', x: b.x, y: b.y, vx: -b.vx * 0.1, vy: -b.vy * 0.1, life: 0.2, max: 0.2, size: rand(4, 7), color: '#ffb347' });
             }
 
-            if (G.chase && G.chase.blimps.length && chaseBlimpHit(b)) { b.dead = true; break; }
-            if (G.payload && payloadShieldHit(b)) { b.dead = true; break; }
             // (a Shock Pistol bolt crackles and throws off sparks as it flies)
             if (s === 0 && b.spark && inView(b.x, b.y, 60)) shockSparks(b.x, b.y, 2, 0.35, -b.vx * 0.05, -b.vy * 0.05);
             if (G.navy && navyBullet(b)) { b.dead = true; break; }
@@ -17524,7 +15056,6 @@ function updateBullets(dt) {
                 const rr = f.r + 3;
                 if ((b.x - f.x) ** 2 + (b.y - f.y) ** 2 < rr * rr) hit = f;
             });
-            if (!hit && G.prop && propBulletHit(b)) { b.dead = true; break; }
             if (!hit && G.traffic.length && !G.world.floor && bulletHitsCar(b)) { b.dead = true; break; }
             if (!hit && G.world.cars && !b.torpedo && bulletHitsDrivenCar(b)) { b.dead = true; break; }
             if (!hit && G.drones && G.drones.length && bulletHitsDrone(b)) { b.dead = true; break; }
@@ -17594,15 +15125,11 @@ function update(dt) {
     if (G.war && G.time >= G.war.nextCenter) updateTeamCenters();
     if (G.noZone) updateOutbreak(dt);
     if (G.ghostMode) updateGhost(dt);
-    if (G.prop) updateProp(dt);
-    if (G.payload) updatePayload(dt);
     if (G.temple) updateTemple(dt);
     if (G.duel) updateDuel(dt);
-    if (G.world.maze && G.escape && G.mode === 'playing') updateMazeFog();
     if (G.survival) { if (!G.frozen && !G.world.floor) updateAnimals(dt); updateCountdown(); }
     updateDayCycle();
     if (G.escape && !G.world.floor && G.time >= G.nextSquads) updateSquads();
-    if (G.escape && G.world.city && !G.world.floor && G.mode !== 'over') updateChaos(dt);
     if (!G.world.floor) updateWreckage(dt);
     const z = G.zone;
 
@@ -17754,9 +15281,7 @@ function render() {
 
     // Ground
     const W = CONFIG.WORLD_SIZE;
-    if (G.chase) drawChaseGround(L, T, R, B, now);
-    else if (G.navy) drawSea(L, T, R, B, now);
-    else if (G.payload) drawPayloadGround(L, T, R, B);
+    if (G.navy) drawSea(L, T, R, B, now);
     else if (G.world.temple) drawTempleGround(L, T, R, B);
     else if (G.world.floor) drawFloorBase(L, T, R, B);
     else if (G.world.city) drawCity(L, T, R, B);
@@ -17865,13 +15390,9 @@ function render() {
     if (G.world.city && !G.world.floor) drawLamps(cx, cy, half);
     const chaos = G.escape && !G.world.floor;
     if (chaos) { drawBombs(); drawTraffic(); }
-    if (G.extract) drawExtraction(now);
 
     if (G.navy) drawNavy(L, T, R, B, now);
     if (G.navy) drawNavyInterior(L, T, R, B, now);
-    if (G.chase) { drawChaseLights(); drawChaseScans(now); }
-    if (G.prop) drawPropDecoys(L, T, R, B);
-    if (G.world.payload) drawPayloadProps(now);
     if (G.world.temple) drawTempleProps(now);
     // Fighters
     const visible = [];
@@ -17932,7 +15453,6 @@ function render() {
         drawRoof(b);
     }
     drawFallingRoofs();
-    if (G.chase) { drawChaseRoofs(p); drawChaseBlimps(now); }
     if (G.revolution) drawDecks(L, T, R, B);
 
     if (G.navy) drawNavyLabels();
@@ -17977,8 +15497,6 @@ function render() {
         const a = Math.min(1, G.hurt * 0.8 + low);
         if (a > 0.01) { ctx.globalAlpha = a; ctx.drawImage(hurtVignette, 0, 0, viewW, viewH); ctx.globalAlpha = 1; }
     }
-    if (G.prop) drawPropBlindfold();
-    if (G.payload) drawPayloadOverlay();
     if (G.temple) drawTempleOverlay();
     if (G.whiteout > 0.01) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, G.whiteout * 1.6)})`; ctx.fillRect(0, 0, viewW, viewH); }
     if (G.flash > 0.01) {
@@ -19022,7 +16540,6 @@ function playerGlow(x, y, r) {
 
 function drawFighter(f) {
     if (f.duelOut) return;
-    if (f.prop) { drawPropShape(ctx, f.x, f.y, f.prop, f.propVar, f.propA, f === G.player); return; }
     if (f.downed) { drawDowned(f); return; }
     // (the boss is drawn as a normal fighter blown up to giant size, gun and all)
     const gk = f.giant ? f.r / CONFIG.RADIUS : 1, r = f.giant ? CONFIG.RADIUS : f.r;
@@ -19229,7 +16746,6 @@ function drawOverhead(f) {
     const p = G.player;
     if (f.duelOut) return;
     if (f.ghost && f !== p && !ghostSeen(f)) return;
-    if (f.prop) return;
     if (f.hidden && p && !p.dead && f !== p && foe(p, f) && dist(f, p) > CONFIG.HIDDEN_SIGHT) return;
     if (f.healing) {
         const t = (G.time - f.healing.start) / (f.healing.end - f.healing.start);
@@ -19659,7 +17175,7 @@ function updateHUD() {
     if (G.revolution) {
         const Rv = G.revolution;
         setHTML(hud.teamScore, 'teams', [0, 1].map(t => `<div class="ts${t === p.team ? ' mine' : ''}${revoLeft(t) === 0 ? ' out' : ''}"><i style="background:${REVO.sides[t].flag}"></i><b>${G.teamAlive[t]}</b><span>${revoName(t)} · ${Rv.bases[t].fallen ? 'base fallen' : `base ${Math.round(baseHealth(Rv.bases[t]) * 100)}% · strike ${Math.floor(Rv.bases[t].strike.ammo / 100) / 10}k/${REVO.strike.cost / 1000}k`}</span></div>`).join('<em>vs</em>'));
-    } else if (G.navy && !G.chase) {
+    } else if (G.navy) {
         const left = G.navy.left || [0, 0], chip = t => `<div class="ts${t === p.team ? ' mine' : ''}${left[t] === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${left[t]}</b><span>${t === p.team ? 'Your ships' : 'Enemy ships'} · ${G.teamAlive[t]} people</span></div>`;
         if (G.navy.ffa) { const k = G.war.teams, still = k - G.navy.out.filter(Boolean).length; setHTML(hud.teamScore, 'teams', chip(p.team).replace('Your ships', 'Your ship') + '<em>vs</em>' + `<div class="ts"><i style="background:#fff7ec"></i><b>${Math.max(0, still - 1)}</b><span>Other squads left</span></div>`); }
         else setHTML(hud.teamScore, 'teams', chip(0) + '<em>vs</em>' + chip(1));
@@ -19669,13 +17185,6 @@ function updateHUD() {
     } else if (G.temple) {
         const sc = G.temple.score, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
         setHTML(hud.teamScore, 'teams', chip(sc[0], TEMPLE.blue, `Blue (first to ${TEMPLE.wins})`, p.team === 0) + '<em>vs</em>' + chip(sc[1], TEMPLE.red, 'Red', p.team === 1));
-    } else if (G.payload) {
-        const P = G.payload, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
-        setHTML(hud.teamScore, 'teams', chip(P.pushers, PAYLOAD.blue, 'Blue on the platform', p.team === 0) + '<em>vs</em>' + chip(P.red || 0, PAYLOAD.red, 'Red blocking', p.team === 1));
-    } else if (G.prop) {
-        const h = G.fighters.filter(f => !f.dead && f.prop).length, sk = G.fighters.filter(f => !f.dead && f.seeker).length;
-        const chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
-        setHTML(hud.teamScore, 'teams', chip(h, '#d9a066', 'Props', !!p.prop) + '<em>vs</em>' + chip(sk, PROP.color, 'Seekers', !!p.seeker));
     } else if (G.noZone) {
         const { a, b } = G.sides;
         const chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
@@ -19688,22 +17197,12 @@ function updateHUD() {
     }
 
     let zt;
-    if (G.chase) zt = chaseStatus(p);
-    else if (G.navy) zt = navyStatus(p);
-    else if (G.prop) zt = propStatus(p);
-    else if (G.payload) zt = payloadStatus(p);
+    if (G.navy) zt = navyStatus(p);
     else if (G.temple) zt = templeStatus(p);
     else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
     else if (G.ghostMode) zt = p.ghost ? `Haunt them all · ${G.fighters.filter(f => !f.dead && !f.ghost).length} hunters left` : 'Find the ghost · follow its glowing footprints';
-    else if (G.escape) {
-        const F = G.world.floor;
-        if (!F && G.extract) zt = `Reach the extraction helicopter · ${Math.round(dist(p, G.extract) / 10)}m`;
-        else if (!F) zt = `Get to the HQ tower · ${Math.round(dist(p, { x: G.hq.cx, y: G.hq.cy }) / 10)}m`;
-        else if (F.roof) zt = 'Get to the helicopter!';
-        else zt = `${F.b.hq ? 'HQ' : F.b.kind} floor ${F.level}/${F.b.floors}${F.b.hq ? ': find the stairs up' : ''}`;
-    }
     else if (G.revolution) zt = p.dead ? (G.revolution.queue.some(q => q.f === p) ? `Respawning in ${Math.ceil((G.revolution.queue.find(q => q.f === p).at - G.time) / 1000)}s` : 'Dead: spectating') : `Wipe out the ${revoName(1 - p.team)} · ${fmtTime(Math.max(0, (REVO.timeLimit - G.time) / 1000))} left`;
     else if (z.state === 'wait') zt = `Zone shrinks in ${fmtTime(z.timer)}`;
     else if (z.state === 'shrink') zt = `Zone closing ${fmtTime(z.timer)}`;
@@ -19927,33 +17426,6 @@ function drawMinimap() {
         g.fillStyle = TEAMS[p.team].color;
         for (const f of G.fighters) if (f.team === p.team && !f.isPlayer) g.fillRect(f.x * k - 1.5, f.y * k - 1.5, 3, 3);
     }
-    // Escape: your group, the stairs, and a line to where you need to go next (HQ, stairs up, or helicopter)
-    if (G.escape) {
-        g.fillStyle = TEAMS[2].color;
-        for (const f of G.fighters) if (!f.soldier && !f.isPlayer) g.fillRect(f.x * k - 1.5, f.y * k - 1.5, 3, 3);
-        const F = G.world.floor;
-        if (F) {
-            g.fillStyle = '#ff5a5f';
-            for (const f of G.fighters) if (f.soldier) g.fillRect(f.x * k - 1.5, f.y * k - 1.5, 3, 3);
-            for (const st of G.world.stairs) {
-                g.fillStyle = st.dir === 'up' ? '#7dffb0' : '#8fd8ff';
-                g.fillRect(st.x * k - 5, st.y * k - 5, 10, 10);
-            }
-        }
-        const goal = !F ? (G.chase ? chaseNext() : G.extract || { x: G.hq.cx, y: G.hq.cy }) : F.heli || (F.b.hq ? G.world.stairs.find(s => s.dir === 'up') : null);
-        if (!F) {
-            g.fillStyle = '#ffd166'; g.strokeStyle = '#160e28'; g.lineWidth = 2;
-            g.beginPath(); g.arc(goal.x * k, goal.y * k, 7, 0, TAU); g.fill(); g.stroke();
-            g.fillStyle = '#160e28'; g.font = '700 7px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(G.extract ? 'GO' : 'HQ', goal.x * k, goal.y * k + 0.5);
-        } else if (F.heli) {
-            g.fillStyle = '#ffd166';
-            g.beginPath(); g.arc(F.heli.x * k, F.heli.y * k, 9, 0, TAU); g.fill();
-        }
-        if (goal && !p.dead) {
-            g.strokeStyle = 'rgba(255,209,102,0.8)'; g.lineWidth = 1.2;
-            g.beginPath(); g.moveTo(p.x * k, p.y * k); g.lineTo(goal.x * k, goal.y * k); g.stroke();
-        }
-    }
     // Zombies: you can see the horde coming (or your fellow zombies)
     if (G.zombies) {
         g.fillStyle = ZOMBIE.color;
@@ -20033,13 +17505,9 @@ const MODES = [
     { id: 'ffa', name: 'FREE FOR ALL', desc: 'Every player for themselves. Last one standing wins.' },
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
-    { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
     { id: 'temple', name: 'TREASURE TEMPLE', desc: 'Two teams race through a jungle and into a giant temple maze full of traps and secret passages, to grab the golden idol and carry it home.' },
-    { id: 'payload', name: 'PAYLOAD', desc: 'Blue rides a shielded platform along a winding track, up and down hills, from their base to the middle of Red\'s. It only moves with Blue on it. Red tries to stop it. Launch site, canyon or forest.' },
-    { id: 'prop', name: 'PROP HUNT', desc: 'The hiders turn into barrels, crates, bushes and more, hidden among hundreds of real ones. The seekers have three minutes to find them. Anyone found joins the seekers.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
     { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
-    { id: 'chase', name: 'CHASE', desc: 'Your squad of 20 breaks out of an army facility, crosses a desert of ruins while helicopters hunt for you, takes a boat down a river through the mountains, crosses the ocean and reaches a giant airship. A long game, by day and by night: you have 500 health, the soldiers 45.' },
     { id: 'navy', name: 'BATTLESHIPS', desc: 'Two fleets at sea. Giant ships with turning cannons, deck guns, torpedoes and helicopters, up to 100 people on each. Take the wheel, man the guns, fly, or board the enemy and capture their ship.' }
 ];
 let ghostRolePick = 'hunter', navyRolePick = 'captain';
@@ -20061,13 +17529,11 @@ function setMenuMode(i, dir) {
     $('mode-desc').textContent = m.desc;
     $('settings-navy').classList.toggle('hidden', m.id !== 'navy');
     $('solo-friends').classList.toggle('hidden', !soloMap(m.id));
-    $('settings-ffa').classList.toggle('hidden', m.id === 'temple' || m.id === 'payload' || m.id === 'navy' || m.id === 'chase' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-ffa').classList.toggle('hidden', m.id === 'temple' || m.id === 'navy' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
-    $('settings-prop').classList.toggle('hidden', m.id !== 'prop');
-    $('settings-payload').classList.toggle('hidden', m.id !== 'payload');
     $('settings-temple').classList.toggle('hidden', m.id !== 'temple');
-    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : m.id === 'prop' ? `Other players (up to ${PROP.maxPlayers - 1})` : m.id === 'payload' ? `Other players (up to ${PAYLOAD.maxPlayers - 1})` : 'Opponents';
+    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
     // Revolution is always two sides
     $('team-count').closest('.cpu-row').classList.toggle('hidden', m.id === 'revolution');
@@ -20111,7 +17577,6 @@ function drawModePreview(now) {
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     if (id === 'zombies') { drawZombiePreview(g, Wd, Ht, now); return; }
     if (id === 'navy') { drawNavyPreview(g, Wd, Ht, now); return; }
-    if (id === 'escape' || id === 'chase') { drawEscapePreview(g, Wd, Ht, now); return; }
     g.save();
     g.fillStyle = SPR.grass;
     g.fillRect(0, 0, Wd, Ht);
@@ -20277,51 +17742,6 @@ function drawZombiePreview(g, Wd, Ht, now) {
     g.restore();
 }
 
-// Escape preview: city streets, people running for a helipad, soldiers closing in
-function drawEscapePreview(g, Wd, Ht, now) {
-    let seed = 23;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    g.save();
-    g.fillStyle = '#a19c93';
-    g.fillRect(0, 0, Wd, Ht);
-    g.fillStyle = '#77726a'; g.fillRect(0, Ht * 0.42 - 8, Wd, 76); g.fillRect(Wd * 0.62 - 8, 0, 76, Ht);
-    g.fillStyle = '#3f3f46'; g.fillRect(0, Ht * 0.42, Wd, 60); g.fillRect(Wd * 0.62, 0, 60, Ht);
-    g.fillStyle = 'rgba(240,200,80,0.75)';
-    for (let x = 10; x < Wd; x += 50) if (Math.abs(x - Wd * 0.62 - 30) > 50) g.fillRect(x, Ht * 0.42 + 28, 26, 4);
-    for (const [x, y, w, h, c] of [[20, 14, 150, 90, '#7d7f86'], [200, 20, 120, 80, '#8a857c'], [Wd * 0.62 + 80, 16, 120, 70, '#6b6f78'], [30, Ht * 0.42 + 80, 140, 80, '#958d80'], [Wd * 0.62 + 90, Ht * 0.42 + 84, 110, 80, '#5f646d']]) {
-        g.fillStyle = 'rgba(10,5,20,0.35)'; g.fillRect(x + 8, y + 10, w, h);
-        g.fillStyle = shade(c, -0.3); g.fillRect(x, y, w, h);
-        g.fillStyle = c; g.fillRect(x + 6, y + 6, w - 12, h - 12);
-        g.fillStyle = '#c9ccd2'; g.fillRect(x + w * 0.6, y + h * 0.3, 18, 18);
-    }
-    for (const [x, y, c] of [[90, Ht * 0.42 + 10, '#c0392b'], [Wd * 0.62 + 10, 200, '#2e86de']]) { g.fillStyle = c; roundRect(g, x, y, 76, 36, 8); g.fill(); }
-    // Helipad on the right
-    const hx = Wd * 0.88, hy = Ht * 0.5;
-    g.fillStyle = '#2f3a33'; g.beginPath(); g.arc(hx, hy, 44, 0, TAU); g.fill();
-    g.strokeStyle = `rgba(125,255,176,${0.6 + Math.sin(now * 4) * 0.3})`; g.lineWidth = 4; g.beginPath(); g.arc(hx, hy, 40, 0, TAU); g.stroke();
-    g.fillStyle = '#e8f5ec'; g.font = '700 34px "Black Ops One", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('H', hx, hy + 2);
-    const run = (now * 30) % 80;
-    const people = [], soldiers = [];
-    for (let i = 0; i < 7; i++) people.push({ x: Wd * 0.3 + rnd() * Wd * 0.3 + run, y: Ht * 0.42 + rnd() * 50, color: BOT_COLORS[i % BOT_COLORS.length] });
-    for (let i = 0; i < 9; i++) soldiers.push({ x: 20 + rnd() * Wd * 0.22, y: 20 + rnd() * (Ht - 40) });
-    for (const sd of [[Wd * 0.75, Ht * 0.12], [Wd * 0.72, Ht * 0.86]]) soldiers.push({ x: sd[0], y: sd[1] });
-    g.lineCap = 'round';
-    for (const s of soldiers) {
-        let best = people[0], bd = Infinity;
-        for (const f of people) { const d = Math.hypot(f.x - s.x, f.y - s.y); if (d < bd) { bd = d; best = f; } }
-        s.aim = Math.atan2(best.y - s.y, best.x - s.x);
-        const t = (now * 1.7 + s.x * 0.013) % 1;
-        const x = lerp(s.x, best.x, t), y = lerp(s.y, best.y, t);
-        g.strokeStyle = 'rgba(255,220,140,0.9)'; g.lineWidth = 2.5;
-        g.beginPath(); g.moveTo(x - Math.cos(s.aim) * 16, y - Math.sin(s.aim) * 16); g.lineTo(x, y); g.stroke();
-    }
-    for (const f of people) previewFighter(g, f.x, f.y, f.color, Math.atan2(hy - f.y, hx - f.x));
-    for (const s of soldiers) {
-        previewFighter(g, s.x, s.y, ESCAPE.soldier, s.aim);
-        g.fillStyle = '#3d4526'; g.beginPath(); g.arc(s.x - 0.5, s.y - 1, 6.5, 0, TAU); g.fill();
-    }
-    g.restore();
-}
 
 // Left half of the slider covers 1–100, right half 100–1000
 // Left half of the slider covers 1–100, right half 100 up to the max
@@ -20333,7 +17753,7 @@ function sliderToCount(v) {
 }
 
 // (Ghost only takes so many players)
-const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'ghost' ? GHOST.maxPlayers - 1 : id === 'prop' ? PROP.maxPlayers - 1 : id === 'payload' ? PAYLOAD.maxPlayers - 1 : Infinity; };
+const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'ghost' ? GHOST.maxPlayers - 1 : Infinity; };
 const showCpuValue = () => { $('cpu-value').textContent = Math.min(cpuCap(), sliderToCount(+slider.value)); };
 slider.addEventListener('input', showCpuValue);
 showCpuValue();
@@ -20431,7 +17851,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'prop' || id === 'payload' || id === 'temple' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'temple' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -20445,31 +17865,19 @@ const BRIEF = {
     survival: [['🎯', '<b>Goal:</b> be the last one alive.'], ['🍖', 'Hunt deer, rabbits and boars for meat, and drink at ponds.'], ['😴', 'Rest when you are tired.'], ['🐺', 'Day turns to night, and wolf packs come out in the dark.']],
     revolution: [['🎯', '<b>Goal:</b> wipe out the other side or bring down their castle.'], ['🏰', 'Each side has a castle with healing rooms, an armory, guard towers and cannons on the walls.'], ['💥', 'Load ammo into your boss strike pad and launch it at the enemy castle.'], ['☠️', 'No revives: when you die, you stay dead.']],
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
-    escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 BRIEF.temple = [['🗿', '<b>5 against 5.</b> Grab the golden idol from the altar in the middle of the temple maze and carry it back to your camp. First team to bring it home 3 times wins. Whoever carries it is slower.'], ['⚠️', 'Watch out for spikes, rolling boulders, collapsing floors, swinging axes, dart walls, spider webs, quicksand and snakes. Press <b>F</b> at a cracked wall to open a secret shortcut, at a stone hatch to use a hidden tunnel, or at an X to dig up a chest.']];
-BRIEF.payload = [['🛤️', '<b>5 against 5.</b> Blue pushes the platform along the track from their base to the target in the middle of Red\'s base. Red stops them before the time runs out.'], ['🧍', 'The platform only moves with Blue standing on it, faster with more of them. It stops while Red is next to it, and rolls back if Blue leaves it alone too long.'], ['🛡️', 'A shield across its front stops shots coming at it from ahead.'], ['⛰️', 'The track winds and goes up and down hills: slower uphill, faster downhill. Two checkpoints each add a minute.'], ['🔫', 'Everyone starts with <b>dual shock pistols</b>. Grab a machine gun, energy gun, guided rocket, sniper, shotgun, burst minigun or rifle from the racks in your base and along the track.'], ['⚡', '<b>Energy Gun:</b> hold to charge (on a phone or iPad, hold the aim stick in the middle), let go to fire. <b>Guided Rocket:</b> keep aiming after you fire to steer it.'], ['♻️', 'When you die you come back in your safe zone after 5 seconds. Nobody can hurt you in your own safe zone.']];
-BRIEF.prop = [['📦', '<b>Props:</b> you look like a barrel, crate, bush, rock, cone or the like, with hundreds of real ones all round. Stand beside ones that look like you, and keep still: a prop that moves is no prop.'], ['🔄', '<b>F</b> (or the button) turns you into the closest prop you\'re next to.'], ['🙈', 'The seekers wait blindfolded for 30 seconds while you hide, then have 3 minutes to find everyone.'], ['🔫', '<b>Seekers:</b> shoot anything that looks wrong. Watch for props that move, or that don\'t match the ones round them.'], ['🎵', 'Every so often each prop whistles: listen for it.'], ['🎯', 'A prop who\'s found joins the seekers. Props win if anyone is still hidden when the time runs out.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
-BRIEF.chase = [['🏃', '<b>Goal:</b> get your squad of 20 all the way to the giant airship at the far end of the world. It\'s a long journey across a huge world, through day and night: you each have <b>500 health</b>, and every soldier has 45. You never run out of ammo, and everyone carries an electric <b>Shock Pistol</b> whose bolts jump to nearby enemies.'],
-    ['🏭', '<b>1. The facility.</b> You start in the cell block. The soldiers want you gone: fight your way out through the east or north gate.'],
-    ['🏜️', '<b>2. The desert, the hardest part.</b> Broken, abandoned buildings everywhere, giant slow airships sweeping the ground with scanners (get under a roof or into a cave to hide), waves of soldiers who hit hard, and more lying in ambush in the towns, big ruins and boulder fields. If an airship\'s scanner catches you out in the open it locks on and drops soldiers on you, so move from roof to roof, or hide in the caves in the giant boulder areas. You can shoot an airship down, but it takes a lot. The boat waits at a pier where the river starts, far to the north-east.'],
-    ['⛰️', '<b>3. The mountains.</b> Walk onto the boat and it sails down the long river winding through the mountain range (take the wheel yourself if you like). Soldier boats patrol the river: you can also walk the banks beside it, and the boat keeps pace with you. Ambushes wait on the banks.'],
-    ['🌊', '<b>4. The ocean.</b> The river runs out to sea. Cross it to the land in the north-east, past the enemy ships.'],
-    ['🎈', '<b>5. The airship.</b> Walk up the ramp under the airship and everyone near you flies away with you.'],
-    ['🤝', 'Your squad follows you. The mountains are a wall: only the river valley gets through them. In the water you slowly drown.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { temple: 'Jungle Temple', launchpad: 'Launch Site', canyon: 'Canyon', forest: 'Forest', chase: 'Desert, mountains and ocean', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
+const BRIEF_MAP = { temple: 'Jungle Temple', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
 function controlsFor(id) {
     const t = TOUCH.enabled, list = (t ? CONTROLS_TOUCH : CONTROLS_KEYS).slice();
     if (id === 'navy') list.push(['🧭', t ? 'The <b>bottom button</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: stick up and down for speed, left and right to steer' : '<b>F</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: <b>W S</b> speed, <b>A D</b> steer']);
-    if (id === 'payload') list.push(['⚡', t ? 'Energy Gun: hold the aim stick in the middle to charge, push it out or let go to fire · Guided Rocket: keep aiming to steer it' : 'Energy Gun: hold the mouse to charge, let go to fire · Guided Rocket: keep aiming to steer it']);
-    if (id === 'prop') list.push(['🔄', t ? 'As a prop, the <b>bottom button</b> turns you into the prop you\'re next to' : 'As a prop, <b>F</b> turns you into the prop you\'re next to']);
     if (id === 'duel') list.push(['🤫', t ? 'Scoped in, you walk slowly and quietly' : 'Hold <b>Shift</b> or scope in to walk slowly and quietly']);
     if (id === 'survival') list.push(['🍖', t ? 'Tap the meat or water on the left to eat or drink' : '<b>C</b> eat · <b>V</b> drink or fill a bucket at water · <b>B</b> rest']);
     if (id === 'revolution') list.push(['💥', t ? 'At your boss strike pad, the bottom button loads ammo or launches it' : 'At your boss strike pad, <b>F</b> loads ammo or launches it']);
@@ -20489,17 +17897,17 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'prop' ? `You: ${propRolePick === 'seeker' ? 'Seeker' : 'Prop'}` : m.id === 'payload' ? `You: ${payloadSidePick === 'red' ? 'Red' : 'Blue'}` : m.id === 'temple' ? `You: ${templeSidePick === 'red' ? 'Red' : 'Blue'} team` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'temple' ? `You: ${templeSidePick === 'red' ? 'Red' : 'Blue'} team` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'prop' || m.id === 'payload' || m.id === 'temple' || m.id === 'chase' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'temple' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'prop' || id === 'payload' || id === 'temple' || id === 'duel' || id === 'navy' || id === 'chase') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'temple' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
     else { const map = BRIEF_STAGE.map; quickMatch(() => startGame(map)); }
 });
 $('brief-back').addEventListener('click', () => {
@@ -20507,7 +17915,7 @@ $('brief-back').addEventListener('click', () => {
     // (a mode with only one map never showed the map screen: back to whatever came before it)
     if (BRIEF_STAGE.stage === 'desc') screens.menu.classList.remove('hidden');
     else if (!soloMap(MODES[menuMode].id)) screens.mapsel.classList.remove('hidden');
-    else if (['ghost', 'prop', 'payload', 'temple', 'navy', 'chase'].includes(MODES[menuMode].id)) openDescription();
+    else if (['ghost', 'temple', 'navy'].includes(MODES[menuMode].id)) openDescription();
     else openTypeSelect();
 });
 
@@ -20515,27 +17923,23 @@ $('brief-back').addEventListener('click', () => {
 let lastMap = 'ordinary';
 function mapAllowed(id, m) {
     if (id === 'navy') return m === 'sea';
-    if (id === 'chase') return m === 'chase';
-    if (id === 'prop') return m === 'ordinary' || m === 'city' || m === 'rusty';
-    if (id === 'payload') return PAYLOAD_MAPS.includes(m);
     if (id === 'temple') return m === 'temple';
     if (m === 'temple') return false;
-    if (PAYLOAD_MAPS.includes(m)) return false;
-    return !(m === 'sea' || m === 'chase' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
+    return !(m === 'sea' || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
 // The one map a mode can be played on, if there's only one: then there's nothing to choose
 function soloMap(id) {
-    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'chase', 'temple', ...PAYLOAD_MAPS].filter(m => mapAllowed(id, m));
+    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'temple'].filter(m => mapAllowed(id, m));
     return all.length === 1 ? all[0] : null;
 }
 function openMapSelect() {
-    const id = MODES[menuMode].id, escape = id === 'escape', solo = soloMap(id);
+    const id = MODES[menuMode].id, solo = soloMap(id);
     if (solo) { screens.menu.classList.add('hidden'); screens.typesel.classList.add('hidden'); openBriefing(solo); return; }
     for (const card of document.querySelectorAll('#mapsel .map-card')) {
         const m = card.dataset.map;
         card.classList.toggle('hidden', !mapAllowed(id, m));
         card.disabled = false;
-        card.querySelector('.map-desc').textContent = (escape && ESCAPE_MAP_DESC[m]) || MAP_DESC[m];
+        card.querySelector('.map-desc').textContent = MAP_DESC[m];
     }
     screens.menu.classList.add('hidden');
     screens.mapsel.classList.remove('hidden');
@@ -20548,32 +17952,12 @@ const MAP_DESC = {
     mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.',
     haunted: 'A giant haunted mansion full of candlelit rooms and coffins, in a foggy cemetery of graves, crypts and dead trees behind an iron fence.',
     cavern: 'The boss\'s lair: a giant cave deep underground with rocks everywhere, glowing crystals and lava cracks.',
-    launchpad: 'A rocket launch site: concrete, blast walls, fuel tanks and rockets on their pads. Launch pads on the track throw the platform into the air.',
-    canyon: 'The track runs along the bottom of a winding canyon, with side passages and rocky mesas up above.',
-    forest: 'A thick forest: trees and bushes everywhere, with the track winding through.',
     wasteland: 'Made for sniping: wide open ground, a few lone trees and broken junk everywhere, no cars. Snipe from far away.'
-};
-const ESCAPE_MAP_DESC = {
-    city: 'Cross the city to the HQ tower and fight up 12 floors to the helicopter.',
-    maze: 'The hardest escape: a huge maze of machine-gun nests and minefields, and your map only shows where you\'ve been.',
-    mountain: 'Climb from a green valley through rocky passes to the helicopter on the snowy summit.'
 };
 
 // Little painted thumbnails of each battlefield
 function drawMapPreview(cv, map) {
     const g = cv.getContext('2d'), W = cv.width, H = cv.height, rnd = seededRand(map.length * 977);
-    if (PAYLOAD_MAPS.includes(map)) {
-        g.fillStyle = map === 'forest' ? '#4f8a3f' : map === 'canyon' ? '#c4874f' : '#8a8f96'; g.fillRect(0, 0, W, H);
-        if (map === 'canyon') { g.strokeStyle = 'rgba(110,62,36,0.5)'; g.lineWidth = 60; g.lineCap = 'round'; g.beginPath(); g.moveTo(-10, 150); g.bezierCurveTo(80, 20, 200, 180, 320, 40); g.stroke(); for (let i = 0; i < 26; i++) { g.fillStyle = '#7a4a2c'; g.beginPath(); g.arc(rnd() * W, rnd() * H, 8 + rnd() * 16, 0, TAU); g.fill(); } }
-        g.strokeStyle = map === 'launchpad' ? '#5e6168' : '#8a6a48'; g.lineWidth = 20; g.lineCap = 'round';
-        g.beginPath(); g.moveTo(-10, 150); g.bezierCurveTo(80, 20, 200, 180, 320, 40); g.stroke();
-        g.strokeStyle = '#c9ccd2'; g.lineWidth = 2; g.setLineDash([]); for (const o of [-5, 5]) { g.beginPath(); g.moveTo(-10, 150 + o); g.bezierCurveTo(80, 20 + o, 200, 180 + o, 320, 40 + o); g.stroke(); }
-        if (map === 'forest') for (let i = 0; i < 40; i++) { const x = rnd() * W, y = rnd() * H; g.fillStyle = i % 2 ? '#2f6b2a' : '#3d7f35'; g.beginPath(); g.arc(x, y, 10 + rnd() * 10, 0, TAU); g.fill(); }
-        if (map === 'launchpad') for (const [x, y] of [[70, 50], [240, 130]]) { g.fillStyle = '#5d6168'; g.beginPath(); g.arc(x, y, 30, 0, TAU); g.fill(); g.fillStyle = '#e9ecf0'; g.beginPath(); g.arc(x, y, 14, 0, TAU); g.fill(); g.fillStyle = '#b8323a'; g.beginPath(); g.arc(x, y, 6, 0, TAU); g.fill(); }
-        g.fillStyle = '#3a404b'; g.save(); g.translate(150, 105); g.rotate(-0.4); g.fillRect(-16, -13, 30, 26); g.strokeStyle = '#7ee6ff'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 20, -0.9, 0.9); g.stroke(); g.restore();
-        g.fillStyle = 'rgba(61,139,255,0.6)'; g.fillRect(0, 120, 30, 60); g.fillStyle = 'rgba(255,75,75,0.6)'; g.fillRect(270, 10, 30, 60);
-        return;
-    }
     if (map === 'wasteland') {
         g.fillStyle = '#6f8a4a'; g.fillRect(0, 0, W, H);
         for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(120,100,60,${0.15 + rnd() * 0.2})`; g.beginPath(); g.arc(rnd() * W, rnd() * H, 6 + rnd() * 18, 0, TAU); g.fill(); }
@@ -20670,7 +18054,7 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
-for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#prop-role', v => { propRolePick = v; }], ['#payload-side', v => { payloadSidePick = v; }], ['#temple-side', v => { templeSidePick = v; }]])
+for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#temple-side', v => { templeSidePick = v; }]])
     for (const b of document.querySelectorAll(sel + ' button')) b.addEventListener('click', () => {
         set(b.dataset.r);
         for (const o of document.querySelectorAll(sel + ' button')) o.classList.toggle('on', o === b);
@@ -20691,31 +18075,23 @@ function startGame(map = lastMap) {
     Sound.init();
     const id = MODES[menuMode].id, war = id === 'war' || id === 'hightech' || id === 'revolution';
     if (id === 'revolution' && map === 'maze') map = 'ordinary';
-    // Escape has no open countryside to cross, and Survival has no maze
-    if (id === 'escape' && map === 'ordinary') map = 'city';
+    // (Survival has no maze)
     if (id !== 'duel' && map === 'wasteland') map = 'ordinary';
     if ((id === 'survival' || id === 'duel') && map === 'maze') map = 'ordinary';
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
-    if (id === 'chase') map = 'chase'; else if (map === 'chase') map = 'ordinary';
-    if (id === 'prop' && !mapAllowed('prop', map)) map = 'ordinary';
-    if (id === 'payload' && !PAYLOAD_MAPS.includes(map)) map = 'forest';
     if (id === 'temple') map = 'temple'; else if (map === 'temple') map = 'ordinary';
-    if (id !== 'payload' && PAYLOAD_MAPS.includes(map)) map = 'ordinary';
     lastMap = map;
     const setup = id === 'navy' ? (navyFleet === 'ffa' ? { type: id, teams: navyFfaCount(), size: NAVY_FFA.crew, ships: 1, crew: NAVY_FFA.crew, role: navyRolePick, fleet: 'ffa' } : navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
-        : id === 'chase' ? { type: id, count: 0 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
-        : id === 'payload' ? { type: id, count: PAYLOAD.players - 1, side: payloadSidePick }
         : id === 'temple' ? { type: id, count: TEMPLE.players - 1, side: templeSidePick }
-        : id === 'prop' ? { type: id, count: Math.max(1, Math.min(PROP.maxPlayers - 1, sliderToCount(+slider.value))), role: propRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
-        : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
+        : { type: id, count: sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'ghost' || id === 'prop' || id === 'payload' || id === 'temple' || id === 'duel' || id === 'navy' || id === 'chase' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'ghost' || id === 'temple' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -20728,23 +18104,20 @@ function startGame(map = lastMap) {
     document.body.classList.add('playing');
     canvas.classList.remove('dead');
     mouse.down = false;
-    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.prop && !G.payload && !G.temple);
+    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.temple);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.prop || !!G.payload || !!G.temple);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.temple);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
     hud.cells.water.classList.toggle('hidden', !G.survival);
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
-    if (G.chase) showBanner('CHASE', true, 'The soldiers want you gone. Break out of the facility with your squad of 20!');
-    else if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
+    if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
     else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
     else if (G.temple) showBanner('TREASURE TEMPLE', true, 'Grab the golden idol from the middle of the temple and carry it back to your camp!');
-    else if (G.payload) showBanner('PAYLOAD', true, G.player.team === 0 ? 'You\'re Blue: stand on the platform to push it to the middle of Red\'s base!' : 'You\'re Red: stop Blue getting the platform into your base!');
-    else if (G.prop) showBanner('PROP HUNT', true, G.player.prop ? 'You\'re a prop! Hide next to props that look like you (F or the button changes you), then keep still.' : `You're a seeker. Wait while the props hide, then find them. Watch for anything that moves!`);
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
@@ -20752,9 +18125,6 @@ function startGame(map = lastMap) {
     else if (war) showBanner(`TEAMS: ${G.war.teams} TEAMS OF ${G.war.size}`, false, 'Grab guns from the supply crates near your base');
     else if (G.bossFight) showBanner('BOSS FIGHT', true, `You + ${G.fighters.filter(f => f.team === 0).length - 1} vs THE BOSS. Don't get close!`);
     else if (G.zombies) { const z = G.fighters.filter(f => f.zombie).length; showBanner('ZOMBIES', true, `${z} zombies are out there. Survive with ${G.fighters.length - z - 1} other survivors.`); }
-    else if (G.escape) showBanner('ESCAPE', true, G.world.terrain === 'maze' ? 'Find a way through the maze to the helicopter. Machine-gun nests, minefields, and the map only shows where you\'ve been!'
-        : G.world.terrain === 'mountain' ? 'Climb the mountains with your group to the helicopter on the snowy summit!'
-        : `Lead your group across the city to the HQ tower and climb ${G.hq.floors} floors to the helicopter!`);
     else if (G.survival) showBanner('SURVIVAL', true, 'Hunt for meat (C to eat), find water (V to drink), rest when tired (B). Everyone moves when the countdown ends!');
     else if (G.early) showBanner('EARLY WARFARE', true, `${G.alive} players. Swords, spears, bows and crossbows only!`);
     else if (G.hightech) showBanner('HIGH TECH WARFARE', true, `${G.alive} players. Find a quantum gun, grab a tech vehicle!`);
@@ -21100,7 +18470,7 @@ function drawGuestHud(g) {
             btn(x, y, sw, 40, `Digit${i + 1}`);
         });
         const side = [['🩹', p.items.bandage || 0, 'KeyQ'], ['➕', p.items.medkit || 0, 'KeyE']];
-        if (!G.early && !G.duel && !G.prop) { const tk = p.throwSel || 'grenade'; side.push(['💣', p.items[tk] || 0, 'KeyT']); }
+        if (!G.early && !G.duel) { const tk = p.throwSel || 'grenade'; side.push(['💣', p.items[tk] || 0, 'KeyT']); }
         side.forEach(([icon, num, code], i) => {
             const x = 14, y = H * 0.42 + i * 62;
             panel(x, y, 56, 54);
@@ -21133,7 +18503,6 @@ function drawGuestHud(g) {
     const loot = !p.dead && !p.car && nearestLoot(p.x, p.y, CONFIG.PICKUP_RANGE), car = !p.dead && !p.car && !loot && nearestCar(p, 90);
     const navyHint = G.navy && !p.dead && !p.car ? navyLabel(p) : '';
     let hint = navyHint ? `F  ${navyHint.toLowerCase()}` : p.car ? 'F  get out' : loot ? `F  pick up ${lootName(loot.key)}` : car ? `F  get in the ${vt(car).name}` : '';
-    if (G.prop && p.prop && !p.dead) hint = 'F  change prop';
     if (hint && g.touch) hint = hint.replace(/^F {2}/, '').toUpperCase();  // (on a touch screen it's their USE button)
     if (hint) { c.font = '700 16px Rajdhani, sans-serif'; c.textAlign = 'center'; const tw = c.measureText(hint).width + 30; panel(W / 2 - tw / 2, H - 132, tw, 30); c.fillStyle = '#ffd166'; c.fillText(hint, W / 2, H - 116); }
     // out of the game, or the game's over
@@ -21576,7 +18945,6 @@ function touchFrame() {
         const p = G && G.player;
         if (!p || G.mode !== 'playing' || p.dead || p.zombie) return '';
         if (G.temple) { const t = templeUseLabel(p); if (t) return t; }
-        if (G.prop && p.prop) { const d = propNear(p); return d ? `BECOME ${PROP_KINDS[d.kind].name.toUpperCase()}` : 'CHANGE PROP'; }
         if (p.car) return `GET OUT`;
         if (G.navy && navyLabel(p)) return navyLabel(p).toUpperCase();
         if (G.revolution && nearOwnPad(p)) return 'BOSS STRIKE';
