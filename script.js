@@ -58,6 +58,11 @@ const WEAPONS = {
     // Hyper drop weapons
     'Plasma Rifle': { damage: 24, range: 1500, rate: 105, speed: 1800, spread: 0.03, mag: 45, rarity: 'hyper', len: 38, w: 9, sound: 'mid', shake: 1.5, hyper: true },
     'Railgun': { damage: 220, range: Infinity, rate: 1800, speed: 4200, spread: 0, mag: 4, rarity: 'hyper', len: 64, w: 9, sound: 'sniper', shake: 10, hyper: true, pierce: true },  // goes through everyone in a line
+    // Payload's guns: the dual shock pistols everyone starts with, a chargeable energy gun, a rocket you steer, and a minigun with 8-round bursts
+    'Dual Shock': { damage: 15, range: 950, rate: 250, speed: 1300, spread: 0.03, mag: 999, rarity: 'rare', len: 14, w: 7, sound: 'light', shake: 1, spark: true, dual: true, ball: 5 },
+    'Energy Gun': { damage: 14, range: 650, rate: 260, speed: 1400, spread: 0, mag: 999, rarity: 'legendary', len: 34, w: 11, sound: 'light', shake: 2, charge: 1100 },
+    'Guided Rocket': { damage: 40, range: 2600, rate: 1300, speed: 600, spread: 0, mag: 999, rarity: 'mythic', len: 50, w: 12, sound: 'heavy', shake: 8, rocket: true, guided: true },
+    'Burst Minigun': { damage: 12, range: 1300, rate: 55, speed: 1600, spread: 0.12, mag: 999, rarity: 'mythic', len: 44, w: 13, sound: 'mid', shake: 1.6, clip: 8, reload: 1300 },
     'Shock Pistol': { damage: 24, range: 1050, rate: 260, speed: 1500, spread: 0.02, mag: 15, rarity: 'hyper', len: 18, w: 8, sound: 'light', shake: 1.6, hyper: true, chain: 2, spark: true },  // Chase: everyone's sidearm, its bolts arc on to 2 more enemies
     'Tesla Cannon': { damage: 32, range: 900, rate: 420, speed: 1300, spread: 0.02, mag: 12, rarity: 'hyper', len: 34, w: 13, sound: 'heavy', shake: 4, hyper: true, chain: 3 },  // arcs to 3 more enemies
     'Laser Beam': { damage: 7, range: 950, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 36, w: 9, sound: 'mid', shake: 0.3, hyper: true, beam: true },  // hold it on them
@@ -1231,6 +1236,7 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'haunted') return generateHaunted();
     if (type === 'sea') return generateSea();
     if (type === 'chase') return generateChase();
+    if (PAYLOAD_MAPS.includes(type)) return generatePayload(type);
     // Wasteland (the sniping map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
@@ -4642,12 +4648,12 @@ function findSpawn(avoid, minDist) {
 
 // setup: { type: 'ffa' | 'epic' | 'escape', count }, { type: 'zombies', count, zombies } or { type: 'war' | 'hightech', teams, size }
 function newState(mode, setup) {
-    CONFIG.WORLD_SIZE = setup.type === 'chase' ? CHASE.world : 12000;  // (Chase is played on a world three times the size)
+    CONFIG.WORLD_SIZE = setup.type === 'chase' ? CHASE.world : setup.type === 'payload' ? PAYLOAD.W : 12000;  // (Chase is played on a world three times the size)
     const W = CONFIG.WORLD_SIZE;
     const zombies = setup.type === 'zombies', chase = setup.type === 'chase', escape = setup.type === 'escape' || chase, survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', bossFight = setup.type === 'boss';
-    const ghostMode = setup.type === 'ghost', propHunt = setup.type === 'prop', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
+    const ghostMode = setup.type === 'ghost', propHunt = setup.type === 'prop', payloadMode = setup.type === 'payload', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution || navy ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4657,7 +4663,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, prop: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, prop: null, payload: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && (setup.type === 'survival' || setup.type === 'chase'), dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4707,7 +4713,7 @@ function newState(mode, setup) {
     };
     setNextZoneTarget(G.zone);
     // (no red zone at all in Survival)
-    if (G.noZone || revolution || survival || navy) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    if (G.noZone || revolution || survival || navy || payloadMode) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Ghost is played in one fixed circle in the middle of the map
     const arena = ghostMode ? GHOST.arena : propHunt ? PROP.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
@@ -4717,7 +4723,7 @@ function newState(mode, setup) {
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
-    const noLoot = duel || navy || propHunt;
+    const noLoot = duel || navy || propHunt || payloadMode;
     if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
@@ -4743,7 +4749,7 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !propHunt && !duel && !navy && !chase) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !propHunt && !payloadMode && !duel && !navy && !chase) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (navy) setupNavy(setup);
     else if (war) {
@@ -4774,6 +4780,7 @@ function newState(mode, setup) {
     if (duel) setupDuel();
     if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
     if (propHunt) setupProp(setup);
+    if (payloadMode) setupPayload(setup);
     G.alive = G.fighters.length;
 }
 
@@ -5235,6 +5242,593 @@ function propStatus(p) {
     if (P.phase === 'hide') return p.seeker ? 'Blindfolded while the props hide' : `Hide! Seekers come out in ${Math.max(0, Math.ceil((P.seekAt - G.time) / 1000))}s`;
     const left = fmtTime(Math.max(0, (P.seekAt + PROP.seek - G.time) / 1000));
     return p.prop ? `Stay hidden · ${left} left · ${n} prop${n === 1 ? '' : 's'} left` : `Find the props · ${left} · ${n} left`;
+}
+
+// ---------- Payload ----------
+// Blue escorts a platform (a shield on its front stops bullets from ahead) along a winding track from their base to the middle of Red's base. It only moves with Blue
+// on it (faster with more of them), stops while Red is next to it, and rolls back if Blue leave it alone too long.
+// Uphill it slows down, downhill it speeds up. Two checkpoints on the way each add time. Everyone respawns.
+// Three maps: a rocket launch site (with launch pads that throw the cart into the air), a canyon, and a forest.
+const PAYLOAD = {
+    W: 6000, time: 300000, cpBonus: 60000, speed: 52, perPusher: 0.22, maxPushers: 4, onR: 105, contestR: 200,
+    rollAfter: 12000, safeR: 240, safeDmg: 30, shieldR: 92, shieldArc: 0.95, rollSpeed: 16, respawn: 5000, protect: 2500, regenAfter: 4000, regen: 9, clearR: 190, maxPlayers: 100,
+    blue: '#3d8bff', red: '#ff4b4b',
+    guns: ['Machine Gun', 'Energy Gun', 'Guided Rocket', 'Sniper', 'Shotgun', 'Burst Minigun', 'Assault Rifle']
+};
+let payloadSidePick = 'blue';
+const PAYLOAD_MAPS = ['launchpad', 'canyon', 'forest'];
+// The track: a smooth line through waypoints that sweep up and down the map and turn as they go
+function payloadTrack() {
+    const W = PAYLOAD.W, way = [{ x: 650, y: 4500 }];
+    const cols = [1400, 2300, 3200, 4100];
+    cols.forEach((x, i) => way.push({ x: x + rand(-150, 150), y: (i % 2 ? 4550 : 1450) + rand(-200, 200) }));
+    way.push({ x: 4950, y: 3000 });
+    // (extra bends between the main turns)
+    const pts = [way[0]];
+    for (let i = 1; i < way.length; i++) {
+        const a = way[i - 1], b = way[i], n = i === way.length - 1 ? 1 : 2;
+        for (let k = 1; k <= n; k++) {
+            const t = k / (n + 1), nx = -(b.y - a.y), ny = b.x - a.x, l = Math.hypot(nx, ny) || 1;
+            const off = rand(-380, 380);
+            pts.push({ x: clamp(lerp(a.x, b.x, t) + nx / l * off, 400, W - 400), y: clamp(lerp(a.y, b.y, t) + ny / l * off, 400, W - 400) });
+        }
+        pts.push(b);
+    }
+    // Catmull-Rom through them, then even spacing
+    const dense = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+        for (let t = 0; t < 1; t += 0.02) {
+            const t2 = t * t, t3 = t2 * t;
+            const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+            dense.push({ x: f(p0.x, p1.x, p2.x, p3.x), y: f(p0.y, p1.y, p2.y, p3.y) });
+        }
+    }
+    dense.push(pts[pts.length - 1]);
+    const out = [{ x: dense[0].x, y: dense[0].y, s: 0 }], STEP = 24;
+    let acc = 0;
+    for (let i = 1; i < dense.length; i++) {
+        let a = out[out.length - 1];
+        const b = dense[i];
+        let d = Math.hypot(b.x - a.x, b.y - a.y);
+        while (d >= STEP) { const k = STEP / d; const q = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k }; acc += STEP; q.s = acc; out.push(q); a = q; d = Math.hypot(b.x - a.x, b.y - a.y); }
+    }
+    const end = pts[pts.length - 1]; acc += Math.hypot(end.x - out[out.length - 1].x, end.y - out[out.length - 1].y); out.push({ x: end.x, y: end.y, s: acc });
+    // Hills: the height along the track (0 low, 1 high)
+    const ph = [rand(0, TAU), rand(0, TAU), rand(0, TAU)];
+    for (const q of out) q.h = clamp(0.5 + 0.28 * Math.sin(q.s * 0.0009 + ph[0]) + 0.16 * Math.sin(q.s * 0.0023 + ph[1]) + 0.06 * Math.sin(q.s * 0.006 + ph[2]), 0, 1);
+    for (let i = 0; i < out.length; i++) { const a = out[Math.max(0, i - 2)], b = out[Math.min(out.length - 1, i + 2)]; out[i].a = Math.atan2(b.y - a.y, b.x - a.x); out[i].slope = (b.h - a.h) / Math.max(1, b.s - a.s); }
+    return out;
+}
+function trackAt(track, s) {
+    const i = clamp(Math.floor(s / 24), 0, track.length - 2);
+    let j = i;
+    while (j < track.length - 2 && track[j + 1].s < s) j++;
+    while (j > 0 && track[j].s > s) j--;
+    const a = track[j], b = track[j + 1], t = clamp((s - a.s) / Math.max(1e-6, b.s - a.s), 0, 1);
+    return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), a: a.a + angleDiff(a.a, b.a) * t, h: lerp(a.h, b.h, t), slope: a.slope };
+}
+function trackDist(track, x, y) {
+    let best = Infinity;
+    for (let i = 0; i < track.length; i += 2) { const q = track[i], d = (q.x - x) ** 2 + (q.y - y) ** 2; if (d < best) best = d; }
+    return Math.sqrt(best);
+}
+function generatePayload(theme) {
+    const W = PAYLOAD.W, grid = new Grid(256, 90), obstacles = [], lootSpots = [], decor = [], rockets = [];
+    const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
+    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
+    const track = payloadTrack(), start = track[0], end = track[track.length - 1];
+    const blueBase = { x: 330, y: start.y, x0: 120, x1: 760, y0: start.y - 380, y1: start.y + 380 };
+    const redBase = { x: end.x, y: end.y, x0: end.x - 460, x1: end.x + 800, y0: end.y - 460, y1: end.y + 460 };
+    const inBase = (x, y, m = 0) => [blueBase, redBase].some(b => x > b.x0 - m && x < b.x1 + m && y > b.y0 - m && y < b.y1 + m);
+    const free = (x, y, r) => x > 150 && y > 150 && x < W - 150 && y < W - 150 && !inBase(x, y, 80) && trackDist(track, x, y) > PAYLOAD.clearR + r && !blockedAt(grid, x, y, r);
+    const wallCol = theme === 'launchpad' ? '#8c929c' : theme === 'canyon' ? '#8a5a3a' : '#6b5a44';
+    // The edge of the world: a wall all the way round
+    for (const [x, y, hw, hh] of [[W / 2, 20, W / 2, 20], [W / 2, W - 20, W / 2, 20], [20, W / 2, 20, W / 2], [W - 20, W / 2, 20, W / 2]]) addBox({ type: 'wall', x, y, hw, hh, color: wallCol });
+    // Bases: walled compounds with gaps to get in and out, and the track running in
+    const baseWalls = (b, color) => {
+        const T = 16, gap = 150, segs = [];
+        const side = (x0, y0, x1, y1) => {
+            const len = Math.hypot(x1 - x0, y1 - y0), n = 3;
+            for (let k = 0; k < n; k++) {
+                // each side split in three with two doorways
+                const t0 = k / n + (k ? gap / len / 2 : 0), t1 = (k + 1) / n - (k < n - 1 ? gap / len / 2 : 0);
+                const ax = lerp(x0, x1, t0), ay = lerp(y0, y1, t0), bx = lerp(x0, x1, t1), by = lerp(y0, y1, t1);
+                segs.push({ x: (ax + bx) / 2, y: (ay + by) / 2, hw: Math.max(T, Math.abs(bx - ax) / 2), hh: Math.max(T, Math.abs(by - ay) / 2) });
+            }
+        };
+        side(b.x0, b.y0, b.x1, b.y0); side(b.x0, b.y1, b.x1, b.y1); side(b.x0, b.y0, b.x0, b.y1); side(b.x1, b.y0, b.x1, b.y1);
+        for (const s of segs) {
+            // (no wall across the track)
+            let hit = false;
+            for (const q of track) if (Math.abs(q.x - s.x) < s.hw + 70 && Math.abs(q.y - s.y) < s.hh + 70) { hit = true; break; }
+            if (!hit) addBox({ type: 'wall', x: s.x, y: s.y, hw: s.hw, hh: s.hh, color });
+        }
+        // a bit of cover inside
+        for (let i = 0; i < 4; i++) { const x = rand(b.x0 + 90, b.x1 - 90), y = rand(b.y0 + 90, b.y1 - 90); if (trackDist(track, x, y) > 140 && !blockedAt(grid, x, y, 40)) addBox({ type: 'crate', x, y, hw: 22, hh: 22 }); }
+    };
+    baseWalls(blueBase, '#3a5f9a'); baseWalls(redBase, '#9a3a3a');
+    if (theme === 'forest') {
+        for (let i = 0; i < 1300; i++) {
+            const x = rand(150, W - 150), y = rand(150, W - 150), canopy = rand(100, 165);
+            if (!free(x, y, 40)) continue;
+            addCircle({ type: 'tree', x, y, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 });
+        }
+        for (let i = 0; i < 700; i++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (free(x, y, 30)) addCircle({ type: 'bush', x, y, r: rand(30, 44), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999 }); }
+        for (let i = 0; i < 160; i++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (free(x, y, 30)) addCircle({ type: 'rock', x, y, r: rand(22, 50), spr: randInt(0, 5), rot: rand(0, TAU) }); }
+        for (let i = 0; i < 900; i++) decor.push({ x: rand(0, W), y: rand(0, W), s: rand(0.5, 1.3), spr: randInt(0, Math.max(0, SPR.patches.length - 1)) });
+    } else if (theme === 'canyon') {
+        // Canyon walls of cliff rock along the track (with side passages), and a rocky mesa beyond
+        for (let i = 0; i < track.length; i += 3) {
+            const q = track[i];
+            if (inBase(q.x, q.y, 250) || Math.sin(q.s * 0.004) > 0.75) continue;  // (gaps: side passages)
+            for (const side of [-1, 1]) {
+                const d = rand(310, 380), x = q.x + Math.cos(q.a + side * Math.PI / 2) * d, y = q.y + Math.sin(q.a + side * Math.PI / 2) * d, r = rand(70, 110);
+                if (trackDist(track, x, y) > 220 + r * 0.3 && !inBase(x, y, 60) && !blockedAt(grid, x, y, r * 0.5) && x > 100 && y > 100 && x < W - 100 && y < W - 100) addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU), cliff: true });
+            }
+        }
+        for (let i = 0; i < 900; i++) { const x = rand(150, W - 150), y = rand(150, W - 150), big = Math.random() < 0.25, r = big ? rand(70, 130) : rand(20, 45); if (free(x, y, r)) addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU), cliff: big }); }
+        for (let i = 0; i < 120; i++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (free(x, y, 30)) addCircle({ type: 'bush', x, y, r: rand(24, 34), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999, dry: true }); }
+    } else {
+        // The launch site: rockets standing on their pads, blast walls, fuel tanks and stacks of crates
+        for (let i = 0; i < 6; i++) {
+            for (let t = 0; t < 40; t++) {
+                const x = rand(600, W - 600), y = rand(600, W - 600);
+                if (!free(x, y, 200) || rockets.some(r => Math.hypot(r.x - x, r.y - y) < 900)) continue;
+                rockets.push({ x, y, h: rand(0.9, 1.25) });
+                addBox({ type: 'wall', x, y, hw: 58, hh: 58, color: '#d9dde2', rocketBase: true });
+                for (const [ox, oy] of [[-150, 0], [150, 0], [0, -150], [0, 150]]) if (Math.random() < 0.6) addBox({ type: 'wall', x: x + ox, y: y + oy, hw: ox ? 12 : 60, hh: ox ? 60 : 12, color: '#7a8088' });
+                break;
+            }
+        }
+        for (let i = 0; i < 260; i++) {
+            const x = rand(150, W - 150), y = rand(150, W - 150), r = Math.random();
+            if (!free(x, y, 60)) continue;
+            if (r < 0.35) { const n = randInt(1, 4); for (let k = 0; k < n; k++) { const cx = x + rand(-50, 50), cy = y + rand(-50, 50); if (!blockedAt(grid, cx, cy, 24)) addBox({ type: 'crate', x: cx, y: cy, hw: 22, hh: 22 }); } }
+            else if (r < 0.6) addBox({ type: 'crate', barrel: true, x, y, hw: 16, hh: 16, color: pick(['#c9cdd3', '#e0b030', '#c04040']) });
+            else if (r < 0.85) { const horiz = Math.random() < 0.5; addBox({ type: 'wall', x, y, hw: horiz ? rand(60, 140) : 14, hh: horiz ? 14 : rand(60, 140), color: '#7a8088' }); }
+            else addBox({ type: 'wall', x, y, hw: rand(40, 70), hh: rand(40, 70), color: '#9aa0a8' });
+        }
+    }
+    // Weapon spots: racks in each base, and pickups along the way
+    const spots = [];
+    for (const [b, dir] of [[blueBase, 1], [redBase, -1]]) for (let i = 0; i < PAYLOAD.guns.length; i++) {
+        const x = (dir > 0 ? b.x0 + 60 : b.x1 - 60), y = b.y0 + 80 + i * ((b.y1 - b.y0 - 160) / (PAYLOAD.guns.length - 1));
+        spots.push({ x, y, key: PAYLOAD.guns[i], every: 15000 });
+    }
+    for (let s = 900; s < track[track.length - 1].s - 900; s += 1100) {
+        const q = trackAt(track, s);
+        for (const side of [-1, 1]) {
+            const x = q.x + Math.cos(q.a + side * Math.PI / 2) * 150, y = q.y + Math.sin(q.a + side * Math.PI / 2) * 150;
+            if (!blockedAt(grid, x, y, 24)) spots.push({ x, y, key: null, every: 25000 });
+        }
+    }
+    // The map picture
+    const [mm, g] = makeCanvas(200, 200), k = 200 / W;
+    g.fillStyle = theme === 'forest' ? '#3f6e34' : theme === 'canyon' ? '#b9784a' : '#7d828a'; g.fillRect(0, 0, 200, 200);
+    for (const o of obstacles) {
+        if (o.type === 'tree') { g.fillStyle = '#244a20'; g.beginPath(); g.arc(o.x * k, o.y * k, Math.max(0.8, o.canopy * 0.5 * k), 0, TAU); g.fill(); }
+        else if (o.type === 'rock') { g.fillStyle = o.cliff ? '#6a3f26' : '#8f7a66'; g.beginPath(); g.arc(o.x * k, o.y * k, Math.max(0.8, o.r * k), 0, TAU); g.fill(); }
+        else if (o.hw) { g.fillStyle = '#4a4d55'; g.fillRect((o.x - o.hw) * k, (o.y - o.hh) * k, Math.max(1, o.hw * 2 * k), Math.max(1, o.hh * 2 * k)); }
+    }
+    g.fillStyle = 'rgba(61,139,255,0.5)'; g.fillRect(blueBase.x0 * k, blueBase.y0 * k, (blueBase.x1 - blueBase.x0) * k, (blueBase.y1 - blueBase.y0) * k);
+    g.fillStyle = 'rgba(255,75,75,0.5)'; g.fillRect(redBase.x0 * k, redBase.y0 * k, (redBase.x1 - redBase.x0) * k, (redBase.y1 - redBase.y0) * k);
+    g.strokeStyle = '#f2e3b8'; g.lineWidth = 2; g.beginPath(); for (const q of track) g.lineTo(q.x * k, q.y * k); g.stroke();
+    const decorGrid = new Grid(512, 900);
+    for (const d of decor) decorGrid.insert(d);
+    // Launch pads on the track (launch site only): the cart flies over the next stretch
+    const pads = theme === 'launchpad' ? [0.22, 0.5, 0.78].map(f => track[track.length - 1].s * f) : [];
+    return { obstacles, grid, decorGrid, buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'payload', theme, payload: { track, blueBase, redBase, spots, rockets, pads, art: payloadArt(theme, track, blueBase, redBase, rockets) } };
+}
+// The ground, painted once at a quarter of the size (the track itself is drawn sharp on top every frame)
+function payloadArt(theme, track, bb, rb, rockets) {
+    if (theme === 'forest') return null;
+    const W = PAYLOAD.W, k = 0.25, [cv, g] = makeCanvas(W * k, W * k), rnd = seededRand(theme.length * 131);
+    g.scale(k, k);
+    if (theme === 'canyon') {
+        g.fillStyle = '#c4874f'; g.fillRect(0, 0, W, W);
+        for (let i = 0; i < 1400; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '120,70,40' : '230,180,120'},${0.08 + rnd() * 0.12})`; g.beginPath(); g.arc(rnd() * W, rnd() * W, 30 + rnd() * 160, 0, TAU); g.fill(); }
+        // the canyon floor along the track: darker, cooler sand
+        g.strokeStyle = 'rgba(110,62,36,0.35)'; g.lineWidth = 640; g.lineCap = 'round'; g.lineJoin = 'round';
+        g.beginPath(); for (const q of track) g.lineTo(q.x, q.y); g.stroke();
+        g.strokeStyle = 'rgba(160,96,58,0.4)'; g.lineWidth = 420; g.beginPath(); for (const q of track) g.lineTo(q.x, q.y); g.stroke();
+    } else {
+        g.fillStyle = '#8a8f96'; g.fillRect(0, 0, W, W);
+        // concrete slabs and painted lines
+        g.strokeStyle = 'rgba(60,64,70,0.35)'; g.lineWidth = 6;
+        for (let x = 0; x < W; x += 300) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, W); g.stroke(); g.beginPath(); g.moveTo(0, x); g.lineTo(W, x); g.stroke(); }
+        for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '50,52,56' : '200,204,210'},${0.06 + rnd() * 0.1})`; g.beginPath(); g.arc(rnd() * W, rnd() * W, 20 + rnd() * 90, 0, TAU); g.fill(); }
+        for (const r of rockets) {
+            g.fillStyle = '#5d6168'; g.beginPath(); g.arc(r.x, r.y, 260, 0, TAU); g.fill();
+            g.strokeStyle = '#e0b030'; g.lineWidth = 18; g.setLineDash([60, 40]); g.beginPath(); g.arc(r.x, r.y, 240, 0, TAU); g.stroke(); g.setLineDash([]);
+            g.fillStyle = 'rgba(20,20,22,0.5)'; g.beginPath(); g.arc(r.x, r.y, 150, 0, TAU); g.fill();
+        }
+    }
+    for (const [b, c] of [[bb, '61,139,255'], [rb, '255,75,75']]) { g.fillStyle = `rgba(${c},0.18)`; g.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
+    return cv;
+}
+function setupPayload(setup) {
+    const Wd = G.world.payload, P = G.payload = {
+        track: Wd.track, len: Wd.track[Wd.track.length - 1].s, s: 0, cart: { x: Wd.track[0].x, y: Wd.track[0].y, a: Wd.track[0].a, hop: 0, dead: false },
+        endAt: PAYLOAD.time, cps: [0.34, 0.67].map(f => ({ s: Wd.track[Wd.track.length - 1].s * f, hit: false })), lastPush: 0, queue: [], state: 'idle', spots: Wd.spots.map(s => ({ ...s, loot: null, next: 0 })), pushers: 0, overtime: false, safe: [payloadSafe(0), payloadSafe(1)]
+    };
+    const all = G.fighters.slice(), p = G.player;
+    const others = all.filter(f => f !== p).sort(() => Math.random() - 0.5);
+    const mySide = setup.side === 'red' ? 1 : 0;
+    const half = Math.ceil(all.length / 2);
+    const blues = new Set();
+    if (p && mySide === 0) blues.add(p);
+    for (const f of others) if (blues.size < (p && mySide === 1 ? Math.floor(all.length / 2) : half)) blues.add(f);
+    for (const f of all) {
+        f.team = blues.has(f) ? 0 : 1;
+        f.color = f.team ? PAYLOAD.red : PAYLOAD.blue; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
+        payloadSpawn(f);
+    }
+    if (p) { G.cam.x = p.x; G.cam.y = p.y; }
+}
+// Each side's safe zone, at the back of its base: you come back to life there, nobody can hurt you inside your own,
+// and an enemy who walks into it gets burned out
+function payloadSafe(team) {
+    const Wd = G.world.payload, b = team ? Wd.redBase : Wd.blueBase;
+    return team ? { x: b.x1 - PAYLOAD.safeR - 30, y: b.y } : { x: b.x0 + PAYLOAD.safeR + 30, y: b.y };
+}
+const inSafe = (f, team) => G.payload && Math.hypot(f.x - G.payload.safe[team].x, f.y - G.payload.safe[team].y) < PAYLOAD.safeR;
+function payloadSpawnPoint(team) {
+    const z = payloadSafe(team);
+    for (let i = 0; i < 40; i++) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (PAYLOAD.safeR - 40), x = z.x + Math.cos(a) * d, y = z.y + Math.sin(a) * d; if (!blockedAt(G.world.grid, x, y, 24)) return { x, y }; }
+    return z;
+}
+function payloadSpawn(f) {
+    const s = payloadSpawnPoint(f.team);
+    f.x = s.x; f.y = s.y; f.vx = f.vy = 0;
+    f.inv = [null, null]; f.slot = 0; f.ammo = {}; f.clip = {}; f.charge = null; f.reloadUntil = 0;
+    applyLoot(f, 'Dual Shock', -1); f.ammo['Dual Shock'] = Infinity;
+    f.hp = f.maxHp = CONFIG.MAX_HEALTH; f.armor = 0; f.items.bandage = 2;
+    f.protectUntil = G.time + PAYLOAD.protect;
+    f.mode = 'wander'; f.target = null; f.goal = null; f.nextThink = G.time;
+}
+// Someone's out: back at their base in a few seconds
+function payloadDeath(t, killer) {
+    G.payload.queue.push({ f: t, at: G.time + PAYLOAD.respawn });
+    if (t.isPlayer && G.mode === 'playing') { G.flash = 0.4; G.flashColor = '255,40,70'; Sound.death(); }
+}
+function payloadRespawn(f) {
+    const fresh = createFighter(f.x, f.y, { isPlayer: f.isPlayer, name: f.name, color: f.color, team: f.team });
+    Object.assign(f, fresh, { remote: f.remote, kills: f.kills, nextThink: G.time, cook: null, healing: null, car: null, up: null });
+    payloadSpawn(f);
+    G.fighters.push(f);
+    G.alive++;
+    if (f.isPlayer) { canvas.classList.remove('dead'); G.timeScale = 1; G.cam.x = f.x; G.cam.y = f.y; }
+}
+const onCart = f => { const c = G.payload.cart; return !f.dead && Math.hypot(f.x - c.x, f.y - c.y) < PAYLOAD.onR; };
+function updatePayload(dt) {
+    const P = G.payload, c = P.cart, p = G.player;
+    // Respawns
+    if (P.queue.length) { const due = P.queue.filter(q => G.time >= q.at); P.queue = P.queue.filter(q => G.time < q.at); for (const q of due) payloadRespawn(q.f); }
+    // Guns never run dry here; health comes back out of the fight
+    for (const f of G.fighters) {
+        if (f.dead) continue;
+        for (const k of f.inv) if (k && f.ammo[k] !== Infinity) f.ammo[k] = Infinity;
+        if (G.time - f.lastHurt > PAYLOAD.regenAfter && f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + PAYLOAD.regen * dt);
+        // (your own safe zone heals you fast; the enemy's burns you)
+        if (inSafe(f, f.team)) f.hp = Math.min(f.maxHp, f.hp + 40 * dt);
+        else if (inSafe(f, 1 - f.team) && G.mode === 'playing') damage(f, PAYLOAD.safeDmg * dt, null, 'safe zone');
+    }
+    // Weapon pickups come back after they're taken
+    for (const sp of P.spots) {
+        if (sp.loot && !sp.loot.gone) continue;
+        if (sp.loot) { sp.loot = null; sp.next = G.time + sp.every; }
+        if (G.time >= sp.next) sp.loot = spawnLoot(sp.x, sp.y, sp.key || pick(PAYLOAD.guns));
+    }
+    // The cart: who's on it and who's near it
+    let blue = 0, red = 0;
+    G.fgrid.query(c.x, c.y, PAYLOAD.contestR, f => { if (f.dead) return; const d = Math.hypot(f.x - c.x, f.y - c.y); if (f.team === 0 && d < PAYLOAD.onR) blue++; else if (f.team === 1 && d < PAYLOAD.contestR) red++; });
+    P.pushers = blue; P.red = red;
+    const here = trackAt(P.track, P.s);
+    let v = 0;
+    if (blue && red) P.state = 'contested';
+    else if (blue) {
+        P.state = 'moving'; P.lastPush = G.time;
+        v = PAYLOAD.speed * (1 + PAYLOAD.perPusher * (Math.min(blue, PAYLOAD.maxPushers) - 1));
+        // uphill slower, downhill faster
+        v *= clamp(1 - here.slope * 900, 0.45, 1.7);
+        if (c.hop > 0) v *= 1.8;
+    } else if (G.time - P.lastPush > PAYLOAD.rollAfter && P.s > 0) {
+        // left alone: it rolls back, but never past a checkpoint it reached
+        const floor = P.cps.filter(q => q.hit).reduce((m, q) => Math.max(m, q.s), 0);
+        if (P.s > floor) { v = -PAYLOAD.rollSpeed * clamp(1 + here.slope * 900, 0.5, 2); P.state = 'rolling'; }
+        else P.state = 'idle';
+    } else P.state = 'idle';
+    if (G.mode === 'playing' || G.mode === 'demo') {
+        const s0 = P.s;
+        P.s = clamp(P.s + v * dt, 0, P.len);
+        const q = trackAt(P.track, P.s), dx = q.x - c.x, dy = q.y - c.y;
+        // (whoever's on it rides along)
+        if (dx || dy) G.fgrid.query(c.x, c.y, PAYLOAD.onR + 10, f => { if (!f.dead && Math.hypot(f.x - c.x, f.y - c.y) < PAYLOAD.onR) { f.x += dx; f.y += dy; } });
+        c.x = q.x; c.y = q.y; c.a = q.a; c.h = q.h;
+        if (v > 0 && Math.random() < dt * 3 && inView(c.x, c.y, 100)) G.particles.push({ type: 'smoke', x: c.x - Math.cos(c.a) * 60 + rand(-20, 20), y: c.y - Math.sin(c.a) * 60 + rand(-20, 20), vx: 0, vy: 0, life: 0.7, max: 0.7, size: rand(6, 11), color: '170,160,140' });
+        // Launch pads: off it flies
+        for (const pad of G.world.payload.pads) if (s0 < pad && P.s >= pad) { c.hop = 1; if (inView(c.x, c.y, 200)) { burst(c.x, c.y, 26, '#ffb347', 300, 'glow'); G.shake = Math.max(G.shake, 8); } Sound.tone(140, 0.6, 'sawtooth', 0.1 * Sound.volAt(c.x, c.y), 600); }
+        if (c.hop > 0) c.hop = Math.max(0, c.hop - dt / 1.6);
+        // Checkpoints
+        for (const cp of P.cps) if (!cp.hit && P.s >= cp.s) {
+            cp.hit = true; P.endAt += PAYLOAD.cpBonus;
+            if (G.mode === 'playing') { showBanner('CHECKPOINT!', false, `+${PAYLOAD.cpBonus / 1000} seconds. ${p && p.team === 0 ? 'Keep pushing!' : 'Stop that cart!'}`); Sound.tone(660, 0.4, 'square', 0.08, 990); }
+        }
+    }
+    if (G.mode === 'demo') {
+        G.demoFollow = c;
+        if (P.s >= P.len || G.time > P.endAt) { P.s = 0; P.endAt = G.time + PAYLOAD.time; for (const cp of P.cps) cp.hit = false; }
+        return;
+    }
+    if (G.mode !== 'playing' || G.result || !p) return;
+    let won = null, title, sub;
+    if (P.s >= P.len) { won = p.team === 0; title = won ? 'PAYLOAD DELIVERED!' : 'THEY DELIVERED IT'; sub = 'Blue got the cart into the middle of Red\'s base.'; }
+    else if (G.time >= P.endAt) {
+        // (overtime while Blue is still on the cart)
+        if (blue) { if (!P.overtime) { P.overtime = true; showBanner('OVERTIME!', true, 'Blue is on the cart: the game goes on until they get off it'); } }
+        else { won = p.team === 1; title = won ? 'DEFENDED!' : 'OUT OF TIME'; sub = `The cart got ${Math.round(P.s / P.len * 100)}% of the way.`; }
+    }
+    if (won === null) return;
+    G.result = { won, place: won ? 1 : 2, title, sub };
+    G.overAt = G.time + 2600;
+    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
+}
+// Bots: Blue gets on the cart, Red heads for it and fights round it; anyone with only the starting pistols grabs a gun nearby first
+function payloadBotPlan(b) {
+    const P = G.payload, c = P.cart;
+    if (b.inv.filter(Boolean).length < 2) {
+        const l = nearestLoot(b.x, b.y, 600, q => WEAPONS[q.key] && !b.inv.includes(q.key) && !claimedByOther(q, b));
+        if (l) { b.mode = 'loot'; b.goal = l; l.claim = b; return true; }
+    }
+    if (b.team === 0) {
+        if (b.cartOff === undefined) b.cartOff = { a: rand(0, TAU), r: rand(10, 70) };
+        const q = { x: c.x + Math.cos(b.cartOff.a) * b.cartOff.r, y: c.y + Math.sin(b.cartOff.a) * b.cartOff.r };
+        if (dist(b, q) < 30) { b.mode = 'rest'; return true; }
+        b.mode = 'zone'; b.goal = q;
+        return true;
+    }
+    // Red: stand in the way, a little ahead of the cart
+    if (b.guardOff === undefined) b.guardOff = Math.random() < 0.5 ? { ahead: rand(30, 160), side: rand(-90, 90) } : { ahead: rand(150, 450), side: rand(-220, 220) };
+    const q = trackAt(P.track, Math.min(P.len, P.s + b.guardOff.ahead));
+    const g = { x: q.x + Math.cos(q.a + Math.PI / 2) * b.guardOff.side, y: q.y + Math.sin(q.a + Math.PI / 2) * b.guardOff.side };
+    if (dist(b, g) < 60) { b.mode = 'rest'; return true; }
+    b.mode = 'zone'; b.goal = g;
+    return true;
+}
+// Drawing: the ground, the track, the checkpoints and the end
+function drawPayloadGround(L, T, R, B) {
+    const Wd = G.world.payload, W = PAYLOAD.W, track = Wd.track, now = performance.now() / 1000;
+    if (Wd.art) ctx.drawImage(Wd.art, 0, 0, W, W);
+    else {
+        ctx.fillStyle = SPR.grass; ctx.fillRect(0, 0, W, W);
+        G.world.decorGrid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2, d => { const s = 128 * d.s; ctx.drawImage(SPR.patches[d.spr], d.x - s, d.y - s, s * 2, s * 2); });
+    }
+    // Which stretch of the track is on screen
+    const vis = [];
+    for (let i = 0; i < track.length; i++) { const q = track[i]; vis[i] = q.x > L - 120 && q.x < R + 120 && q.y > T - 120 && q.y < B + 120; }
+    const run = (fn) => { let open = false; for (let i = 0; i < track.length; i++) { const on = vis[i] || vis[i + 1] || vis[i - 1]; if (on) { if (!open) { ctx.beginPath(); ctx.moveTo(track[i].x, track[i].y); open = true; } else ctx.lineTo(track[i].x, track[i].y); } else if (open) { fn(); open = false; } } if (open) fn(); };
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const theme = G.world.theme;
+    // the bed of gravel or packed earth
+    ctx.strokeStyle = theme === 'forest' ? '#7a6244' : theme === 'canyon' ? '#8e6a48' : '#5e6168'; ctx.lineWidth = 92; run(() => ctx.stroke());
+    ctx.strokeStyle = theme === 'forest' ? '#927754' : theme === 'canyon' ? '#a88058' : '#6c7078'; ctx.lineWidth = 76; run(() => ctx.stroke());
+    // Sleepers, lighter on the high ground and darker in the dips, with arrows on the climbs
+    for (let i = 0; i < track.length; i += 2) {
+        if (!vis[i]) continue;
+        const q = track[i], sh = Math.round(70 + q.h * 70);
+        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.a);
+        ctx.fillStyle = `rgb(${sh + 30},${sh + 8},${sh - 20})`; ctx.fillRect(-6, -30, 12, 60);
+        ctx.restore();
+    }
+    for (const side of [-1, 1]) {
+        ctx.strokeStyle = '#3a3d44'; ctx.lineWidth = 6;
+        ctx.beginPath(); let open = false;
+        for (let i = 0; i < track.length; i++) { const q = track[i]; if (!vis[i]) { open = false; continue; } const x = q.x + Math.cos(q.a + Math.PI / 2) * 19 * side, y = q.y + Math.sin(q.a + Math.PI / 2) * 19 * side; if (!open) { ctx.moveTo(x, y); open = true; } else ctx.lineTo(x, y); }
+        ctx.stroke();
+        ctx.strokeStyle = '#c9ccd2'; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+    for (let i = 10; i < track.length; i += 14) {
+        const q = track[i];
+        if (!vis[i] || Math.abs(q.slope) < 0.00012) continue;
+        const up = q.slope > 0;
+        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.a);
+        ctx.fillStyle = up ? 'rgba(255,209,102,0.75)' : 'rgba(126,249,255,0.7)';
+        ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-4, -12); ctx.lineTo(-4, 12); ctx.closePath(); ctx.fill();
+        ctx.restore();
+    }
+    // Launch pads on the track
+    for (const s of Wd.pads) {
+        const q = trackAt(track, s);
+        if (!inView(q.x, q.y, 120)) continue;
+        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.a);
+        ctx.fillStyle = '#2a2d33'; roundRect(ctx, -50, -50, 100, 100, 12); ctx.fill();
+        ctx.fillStyle = `rgba(255,140,40,${0.55 + Math.sin(now * 6) * 0.25})`;
+        for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(-26 + k * 22, -30); ctx.lineTo(-10 + k * 22, 0); ctx.lineTo(-26 + k * 22, 30); ctx.lineTo(-34 + k * 22, 30); ctx.lineTo(-18 + k * 22, 0); ctx.lineTo(-34 + k * 22, -30); ctx.closePath(); ctx.fill(); }
+        ctx.restore();
+    }
+    // Checkpoints: a line across the track with flags
+    const P = G.payload;
+    if (P) for (const cp of P.cps) {
+        const q = trackAt(track, cp.s);
+        if (!inView(q.x, q.y, 120)) continue;
+        ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.a);
+        ctx.fillStyle = cp.hit ? 'rgba(61,139,255,0.8)' : 'rgba(255,255,255,0.75)'; ctx.fillRect(-5, -55, 10, 110);
+        for (const y of [-58, 58]) { ctx.fillStyle = '#2a2d33'; ctx.fillRect(-2, y - 2, 4, 4); ctx.fillStyle = cp.hit ? PAYLOAD.blue : '#ffd166'; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(22, y - 8); ctx.lineTo(0, y - 16); ctx.closePath(); ctx.fill(); }
+        ctx.restore();
+    }
+    // The end: a target in the middle of Red's base
+    const e = track[track.length - 1];
+    if (inView(e.x, e.y, 160)) {
+        ctx.save(); ctx.globalAlpha = 0.85;
+        for (let k = 3; k > 0; k--) { ctx.fillStyle = k % 2 ? PAYLOAD.red : '#fff7ec'; ctx.beginPath(); ctx.arc(e.x, e.y, k * 34, 0, TAU); ctx.fill(); }
+        ctx.restore();
+    }
+}
+// The rockets on their pads (over the blast walls), and the cart itself
+function drawPayloadProps(now) {
+    const Wd = G.world.payload, P = G.payload;
+    for (const r of Wd.rockets) {
+        if (!inView(r.x, r.y, 200)) continue;
+        ctx.save(); ctx.translate(r.x, r.y); ctx.scale(r.h, r.h);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(18, 22, 70, 62, 0, 0, TAU); ctx.fill();
+        for (const a of [0, 2.09, 4.19]) { ctx.save(); ctx.rotate(a); ctx.fillStyle = '#b8323a'; ctx.beginPath(); ctx.moveTo(30, -12); ctx.lineTo(78, 0); ctx.lineTo(30, 12); ctx.closePath(); ctx.fill(); ctx.restore(); }
+        ctx.fillStyle = '#e9ecf0'; ctx.beginPath(); ctx.arc(0, 0, 46, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#cdd2d8'; ctx.beginPath(); ctx.arc(0, 0, 36, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#b8323a'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(-14, -14, 10, 0, TAU); ctx.fill();
+        ctx.restore();
+    }
+    if (!P) return;
+    // The safe zones: a dome of light in each base
+    for (const t of [0, 1]) {
+        const z = P.safe[t];
+        if (!inView(z.x, z.y, PAYLOAD.safeR + 20)) continue;
+        const col = t ? '255,75,75' : '61,139,255';
+        ctx.fillStyle = `rgba(${col},0.12)`; ctx.beginPath(); ctx.arc(z.x, z.y, PAYLOAD.safeR, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(${col},${0.55 + Math.sin(now * 3) * 0.2})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(z.x, z.y, PAYLOAD.safeR, 0, TAU); ctx.stroke();
+        ctx.font = '800 26px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = `rgba(${col},0.7)`;
+        ctx.fillText('SAFE ZONE', z.x, z.y);
+    }
+    const c = P.cart, hop = c.hop > 0 ? Math.sin((1 - c.hop) * Math.PI) : 0, sc = 1 + hop * 0.45;
+    // a ring on the ground: blue while it moves, red while it's blocked
+    const col = P.state === 'moving' ? '61,139,255' : P.state === 'contested' ? '255,75,75' : P.state === 'rolling' ? '255,209,102' : '220,220,230';
+    ctx.strokeStyle = `rgba(${col},${0.45 + Math.sin(now * 5) * 0.15})`; ctx.lineWidth = 4; ctx.setLineDash([14, 10]);
+    ctx.beginPath(); ctx.arc(c.x, c.y, PAYLOAD.onR, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    ctx.save(); ctx.translate(c.x, c.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(8 + hop * 30, 12 + hop * 40, 74, 46, c.a, 0, TAU); ctx.fill();
+    ctx.rotate(c.a); ctx.scale(sc, sc);
+    // The platform: a wide flat deck on rail wheels, with hazard stripes round the edge and a glowing core
+    ctx.fillStyle = '#1c1d21';
+    for (const [x, y] of [[-52, -19], [52, -19], [-52, 19], [52, 19]]) { ctx.beginPath(); ctx.arc(x, y, 9, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = '#3a404b'; roundRect(ctx, -78, -64, 150, 128, 16); ctx.fill();
+    ctx.save(); roundRect(ctx, -78, -64, 150, 128, 16); ctx.clip();
+    ctx.fillStyle = '#e0b030';
+    for (let k = -10; k < 12; k++) { ctx.beginPath(); ctx.moveTo(-90 + k * 18, -70); ctx.lineTo(-80 + k * 18, -70); ctx.lineTo(-120 + k * 18, 70); ctx.lineTo(-130 + k * 18, 70); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = '#56606e'; roundRect(ctx, -70, -56, 134, 112, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(30,34,40,0.5)'; ctx.lineWidth = 2;
+    for (let x = -50; x < 64; x += 22) { ctx.beginPath(); ctx.moveTo(x, -56); ctx.lineTo(x, 56); ctx.stroke(); }
+    const pulse = 0.6 + Math.sin(now * 4) * 0.25;
+    ctx.fillStyle = '#1f2533'; ctx.beginPath(); ctx.arc(-14, 0, 20, 0, TAU); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(95,212,255,${0.35 * pulse})`; ctx.beginPath(); ctx.arc(-14, 0, 30, 0, TAU); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#5fd4ff'; ctx.beginPath(); ctx.arc(-14, 0, 11, 0, TAU); ctx.fill();
+    // The shield across the front: a curved wall of glowing energy on two posts
+    const hitK = clamp(1 - (G.time - (c.shieldHit || -1e9)) / 250, 0, 1), R = PAYLOAD.shieldR / sc, A = PAYLOAD.shieldArc;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(95,212,255,${0.25 + 0.2 * pulse + hitK * 0.4})`; ctx.lineWidth = 16; ctx.beginPath(); ctx.arc(0, 0, R, -A, A); ctx.stroke();
+    ctx.strokeStyle = `rgba(200,245,255,${0.6 + hitK * 0.4})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, R, -A, A); ctx.stroke();
+    ctx.restore();
+    for (const s2 of [-1, 1]) { ctx.fillStyle = '#2a2f38'; ctx.beginPath(); ctx.arc(Math.cos(A * s2) * R, Math.sin(A * s2) * R, 7, 0, TAU); ctx.fill(); ctx.fillStyle = '#5fd4ff'; ctx.beginPath(); ctx.arc(Math.cos(A * s2) * R, Math.sin(A * s2) * R, 3, 0, TAU); ctx.fill(); }
+    ctx.restore();
+}
+// On the screen: how far along the cart is, the time, an arrow to the cart when it's off screen, and the respawn countdown
+function drawPayloadOverlay() {
+    const P = G.payload, p = G.player;
+    if (!P || G.mode !== 'playing' || !p) return;
+    const w = Math.min(360, viewW - 40), x = viewW / 2 - w / 2, y = viewW < 600 ? 200 : 74;
+    ctx.save();
+    ctx.fillStyle = 'rgba(14,10,28,0.72)'; roundRect(ctx, x - 10, y - 12, w + 20, 34, 10); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(x, y + 2, w, 6);
+    ctx.fillStyle = PAYLOAD.blue; ctx.fillRect(x, y + 2, w * P.s / P.len, 6);
+    for (const cp of P.cps) { ctx.fillStyle = cp.hit ? PAYLOAD.blue : '#ffd166'; ctx.fillRect(x + w * cp.s / P.len - 2, y - 3, 4, 16); }
+    ctx.fillStyle = PAYLOAD.red; ctx.beginPath(); ctx.arc(x + w, y + 5, 7, 0, TAU); ctx.fill();
+    const cx = x + w * P.s / P.len;
+    ctx.fillStyle = P.state === 'contested' ? PAYLOAD.red : P.state === 'moving' ? '#e8fbff' : '#c9c3dd';
+    roundRect(ctx, cx - 10, y - 6, 20, 18, 4); ctx.fill();
+    ctx.font = '700 12px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1f2533';
+    ctx.fillText(P.state === 'contested' ? '!' : P.pushers ? `×${P.pushers}` : '', cx, y + 3);
+    ctx.restore();
+    // where the cart is, when you can't see it
+    const c = P.cart, sx = (c.x - G.cam.x) * G.zoom + viewW / 2, sy = (c.y - G.cam.y) * G.zoom + viewH / 2;
+    if (!p.dead && (sx < 0 || sy < 0 || sx > viewW || sy > viewH)) {
+        const a = Math.atan2(sy - viewH / 2, sx - viewW / 2), R = Math.min(viewW, viewH) / 2 - 50;
+        const ax = viewW / 2 + Math.cos(a) * R, ay = viewH / 2 + Math.sin(a) * R;
+        ctx.save(); ctx.translate(ax, ay); ctx.rotate(a);
+        ctx.fillStyle = 'rgba(95,212,255,0.9)'; ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-10, -13); ctx.lineTo(-4, 0); ctx.lineTo(-10, 13); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        ctx.font = '700 13px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8fbff';
+        ctx.fillText(`CART ${Math.round(Math.hypot(c.x - p.x, c.y - p.y) / 10)}m`, ax - Math.cos(a) * 30, ay - Math.sin(a) * 30);
+    }
+    if (p.dead) {
+        const q = P.queue.find(q => q.f === p);
+        ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(10,6,20,0.45)'; ctx.fillRect(0, viewH * 0.36, viewW, viewH * 0.18);
+        ctx.font = '900 46px "Black Ops One", sans-serif'; ctx.fillStyle = '#ffd166';
+        ctx.fillText(`RESPAWNING IN ${q ? Math.max(1, Math.ceil((q.at - G.time) / 1000)) : ''}`, viewW / 2, viewH * 0.43);
+        ctx.font = '600 19px Rajdhani, sans-serif'; ctx.fillStyle = '#fff7ec';
+        ctx.fillText('You come back in your safe zone', viewW / 2, viewH * 0.5);
+        ctx.restore();
+    }
+}
+function payloadStatus(p) {
+    const P = G.payload, left = fmtTime(Math.max(0, (P.endAt - G.time) / 1000)), pct = Math.round(P.s / P.len * 100);
+    const slope = trackAt(P.track, P.s).slope, hill = slope > 0.00012 ? ' · uphill' : slope < -0.00012 ? ' · downhill' : '';
+    const st = P.state === 'contested' ? 'blocked!' : P.state === 'moving' ? `moving${hill}` : P.state === 'rolling' ? 'rolling back' : 'stopped';
+    return `${p.team === 0 ? 'Push the cart' : 'Stop the cart'} · ${pct}% · ${st} · ${P.overtime ? 'OVERTIME' : left}`;
+}
+
+// ----- The Payload guns -----
+// Energy Gun: hold to charge. Let go early for a small blast, or charge it up for a big glowing ball that bursts
+function chargeGun(f, down, dt) {
+    const name = held(f), w = WEAPONS[name];
+    if (!w || !w.charge) { f.charge = null; return false; }
+    if (f.cook || stunned(f) || f.car || f.downed) return true;
+    if (down) f.charge = Math.min(1, (f.charge || 0) + dt / (w.charge / 1000));
+    else if (f.charge !== null && f.charge !== undefined) { fireEnergy(f, f.charge); f.charge = null; }
+    return true;
+}
+function fireEnergy(f, k) {
+    const name = held(f), w = WEAPONS[name];
+    if (G.time - f.lastShot < w.rate) return;
+    f.lastShot = G.time; f.lastLoud = G.time; f.recoil = 0.5 + k;
+    const big = k > 0.3, a = f.angle + (big ? 0 : rand(-0.03, 0.03)), sp = big ? 900 : 1400;
+    G.bullets.push({ x: f.x + Math.cos(a) * (f.r + 6), y: f.y + Math.sin(a) * (f.r + 6), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: big ? 22 + 68 * k : w.damage, owner: f, left: big ? 1500 : 650, weapon: name, ball: { r: big ? 7 + 11 * k : 4.5, c: '#5fd4ff' }, eblast: big ? 50 + 90 * k : 0 });
+    if (inView(f.x, f.y, 100)) burst(f.x + Math.cos(a) * 30, f.y + Math.sin(a) * 30, big ? 14 : 5, '#7ee6ff', big ? 220 : 120, 'glow');
+    Sound.tone(big ? 260 : 950, big ? 0.35 : 0.12, 'sine', (big ? 0.12 : 0.07) * Sound.volAt(f.x, f.y), big ? 90 : 1500);
+}
+function energyBlast(x, y, R, owner, dmg) {
+    G.fgrid.query(x, y, R + 30, t => {
+        if (t.dead || !foe(owner, t)) return;
+        const d = Math.hypot(t.x - x, t.y - y);
+        if (d < R + t.r) damage(t, dmg * (1 - d / (R + t.r) * 0.6), owner, 'Energy Gun');
+    });
+    if (inView(x, y, R + 60)) {
+        G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: R * 1.2, color: '#5fd4ff' });
+        burst(x, y, 18, '#7ee6ff', 260, 'glow');
+    }
+    Sound.tone(180, 0.3, 'sine', 0.1 * Sound.volAt(x, y), 60);
+}
+// The platform's shield: a curved wall across its front that stops any shot coming at it from ahead
+function payloadShieldHit(b) {
+    const c = G.payload.cart, dx = b.x - c.x, dy = b.y - c.y, d = Math.hypot(dx, dy);
+    if (d < PAYLOAD.shieldR - 10 || d > PAYLOAD.shieldR + 10) return false;
+    if (Math.abs(angleDiff(c.a, Math.atan2(dy, dx))) > PAYLOAD.shieldArc) return false;
+    if (b.vx * dx + b.vy * dy > 0) return false;  // (shots from the platform go out through it)
+    if (inView(b.x, b.y, 60)) { burst(b.x, b.y, 6, '#7ee6ff', 160, 'glow'); G.particles.push({ type: 'ring', x: b.x, y: b.y, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 16, color: '#7ee6ff' }); }
+    c.shieldHit = G.time;
+    return true;
+}
+// Guided Rocket: it turns toward wherever its shooter is aiming now, so you can steer it round corners
+function steerGuided(b, dt) {
+    const o = b.owner;
+    if (!o || o.dead) return;
+    const cur = Math.atan2(b.vy, b.vx), sp = Math.hypot(b.vx, b.vy);
+    const na = cur + clamp(angleDiff(cur, o.angle), -3.2 * dt, 3.2 * dt);
+    b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp;
+}
+// The charge glowing in front of the gun
+function drawCharges() {
+    for (const f of G.fighters) {
+        if (f.dead || !(f.charge > 0) || !inView(f.x, f.y, 80)) continue;
+        const d = f.r + 30, x = f.x + Math.cos(f.angle) * d, y = f.y + Math.sin(f.angle) * d, r = 4 + f.charge * 12;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `rgba(95,212,255,${0.25 + f.charge * 0.3})`; ctx.beginPath(); ctx.arc(x, y, r * 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#bff3ff'; ctx.beginPath(); ctx.arc(x, y, r * (0.8 + Math.sin(G.time * 0.03) * 0.1), 0, TAU); ctx.fill();
+        ctx.restore();
+    }
 }
 
 // ---------- Sniper Duel ----------
@@ -9081,6 +9675,12 @@ function newDemo() {
         G.cam.x = G.bossF.x; G.cam.y = G.bossF.y;
         return;
     }
+    if (id === 'payload') {
+        newState('demo', { type: 'payload', count: 20, map: pick(PAYLOAD_MAPS) });
+        G.alive = G.fighters.length;
+        G.cam.x = G.payload.cart.x; G.cam.y = G.payload.cart.y;
+        return;
+    }
     if (id === 'prop') {
         newState('demo', { type: 'prop', count: 24, map: 'ordinary' });
         G.alive = G.fighters.length;
@@ -9441,7 +10041,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.ghostMode || G.prop || G.duel || G.navy) return;
+    if (G.ghostMode || G.prop || G.payload || G.duel || G.navy) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -9727,6 +10327,21 @@ function tryAttack(f) {
         if (isHuman(f)) { Sound.empty(); f.lastShot = G.time; }
         return;
     }
+    // (a bot with the Energy Gun charges it up for a moment, then lets go)
+    if (w.charge) {
+        if (f.charge === null || f.charge === undefined) { f.charge = 0; f.chargeWant = Math.random() < 0.4 ? rand(0, 0.25) : rand(0.5, 1); f.chargeAt = G.time; }
+        f.charge = Math.min(1, (G.time - f.chargeAt) / w.charge);
+        if (f.charge >= f.chargeWant) { fireEnergy(f, f.charge); f.charge = null; }
+        return;
+    }
+    // Guns with a clip: so many shots, then a reload
+    if (w.clip) {
+        if (G.time < (f.reloadUntil || 0)) return;
+        if (!f.clip) f.clip = {};
+        if (f.clip[name] === undefined) f.clip[name] = w.clip;
+        f.clip[name]--;
+        if (f.clip[name] <= 0) { f.clip[name] = w.clip; f.reloadUntil = G.time + w.reload; if (isHuman(f)) Sound.tone(300, 0.08, 'square', 0.06, 200); }
+    }
 
     if (f.ammo[name] !== Infinity && f.perk !== 'ammo' && !(G.chase && f.team === 0)) f.ammo[name]--;  // (Chase: the squad never runs out)  // (the ammo pack never runs dry)
     f.lastShot = G.time;
@@ -9747,8 +10362,10 @@ function tryAttack(f) {
         const sp = w.speed * (count > 1 ? rand(0.9, 1.08) : 1);
         // Rounds leave from the edge of your body, not the end of the barrel: anything right up against you still gets hit
         // (and the barrel can't poke through a wall). Rockets launch from the barrel so they don't go off in your face
-        const bx = w.rocket ? mx : f.x + ca * f.r, by = w.rocket ? my : f.y + sa * f.r;
-        G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive, spark: !!w.spark });
+        let bx = w.rocket ? mx : f.x + ca * f.r, by = w.rocket ? my : f.y + sa * f.r;
+        // (two pistols: the shots come from each hand in turn)
+        if (w.dual) { f.dualSide = -(f.dualSide || 1); bx += -sa * 10 * f.dualSide; by += ca * 10 * f.dualSide; }
+        G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive, spark: !!w.spark, guided: !!w.guided, ball: w.ball ? { r: w.ball, c: '#7ef9ff' } : null });
     }
     if (inView(mx, my, 100) && !w.string) {
         G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.06, max: 0.06, size: 10 + w.w * 1.4, angle: f.angle });
@@ -10183,6 +10800,7 @@ function damage(t, amount, attacker, weapon) {
     if (G.duel && t.duel) { duelHit(t, attacker, weapon); return; }
     if (t.car && !t.car.dead) return;
     if (G.time < (t.protectUntil || 0)) return;  // just respawned
+    if (G.payload && inSafe(t, t.team)) return;  // (nobody can hurt you in your own safe zone)
     if (t.downed) { t.downHp -= amount * (G.war && attacker && attacker !== t ? closeGameMul(attacker.team, t.team) : 1); t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
     let dmg = amount;
     if (G.war && attacker && attacker !== t) dmg *= closeGameMul(attacker.team, t.team);
@@ -10269,7 +10887,7 @@ function killFighter(t, killer, weapon) {
 
     // (in the menu's background battle people fall as bodies; in a real game they're just gone, no effect)
     if (!t.escaped && !t.vaporized && G.mode === 'demo') addCorpse(t);
-    dropDeathWeapons(t);
+    if (!G.payload) dropDeathWeapons(t);  // (Payload: guns come from the racks)
     if (G.mode === 'demo' && inView(t.x, t.y, 100)) {
         burst(t.x, t.y, 22, t.color, 260, 'blood');
         burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
@@ -10279,6 +10897,7 @@ function killFighter(t, killer, weapon) {
     if (G.mode !== 'demo') addKillfeed(t, killer, weapon);
 
     if (G.war) { warDeath(t, killer, weapon); return; }
+    if (G.payload) { payloadDeath(t, killer); return; }
     if (t.isPlayer && G.result) return;
     if (t.isPlayer) {
         G.result = { won: false, place: G.escape ? G.sides.a + G.escaped : G.alive + 1, sub: G.escape ? `The army got you. ${G.escaped} of ${ESCAPE.people} people escaped.` : G.bossFight && G.bossF && !G.bossF.dead ? `The boss still has ${Math.ceil(G.bossF.hp / G.bossF.maxHp * 100)}% of his health left.` : null, killer: killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null) };
@@ -10638,7 +11257,8 @@ function updatePlayer(p, dt) {
         // A grenade in hand: the trigger pulls the pin, and letting go throws it where you're aiming
         if (mouse.down && !p.cook) { playerCook(p); if (p.cook) p.cookByTrigger = true; }
         else if (!mouse.down && p.cook && p.cookByTrigger) { p.cookByTrigger = false; playerRelease(p); }
-    } else if (mouse.down && !p.swim) tryAttack(p);
+    } else if (!p.swim && chargeGun(p, mouse.down, dt)) { /* (the Energy Gun charges while held, fires when let go) */ }
+    else if (mouse.down && !p.swim) tryAttack(p);
 }
 
 // ---------- Bot AI ----------
@@ -10849,6 +11469,7 @@ function botThink(b) {
         chooseBotWeapon(b, bestD);
         return;
     }
+    if (G.payload && payloadBotPlan(b)) return;
     if (outside) {
         b.mode = 'zone';
         b.goal = goal;
@@ -16101,6 +16722,7 @@ function updateBullets(dt) {
         if (b.homing) steerHoming(b, dt);
         else if (b.navyHoming) navySteerMissile(b, dt);
         else if (b.subSeek) navySeekSub(b, dt);
+        else if (b.guided) steerGuided(b, dt);
         const speed = Math.hypot(b.vx, b.vy);
         const total = speed * dt;
         const steps = Math.max(1, Math.ceil(total / 14));
@@ -16120,6 +16742,7 @@ function updateBullets(dt) {
             }
 
             if (G.chase && G.chase.blimps.length && chaseBlimpHit(b)) { b.dead = true; break; }
+            if (G.payload && payloadShieldHit(b)) { b.dead = true; break; }
             // (a Shock Pistol bolt crackles and throws off sparks as it flies)
             if (s === 0 && b.spark && inView(b.x, b.y, 60)) shockSparks(b.x, b.y, 2, 0.35, -b.vx * 0.05, -b.vy * 0.05);
             if (G.navy && navyBullet(b)) { b.dead = true; break; }
@@ -16207,6 +16830,7 @@ function updateBullets(dt) {
             }
         }
         if (b.dead && b.explosive) miniBlast(b.x - b.vx * 0.008, b.y - b.vy * 0.008, b.owner);
+        if (b.dead && b.eblast) energyBlast(b.x - b.vx * 0.01, b.y - b.vy * 0.01, b.eblast, b.owner, b.dmg * 0.5);
         if (b.dead && b.rocket) {
             const ex = clamp(b.x - b.vx * 0.012, 0, W), ey = clamp(b.y - b.vy * 0.012, 0, W);
             blast(ex, ey, b.owner, b.blastR || ROCKET.radius, b.blastDmg || ROCKET.damage, b.weapon);
@@ -16247,6 +16871,7 @@ function update(dt) {
     if (G.noZone) updateOutbreak(dt);
     if (G.ghostMode) updateGhost(dt);
     if (G.prop) updateProp(dt);
+    if (G.payload) updatePayload(dt);
     if (G.duel) updateDuel(dt);
     if (G.world.maze && G.escape && G.mode === 'playing') updateMazeFog();
     if (G.survival) { if (!G.frozen && !G.world.floor) updateAnimals(dt); updateCountdown(); }
@@ -16406,6 +17031,7 @@ function render() {
     const W = CONFIG.WORLD_SIZE;
     if (G.chase) drawChaseGround(L, T, R, B, now);
     else if (G.navy) drawSea(L, T, R, B, now);
+    else if (G.payload) drawPayloadGround(L, T, R, B);
     else if (G.world.floor) drawFloorBase(L, T, R, B);
     else if (G.world.city) drawCity(L, T, R, B);
     else {
@@ -16519,6 +17145,7 @@ function render() {
     if (G.navy) drawNavyInterior(L, T, R, B, now);
     if (G.chase) { drawChaseLights(); drawChaseScans(now); }
     if (G.prop) drawPropDecoys(L, T, R, B);
+    if (G.world.payload) drawPayloadProps(now);
     // Fighters
     const visible = [];
     const deckOf = f => (f && f.room && f.ship ? f.ship : null), myDeck = G.player ? G.player.room || null : null, myShip = deckOf(G.player);
@@ -16539,6 +17166,7 @@ function render() {
         if (f.swim) drawSwimmer(f);
     }
     for (const f of visible) { drawShieldBubble(f); drawStun(f); drawFrozen(f); }
+    drawCharges();
 
     if (G.world.floor && G.world.floor.heli) drawHelicopter(G.world.floor.heli.x, G.world.floor.heli.y, now);
     drawBullets(L, T, R, B);
@@ -16623,6 +17251,7 @@ function render() {
         if (a > 0.01) { ctx.globalAlpha = a; ctx.drawImage(hurtVignette, 0, 0, viewW, viewH); ctx.globalAlpha = 1; }
     }
     if (G.prop) drawPropBlindfold();
+    if (G.payload) drawPayloadOverlay();
     if (G.whiteout > 0.01) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, G.whiteout * 1.6)})`; ctx.fillRect(0, 0, viewW, viewH); }
     if (G.flash > 0.01) {
         ctx.fillStyle = `rgba(${G.flashColor},${G.flash * 0.6})`;
@@ -17742,6 +18371,15 @@ function drawFighter(f) {
             ctx.fillStyle = '#d8dde6'; ctx.beginPath(); ctx.moveTo(bx + 15, 0); ctx.lineTo(bx + 9, -3); ctx.lineTo(bx + 9, 3); ctx.closePath(); ctx.fill();
         }
         hands = [[bx - 2, 0], [ex - pull, 0]];
+    } else if (w.dual) {
+        // A pistol in each hand
+        for (const sy of [-1, 1]) {
+            const k2 = (f.dualSide === sy ? kick : 0), gx = r * 0.55 + k2, gy = sy * 10;
+            ctx.fillStyle = '#1f1b2b'; roundRect(ctx, gx - 2, gy - w.w / 2 - 1.5, w.len + 12, w.w + 3, 3); ctx.fill();
+            ctx.fillStyle = '#2f6fb3'; roundRect(ctx, gx, gy - w.w / 2, w.len + 8, w.w, 2); ctx.fill();
+            ctx.fillStyle = '#7ef9ff'; ctx.fillRect(gx + w.len + 4, gy - 1.5, 4, 3);
+        }
+        hands = [[r * 0.75 + (f.dualSide === -1 ? kick : 0), -10], [r * 0.75 + (f.dualSide === 1 ? kick : 0), 10]];
     } else {
         // Gun body, barrel and a rarity-colored stripe
         const gx = r * 0.35 + kick;
@@ -17901,6 +18539,16 @@ function drawBullets(L, T, R, B) {
         if (b.boulder) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.arc(b.x + 8, b.y + 12, 11, 0, TAU); ctx.fill(); ctx.fillStyle = '#7d7468'; ctx.beginPath(); ctx.arc(b.x, b.y, 12, 0, TAU); ctx.fill(); ctx.fillStyle = '#9a9083'; ctx.beginPath(); ctx.arc(b.x - 3, b.y - 3, 6, 0, TAU); ctx.fill(); continue; }
         if (b.zap) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = '#7fe9ff'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(b.x, b.y); for (let k = 1; k <= 4; k++) ctx.lineTo(b.x - b.vx * 0.006 * k + rand(-7, 7), b.y - b.vy * 0.006 * k + rand(-7, 7)); ctx.stroke(); ctx.fillStyle = '#e8ffff'; ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, TAU); ctx.fill(); ctx.restore(); continue; }
         if (b.rocket) { drawRocket(b); continue; }
+        if (b.ball) {
+            // A glowing ball of blue energy
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            const r = b.ball.r, sp0 = Math.hypot(b.vx, b.vy) || 1;
+            ctx.fillStyle = 'rgba(95,212,255,0.25)'; ctx.beginPath(); ctx.arc(b.x - b.vx / sp0 * r, b.y - b.vy / sp0 * r, r * 1.6, 0, TAU); ctx.fill();
+            ctx.fillStyle = 'rgba(95,212,255,0.45)'; ctx.beginPath(); ctx.arc(b.x, b.y, r * 1.9, 0, TAU); ctx.fill();
+            ctx.fillStyle = '#d9f8ff'; ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, TAU); ctx.fill();
+            ctx.restore();
+            continue;
+        }
         if (WEAPONS[b.weapon] && WEAPONS[b.weapon].string) {
             const arrow = b.weapon !== 'Crossbow', a = Math.atan2(b.vy, b.vx), L = b.weapon === 'Longbow' ? 44 : arrow ? 36 : 26;
             ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
@@ -18238,6 +18886,9 @@ function updateHUD() {
     } else if (G.war) {
         setHTML(hud.teamScore, 'teams', G.teamAlive.map((n, t) =>
             `<div class="ts${t === p.team ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${n}</b><span>${t === p.team ? 'Your team' : TEAMS[t].name}</span></div>`).join('<em>vs</em>'));
+    } else if (G.payload) {
+        const P = G.payload, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
+        setHTML(hud.teamScore, 'teams', chip(P.pushers, PAYLOAD.blue, 'Blue on the platform', p.team === 0) + '<em>vs</em>' + chip(P.red || 0, PAYLOAD.red, 'Red blocking', p.team === 1));
     } else if (G.prop) {
         const h = G.fighters.filter(f => !f.dead && f.prop).length, sk = G.fighters.filter(f => !f.dead && f.seeker).length;
         const chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
@@ -18257,6 +18908,7 @@ function updateHUD() {
     if (G.chase) zt = chaseStatus(p);
     else if (G.navy) zt = navyStatus(p);
     else if (G.prop) zt = propStatus(p);
+    else if (G.payload) zt = payloadStatus(p);
     else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
@@ -18339,7 +18991,7 @@ function updateHUD() {
     const name = held(p), w = WEAPONS[name];
     setText(hud.weapon, 'wname', p.nadeReady ? `${ITEMS[p.throwSel].name} (in hand)` : name);
     hud.weapon.style.color = p.nadeReady ? '#ffb347' : RARITY[w.rarity].color;
-    setText(hud.mag, 'mag', w.melee ? '—' : p.ammo[name] === Infinity ? '∞' : String(Math.max(0, p.ammo[name] || 0)));
+    setText(hud.mag, 'mag', w.melee ? '—' : w.clip ? (G.time < (p.reloadUntil || 0) ? 'RELOAD' : `${p.clip && p.clip[name] !== undefined ? p.clip[name] : w.clip}/${w.clip}`) : w.charge && p.charge > 0 ? `${Math.round(p.charge * 100)}%` : p.ammo[name] === Infinity ? '∞' : String(Math.max(0, p.ammo[name] || 0)));
     hud.mag.style.color = !w.melee && !(p.ammo[name] > 0) ? '#ff4f6d' : '';
 
     // Context prompt
@@ -18598,6 +19250,7 @@ const MODES = [
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
+    { id: 'payload', name: 'PAYLOAD', desc: 'Blue rides a shielded platform along a winding track, up and down hills, from their base to the middle of Red\'s. It only moves with Blue on it. Red tries to stop it. Launch site, canyon or forest.' },
     { id: 'prop', name: 'PROP HUNT', desc: 'The hiders turn into barrels, crates, bushes and more, hidden among hundreds of real ones. The seekers have three minutes to find them. Anyone found joins the seekers.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
     { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
@@ -18627,7 +19280,8 @@ function setMenuMode(i, dir) {
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
     $('settings-prop').classList.toggle('hidden', m.id !== 'prop');
-    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : m.id === 'prop' ? `Other players (up to ${PROP.maxPlayers - 1})` : 'Opponents';
+    $('settings-payload').classList.toggle('hidden', m.id !== 'payload');
+    document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : m.id === 'prop' ? `Other players (up to ${PROP.maxPlayers - 1})` : m.id === 'payload' ? `Other players (up to ${PAYLOAD.maxPlayers - 1})` : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
     // Revolution is always two sides
     $('team-count').closest('.cpu-row').classList.toggle('hidden', m.id === 'revolution');
@@ -18893,7 +19547,7 @@ function sliderToCount(v) {
 }
 
 // (Ghost only takes so many players)
-const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'ghost' ? GHOST.maxPlayers - 1 : id === 'prop' ? PROP.maxPlayers - 1 : Infinity; };
+const cpuCap = () => { const id = MODES[menuMode] && MODES[menuMode].id; return id === 'ghost' ? GHOST.maxPlayers - 1 : id === 'prop' ? PROP.maxPlayers - 1 : id === 'payload' ? PAYLOAD.maxPlayers - 1 : Infinity; };
 const showCpuValue = () => { $('cpu-value').textContent = Math.min(cpuCap(), sliderToCount(+slider.value)); };
 slider.addEventListener('input', showCpuValue);
 showCpuValue();
@@ -18991,7 +19645,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'prop' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'prop' || id === 'payload' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -19007,6 +19661,7 @@ const BRIEF = {
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
+BRIEF.payload = [['🛤️', '<b>Goal:</b> Blue pushes the platform along the track from their base to the target in the middle of Red\'s base. Red stops them before the time runs out.'], ['🧍', 'The platform only moves with Blue standing on it, faster with more of them. It stops while Red is next to it, and rolls back if Blue leaves it alone too long.'], ['🛡️', 'A shield across its front stops shots coming at it from ahead.'], ['⛰️', 'The track winds and goes up and down hills: slower uphill, faster downhill. Two checkpoints each add a minute.'], ['🔫', 'Everyone starts with <b>dual shock pistols</b>. Grab a machine gun, energy gun, guided rocket, sniper, shotgun, burst minigun or rifle from the racks in your base and along the track.'], ['⚡', '<b>Energy Gun:</b> hold to charge (on a phone or iPad, hold the aim stick in the middle), let go to fire. <b>Guided Rocket:</b> keep aiming after you fire to steer it.'], ['♻️', 'When you die you come back in your safe zone after 5 seconds. Nobody can hurt you in your own safe zone.']];
 BRIEF.prop = [['📦', '<b>Props:</b> you look like a barrel, crate, bush, rock, cone or the like, with hundreds of real ones all round. Stand beside ones that look like you, and keep still: a prop that moves is no prop.'], ['🔄', '<b>F</b> (or the button) turns you into the closest prop you\'re next to.'], ['🙈', 'The seekers wait blindfolded for 30 seconds while you hide, then have 3 minutes to find everyone.'], ['🔫', '<b>Seekers:</b> shoot anything that looks wrong. Watch for props that move, or that don\'t match the ones round them.'], ['🎵', 'Every so often each prop whistles: listen for it.'], ['🎯', 'A prop who\'s found joins the seekers. Props win if anyone is still hidden when the time runs out.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
@@ -19019,13 +19674,14 @@ BRIEF.chase = [['🏃', '<b>Goal:</b> get your squad of 20 all the way to the gi
     ['🤝', 'Your squad follows you. The mountains are a wall: only the river valley gets through them. In the water you slowly drown.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { chase: 'Desert, mountains and ocean', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
+const BRIEF_MAP = { launchpad: 'Launch Site', canyon: 'Canyon', forest: 'Forest', chase: 'Desert, mountains and ocean', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
 function controlsFor(id) {
     const t = TOUCH.enabled, list = (t ? CONTROLS_TOUCH : CONTROLS_KEYS).slice();
     if (id === 'navy') list.push(['🧭', t ? 'The <b>bottom button</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: stick up and down for speed, left and right to steer' : '<b>F</b> takes the wheel or a gun, or jumps overboard at the rail. At the wheel: <b>W S</b> speed, <b>A D</b> steer']);
+    if (id === 'payload') list.push(['⚡', t ? 'Energy Gun: hold the aim stick in the middle to charge, push it out or let go to fire · Guided Rocket: keep aiming to steer it' : 'Energy Gun: hold the mouse to charge, let go to fire · Guided Rocket: keep aiming to steer it']);
     if (id === 'prop') list.push(['🔄', t ? 'As a prop, the <b>bottom button</b> turns you into the prop you\'re next to' : 'As a prop, <b>F</b> turns you into the prop you\'re next to']);
     if (id === 'duel') list.push(['🤫', t ? 'Scoped in, you walk slowly and quietly' : 'Hold <b>Shift</b> or scope in to walk slowly and quietly']);
     if (id === 'survival') list.push(['🍖', t ? 'Tap the meat or water on the left to eat or drink' : '<b>C</b> eat · <b>V</b> drink or fill a bucket at water · <b>B</b> rest']);
@@ -19046,17 +19702,17 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'prop' ? `You: ${propRolePick === 'seeker' ? 'Seeker' : 'Prop'}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'prop' ? `You: ${propRolePick === 'seeker' ? 'Seeker' : 'Prop'}` : m.id === 'payload' ? `You: ${payloadSidePick === 'red' ? 'Red' : 'Blue'}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'prop' || m.id === 'chase' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'prop' || m.id === 'payload' || m.id === 'chase' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'prop' || id === 'duel' || id === 'navy' || id === 'chase') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'prop' || id === 'payload' || id === 'duel' || id === 'navy' || id === 'chase') openMapSelect(); else openTypeSelect(); }
     else { const map = BRIEF_STAGE.map; quickMatch(() => startGame(map)); }
 });
 $('brief-back').addEventListener('click', () => {
@@ -19064,7 +19720,7 @@ $('brief-back').addEventListener('click', () => {
     // (a mode with only one map never showed the map screen: back to whatever came before it)
     if (BRIEF_STAGE.stage === 'desc') screens.menu.classList.remove('hidden');
     else if (!soloMap(MODES[menuMode].id)) screens.mapsel.classList.remove('hidden');
-    else if (['ghost', 'prop', 'navy', 'chase'].includes(MODES[menuMode].id)) openDescription();
+    else if (['ghost', 'prop', 'payload', 'navy', 'chase'].includes(MODES[menuMode].id)) openDescription();
     else openTypeSelect();
 });
 
@@ -19074,11 +19730,13 @@ function mapAllowed(id, m) {
     if (id === 'navy') return m === 'sea';
     if (id === 'chase') return m === 'chase';
     if (id === 'prop') return m === 'ordinary' || m === 'city' || m === 'rusty';
+    if (id === 'payload') return PAYLOAD_MAPS.includes(m);
+    if (PAYLOAD_MAPS.includes(m)) return false;
     return !(m === 'sea' || m === 'chase' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
 // The one map a mode can be played on, if there's only one: then there's nothing to choose
 function soloMap(id) {
-    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'chase'].filter(m => mapAllowed(id, m));
+    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'chase', ...PAYLOAD_MAPS].filter(m => mapAllowed(id, m));
     return all.length === 1 ? all[0] : null;
 }
 function openMapSelect() {
@@ -19101,6 +19759,9 @@ const MAP_DESC = {
     mountain: 'Green valleys, pine forests, rocky passes and snowy peaks.',
     haunted: 'A giant haunted mansion full of candlelit rooms and coffins, in a foggy cemetery of graves, crypts and dead trees behind an iron fence.',
     cavern: 'The boss\'s lair: a giant cave deep underground with rocks everywhere, glowing crystals and lava cracks.',
+    launchpad: 'A rocket launch site: concrete, blast walls, fuel tanks and rockets on their pads. Launch pads on the track throw the platform into the air.',
+    canyon: 'The track runs along the bottom of a winding canyon, with side passages and rocky mesas up above.',
+    forest: 'A thick forest: trees and bushes everywhere, with the track winding through.',
     wasteland: 'Made for sniping: wide open ground, a few lone trees and broken junk everywhere, no cars. Snipe from far away.'
 };
 const ESCAPE_MAP_DESC = {
@@ -19112,6 +19773,18 @@ const ESCAPE_MAP_DESC = {
 // Little painted thumbnails of each battlefield
 function drawMapPreview(cv, map) {
     const g = cv.getContext('2d'), W = cv.width, H = cv.height, rnd = seededRand(map.length * 977);
+    if (PAYLOAD_MAPS.includes(map)) {
+        g.fillStyle = map === 'forest' ? '#4f8a3f' : map === 'canyon' ? '#c4874f' : '#8a8f96'; g.fillRect(0, 0, W, H);
+        if (map === 'canyon') { g.strokeStyle = 'rgba(110,62,36,0.5)'; g.lineWidth = 60; g.lineCap = 'round'; g.beginPath(); g.moveTo(-10, 150); g.bezierCurveTo(80, 20, 200, 180, 320, 40); g.stroke(); for (let i = 0; i < 26; i++) { g.fillStyle = '#7a4a2c'; g.beginPath(); g.arc(rnd() * W, rnd() * H, 8 + rnd() * 16, 0, TAU); g.fill(); } }
+        g.strokeStyle = map === 'launchpad' ? '#5e6168' : '#8a6a48'; g.lineWidth = 20; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(-10, 150); g.bezierCurveTo(80, 20, 200, 180, 320, 40); g.stroke();
+        g.strokeStyle = '#c9ccd2'; g.lineWidth = 2; g.setLineDash([]); for (const o of [-5, 5]) { g.beginPath(); g.moveTo(-10, 150 + o); g.bezierCurveTo(80, 20 + o, 200, 180 + o, 320, 40 + o); g.stroke(); }
+        if (map === 'forest') for (let i = 0; i < 40; i++) { const x = rnd() * W, y = rnd() * H; g.fillStyle = i % 2 ? '#2f6b2a' : '#3d7f35'; g.beginPath(); g.arc(x, y, 10 + rnd() * 10, 0, TAU); g.fill(); }
+        if (map === 'launchpad') for (const [x, y] of [[70, 50], [240, 130]]) { g.fillStyle = '#5d6168'; g.beginPath(); g.arc(x, y, 30, 0, TAU); g.fill(); g.fillStyle = '#e9ecf0'; g.beginPath(); g.arc(x, y, 14, 0, TAU); g.fill(); g.fillStyle = '#b8323a'; g.beginPath(); g.arc(x, y, 6, 0, TAU); g.fill(); }
+        g.fillStyle = '#3a404b'; g.save(); g.translate(150, 105); g.rotate(-0.4); g.fillRect(-16, -13, 30, 26); g.strokeStyle = '#7ee6ff'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 20, -0.9, 0.9); g.stroke(); g.restore();
+        g.fillStyle = 'rgba(61,139,255,0.6)'; g.fillRect(0, 120, 30, 60); g.fillStyle = 'rgba(255,75,75,0.6)'; g.fillRect(270, 10, 30, 60);
+        return;
+    }
     if (map === 'wasteland') {
         g.fillStyle = '#6f8a4a'; g.fillRect(0, 0, W, H);
         for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(120,100,60,${0.15 + rnd() * 0.2})`; g.beginPath(); g.arc(rnd() * W, rnd() * H, 6 + rnd() * 18, 0, TAU); g.fill(); }
@@ -19208,7 +19881,7 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
-for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#prop-role', v => { propRolePick = v; }]])
+for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#prop-role', v => { propRolePick = v; }], ['#payload-side', v => { payloadSidePick = v; }]])
     for (const b of document.querySelectorAll(sel + ' button')) b.addEventListener('click', () => {
         set(b.dataset.r);
         for (const o of document.querySelectorAll(sel + ' button')) o.classList.toggle('on', o === b);
@@ -19238,17 +19911,20 @@ function startGame(map = lastMap) {
     if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
     if (id === 'chase') map = 'chase'; else if (map === 'chase') map = 'ordinary';
     if (id === 'prop' && !mapAllowed('prop', map)) map = 'ordinary';
+    if (id === 'payload' && !PAYLOAD_MAPS.includes(map)) map = 'forest';
+    if (id !== 'payload' && PAYLOAD_MAPS.includes(map)) map = 'ordinary';
     lastMap = map;
     const setup = id === 'navy' ? (navyFleet === 'ffa' ? { type: id, teams: navyFfaCount(), size: NAVY_FFA.crew, ships: 1, crew: NAVY_FFA.crew, role: navyRolePick, fleet: 'ffa' } : navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
         : id === 'chase' ? { type: id, count: 0 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
+        : id === 'payload' ? { type: id, count: Math.max(1, Math.min(PAYLOAD.maxPlayers - 1, sliderToCount(+slider.value))), side: payloadSidePick }
         : id === 'prop' ? { type: id, count: Math.max(1, Math.min(PROP.maxPlayers - 1, sliderToCount(+slider.value))), role: propRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'ghost' || id === 'prop' || id === 'duel' || id === 'navy' || id === 'chase' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'ghost' || id === 'prop' || id === 'payload' || id === 'duel' || id === 'navy' || id === 'chase' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -19261,11 +19937,11 @@ function startGame(map = lastMap) {
     document.body.classList.add('playing');
     canvas.classList.remove('dead');
     mouse.down = false;
-    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.prop);
+    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.prop && !G.payload);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.prop);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.prop || !!G.payload);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
@@ -19275,6 +19951,7 @@ function startGame(map = lastMap) {
     else if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
     else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
+    else if (G.payload) showBanner('PAYLOAD', true, G.player.team === 0 ? 'You\'re Blue: stand on the platform to push it to the middle of Red\'s base!' : 'You\'re Red: stop Blue getting the platform into your base!');
     else if (G.prop) showBanner('PROP HUNT', true, G.player.prop ? 'You\'re a prop! Hide next to props that look like you (F or the button changes you), then keep still.' : `You're a seeker. Wait while the props hide, then find them. Watch for anything that moves!`);
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
@@ -19986,8 +20663,11 @@ function touchFrame() {
         mouse.x = viewW / 2 + (p.x - G.cam.x) * G.zoom + a.x * reach;
         mouse.y = viewH / 2 + (p.y - G.cam.y) * G.zoom + a.y * reach;
     }
-    if (a.on || TOUCH.wasFiring) mouse.down = firing;
-    TOUCH.wasFiring = firing;
+    // (the Energy Gun: holding the stick near the middle charges it; push it out or let go to fire)
+    const wq = WEAPONS[held(p)];
+    const trig = wq && wq.charge ? a.on && a.mag < TOUCH.fireAt : firing;
+    if (a.on || TOUCH.wasFiring) mouse.down = trig;
+    TOUCH.wasFiring = trig;
 }
 (function setUpTouch() {
     const layer = $('touch'), moveEl = $('stick-move'), aimEl = $('stick-aim');

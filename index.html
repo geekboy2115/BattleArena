@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261108e">
+    <link rel="stylesheet" href="style.css?v=20261108f">
 </head>
 
 <body>
@@ -141,6 +141,14 @@
                 <div class="cpu-row"><span>Play as</span>
                     <div class="seg" id="ghost-role">
                         <button data-r="hunter" class="on">Hunter</button><button data-r="ghost">Ghost</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cpu-select hidden" id="settings-payload">
+                <div class="cpu-row"><span>Your team</span>
+                    <div class="seg" id="payload-side">
+                        <button data-r="blue" class="on">Blue (push)</button><button data-r="red">Red (stop)</button>
                     </div>
                 </div>
             </div>
@@ -277,6 +285,9 @@
                 <button class="map-card" data-map="cavern"><canvas width="300" height="180"></canvas><span class="map-name">CAVERN</span><span class="map-desc"></span></button>
                 <button class="map-card" data-map="wasteland"><canvas width="300" height="180"></canvas><span class="map-name">WASTELAND</span><span class="map-desc"></span></button>
                 <button class="map-card" data-map="mountain"><canvas width="300" height="180"></canvas><span class="map-name">MOUNTAINS</span><span class="map-desc"></span></button>
+                <button class="map-card" data-map="launchpad"><canvas width="300" height="180"></canvas><span class="map-name">LAUNCH SITE</span><span class="map-desc"></span></button>
+                <button class="map-card" data-map="canyon"><canvas width="300" height="180"></canvas><span class="map-name">CANYON</span><span class="map-desc"></span></button>
+                <button class="map-card" data-map="forest"><canvas width="300" height="180"></canvas><span class="map-name">FOREST</span><span class="map-desc"></span></button>
             </div>
             <button id="friends-btn" class="btn primary friends-btn">PLAY WITH FRIENDS</button>
             <button id="mapsel-back" class="btn ghost">BACK</button>
@@ -396,7 +407,7 @@
         </div>
     </div>
 
-    <script src="script.js?v=20261108e"></script>
+    <script src="script.js?v=20261108f"></script>
 </body>
 
 </html>
