@@ -5339,7 +5339,7 @@ function navyCrewman(s, name, isPlayerToo) {
 function setupNavy(setup) {
     const W = CONFIG.WORLD_SIZE, C = W / 2, demo = G.mode === 'demo';
     const n = setup.ships || 1, crew = setup.crew || 20;
-    G.navy = { ships: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n, crew, wake: 0, mini: setup.fleet === 'mini', huge: setup.fleet === 'huge' };
+    G.navy = { ships: [], wrecks: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n, crew, wake: 0, mini: setup.fleet === 'mini', huge: setup.fleet === 'huge' };
     G.world.cars = [];
     let name = 0;
     const firstPlayer = G.mode === 'playing';
@@ -5885,6 +5885,8 @@ function updateNavy(dt) {
         }
     }
     for (const s of N.ships) navyShipTick(s, dt);
+    // (a ship that's gone down stays on the sea floor as a wreck you can still see)
+    for (const s of N.ships) if (s.gone) N.wrecks.push({ kind: s.kind, team: s.team, name: s.name, C: s.C, x: s.x, y: s.y, a: s.a + 0.09 });
     N.ships = N.ships.filter(s => !s.gone);
     if (G.time >= N.nextCheck) navyCheck();
 }
@@ -6596,7 +6598,21 @@ function navyIslandShape(g, q, baseR) {
     }
     g.closePath();
 }
+const SHIPWRECK = { alpha: 0.42, scale: 0.86 };
+function drawNavyWreck(w, al) {
+    const art = navyArt(w.kind, w.team);
+    ctx.globalAlpha = al;
+    ctx.drawImage(art, -art.width / 2, -art.height / 2);
+    // (green-blue water over her, darker the deeper she lies)
+    ctx.globalAlpha = al * 0.9; ctx.fillStyle = 'rgba(10,52,72,0.6)'; navyHullPath(ctx, w.C, 14); ctx.fill();
+    ctx.globalAlpha = 1;
+}
 function drawNavy(L, T, R, B, now) {
+    for (const w of G.navy.wrecks || []) {
+        if (w.x + w.C.len / 2 < L || w.x - w.C.len / 2 > R || w.y + w.C.len / 2 < T || w.y - w.C.len / 2 > B) continue;
+        ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(w.a); ctx.scale(SHIPWRECK.scale, SHIPWRECK.scale);
+        drawNavyWreck(w, SHIPWRECK.alpha); ctx.restore();
+    }
     drawNavyWakes(L, T, R, B, now);
     for (const s of G.navy.ships) {
         if (s.x + s.C.len / 2 + 80 < L || s.x - s.C.len / 2 - 80 > R || s.y + s.C.len / 2 + 80 < T || s.y - s.C.len / 2 - 80 > B) continue;
@@ -6605,9 +6621,10 @@ function drawNavy(L, T, R, B, now) {
         ctx.save();
         ctx.translate(s.x, s.y);
         ctx.rotate(s.a + sink * 0.09);
-        if (sink) { ctx.globalAlpha = clamp(1.25 - sink * 1.3, 0, 1); const k = 1 - sink * 0.14; ctx.scale(k, k); }
+        if (sink) { ctx.globalAlpha = clamp(1.25 - sink * 1.3, SHIPWRECK.alpha, 1); const k = 1 - sink * 0.14; ctx.scale(k, k); }
         ctx.fillStyle = 'rgba(0,30,50,0.32)';
         ctx.save(); ctx.translate(16, 24); navyHullPath(ctx, C, 14); ctx.fill(); ctx.restore();
+        if (s.sunk) { drawNavyWreck(s, SHIPWRECK.alpha); ctx.restore(); continue; }
         ctx.drawImage(art, -art.width / 2, -art.height / 2);
         for (const g of s.guns) if (!g.room) navyDrawGun(g);  // (the guns below deck only show from inside)
         // Hull fires
@@ -6711,6 +6728,14 @@ function drawNavyInterior(L, T, R, B, now) {
 // Names and hull bars, on top of everything
 function drawNavyLabels() {
     const k = 1 / G.zoom, pl = G.player;
+    // (a wreck's name, faint, so you know whose ship lies there)
+    ctx.font = `700 ${13 * k}px Rajdhani, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const w of [...(G.navy.wrecks || []), ...G.navy.ships.filter(s => s.sunk)]) {
+        if (!inView(w.x, w.y, w.C.len / 2)) continue;
+        const t = `WRECK · ${w.name}`;
+        ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.strokeText(t, w.x, w.y);
+        ctx.fillStyle = 'rgba(220,230,236,0.7)'; ctx.fillText(t, w.x, w.y);
+    }
     for (const s of G.navy.ships) {
         if (s.sunk || !inView(s.x, s.y, s.C.len / 2)) continue;
         const f = clamp(s.hp / s.maxHp, 0, 1), w = (s.kind === 'mega' ? 280 : s.kind === 'battleship' ? 200 : s.kind === 'destroyer' ? 150 : s.kind === 'mini' ? 120 : 110) * k, h = 8 * k, x = s.x - w / 2, y = s.y - s.C.beam / 2 - 34 * k;
@@ -6730,6 +6755,13 @@ function drawSwimmer(f) {
     ctx.beginPath(); ctx.ellipse(f.x, f.y + 6, f.r * 1.35 + Math.sin(G.time / 240) * 2, f.r * 1.05, 0, 0, TAU); ctx.stroke();
 }
 function drawNavyMinimap(g, k) {
+    for (const w of G.navy.wrecks || []) {
+        g.save(); g.translate(w.x * k, w.y * k); g.rotate(w.a);
+        const l = Math.max(7, w.C.len * k), b = Math.max(3, w.C.beam * k * 1.2);
+        g.fillStyle = 'rgba(40,46,52,0.75)'; g.strokeStyle = shade(TEAMS[w.team].color, -0.2); g.lineWidth = 1;
+        g.beginPath(); g.moveTo(l / 2, 0); g.lineTo(l / 4, -b / 2); g.lineTo(-l / 2, -b / 2); g.lineTo(-l / 2, b / 2); g.lineTo(l / 4, b / 2); g.closePath(); g.fill(); g.stroke();
+        g.restore();
+    }
     for (const s of G.navy.ships) {
         if (s.sunk) continue;
         g.save();
