@@ -59,7 +59,7 @@ const WEAPONS = {
     'Plasma Rifle': { damage: 24, range: 1500, rate: 105, speed: 1800, spread: 0.03, mag: 45, rarity: 'hyper', len: 38, w: 9, sound: 'mid', shake: 1.5, hyper: true },
     'Railgun': { damage: 220, range: Infinity, rate: 1800, speed: 4200, spread: 0, mag: 4, rarity: 'hyper', len: 64, w: 9, sound: 'sniper', shake: 10, hyper: true, pierce: true },  // goes through everyone in a line
     // Payload's guns: the dual shock pistols everyone starts with, a chargeable energy gun, a rocket you steer, and a minigun with 8-round bursts
-    'Dual Shock': { damage: 15, range: 950, rate: 250, speed: 1300, spread: 0.03, mag: 999, rarity: 'rare', len: 14, w: 7, sound: 'light', shake: 1, spark: true, dual: true, ball: 5 },
+    'Dual Shock': { damage: 15, range: 950, rate: 250, speed: 1300, spread: 0.03, mag: 999, rarity: 'rare', len: 14, w: 7, sound: 'light', shake: 1, spark: true, dual: true, bolt: true },
     'Energy Gun': { damage: 14, range: 650, rate: 260, speed: 1400, spread: 0, mag: 999, rarity: 'legendary', len: 34, w: 11, sound: 'light', shake: 2, charge: 1100 },
     'Guided Rocket': { damage: 40, range: 2600, rate: 1300, speed: 600, spread: 0, mag: 999, rarity: 'mythic', len: 50, w: 12, sound: 'heavy', shake: 8, rocket: true, guided: true },
     'Burst Minigun': { damage: 12, range: 1300, rate: 55, speed: 1600, spread: 0.12, mag: 999, rarity: 'mythic', len: 44, w: 13, sound: 'mid', shake: 1.6, clip: 8, reload: 1300 },
@@ -5578,12 +5578,12 @@ function updatePayload(dt) {
 function payloadBotPlan(b) {
     const P = G.payload, c = P.cart;
     if (b.inv.filter(Boolean).length < 2) {
-        const l = nearestLoot(b.x, b.y, 600, q => WEAPONS[q.key] && !b.inv.includes(q.key) && !claimedByOther(q, b));
+        // (Blue only grabs a gun that's right on the way; Red will go further for one)
+        const l = nearestLoot(b.x, b.y, b.team === 0 ? 260 : 600, q => WEAPONS[q.key] && !b.inv.includes(q.key) && !claimedByOther(q, b));
         if (l) { b.mode = 'loot'; b.goal = l; l.claim = b; return true; }
     }
     if (b.team === 0) {
-        if (b.cartOff === undefined) b.cartOff = { a: rand(0, TAU), r: rand(10, 70) };
-        const q = { x: c.x + Math.cos(b.cartOff.a) * b.cartOff.r, y: c.y + Math.sin(b.cartOff.a) * b.cartOff.r };
+        const q = payloadSpotFor(b);
         if (dist(b, q) < 30) { b.mode = 'rest'; return true; }
         b.mode = 'zone'; b.goal = q;
         return true;
@@ -5595,6 +5595,12 @@ function payloadBotPlan(b) {
     if (dist(b, g) < 60) { b.mode = 'rest'; return true; }
     b.mode = 'zone'; b.goal = g;
     return true;
+}
+// Where on the platform this Blue bot stands
+function payloadSpotFor(b) {
+    const c = G.payload.cart;
+    if (b.cartOff === undefined) b.cartOff = { a: rand(0, TAU), r: rand(10, 70) };
+    return { x: c.x + Math.cos(b.cartOff.a) * b.cartOff.r, y: c.y + Math.sin(b.cartOff.a) * b.cartOff.r };
 }
 // Drawing: the ground, the track, the checkpoints and the end
 function drawPayloadGround(L, T, R, B) {
@@ -5785,8 +5791,8 @@ function fireEnergy(f, k) {
     if (G.time - f.lastShot < w.rate) return;
     f.lastShot = G.time; f.lastLoud = G.time; f.recoil = 0.5 + k;
     const big = k > 0.3, a = f.angle + (big ? 0 : rand(-0.03, 0.03)), sp = big ? 900 : 1400;
-    G.bullets.push({ x: f.x + Math.cos(a) * (f.r + 6), y: f.y + Math.sin(a) * (f.r + 6), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: big ? 22 + 68 * k : w.damage, owner: f, left: big ? 1500 : 650, weapon: name, ball: { r: big ? 7 + 11 * k : 4.5, c: '#5fd4ff' }, eblast: big ? 50 + 90 * k : 0 });
-    if (inView(f.x, f.y, 100)) burst(f.x + Math.cos(a) * 30, f.y + Math.sin(a) * 30, big ? 14 : 5, '#7ee6ff', big ? 220 : 120, 'glow');
+    G.bullets.push({ x: f.x + Math.cos(a) * (f.r + 6), y: f.y + Math.sin(a) * (f.r + 6), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: big ? 22 + 68 * k : w.damage, owner: f, left: big ? 1500 : 650, weapon: name, ball: { r: big ? 7 + 11 * k : 4.5, glow: '20,50,230', core: '#1f4dff' }, eblast: big ? 50 + 90 * k : 0 });
+    if (inView(f.x, f.y, 100)) burst(f.x + Math.cos(a) * 30, f.y + Math.sin(a) * 30, big ? 14 : 5, '#3a6bff', big ? 220 : 120, 'glow');
     Sound.tone(big ? 260 : 950, big ? 0.35 : 0.12, 'sine', (big ? 0.12 : 0.07) * Sound.volAt(f.x, f.y), big ? 90 : 1500);
 }
 function energyBlast(x, y, R, owner, dmg) {
@@ -5796,8 +5802,8 @@ function energyBlast(x, y, R, owner, dmg) {
         if (d < R + t.r) damage(t, dmg * (1 - d / (R + t.r) * 0.6), owner, 'Energy Gun');
     });
     if (inView(x, y, R + 60)) {
-        G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: R * 1.2, color: '#5fd4ff' });
-        burst(x, y, 18, '#7ee6ff', 260, 'glow');
+        G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: R * 1.2, color: '#2a5cff' });
+        burst(x, y, 18, '#4a7bff', 260, 'glow');
     }
     Sound.tone(180, 0.3, 'sine', 0.1 * Sound.volAt(x, y), 60);
 }
@@ -5824,9 +5830,9 @@ function drawCharges() {
     for (const f of G.fighters) {
         if (f.dead || !(f.charge > 0) || !inView(f.x, f.y, 80)) continue;
         const d = f.r + 30, x = f.x + Math.cos(f.angle) * d, y = f.y + Math.sin(f.angle) * d, r = 4 + f.charge * 12;
-        ctx.save(); ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = `rgba(95,212,255,${0.25 + f.charge * 0.3})`; ctx.beginPath(); ctx.arc(x, y, r * 2, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#bff3ff'; ctx.beginPath(); ctx.arc(x, y, r * (0.8 + Math.sin(G.time * 0.03) * 0.1), 0, TAU); ctx.fill();
+        ctx.save();
+        ctx.fillStyle = `rgba(20,50,230,${0.25 + f.charge * 0.3})`; ctx.beginPath(); ctx.arc(x, y, r * 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#1f4dff'; ctx.beginPath(); ctx.arc(x, y, r * (0.8 + Math.sin(G.time * 0.03) * 0.1), 0, TAU); ctx.fill();
         ctx.restore();
     }
 }
@@ -10365,7 +10371,7 @@ function tryAttack(f) {
         let bx = w.rocket ? mx : f.x + ca * f.r, by = w.rocket ? my : f.y + sa * f.r;
         // (two pistols: the shots come from each hand in turn)
         if (w.dual) { f.dualSide = -(f.dualSide || 1); bx += -sa * 10 * f.dualSide; by += ca * 10 * f.dualSide; }
-        G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive, spark: !!w.spark, guided: !!w.guided, ball: w.ball ? { r: w.ball, c: '#7ef9ff' } : null });
+        G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive, spark: !!w.spark, guided: !!w.guided, ball: w.ball ? { r: w.ball, glow: '30,70,255', core: '#8fb0ff' } : null, bolt: !!w.bolt });
     }
     if (inView(mx, my, 100) && !w.string) {
         G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.06, max: 0.06, size: 10 + w.w * 1.4, angle: f.angle });
@@ -11778,7 +11784,11 @@ function updateBot(b, dt) {
             const ax = (t.x - b.x) / d, ay = (t.y - b.y) / d;
             const w = WEAPONS[held(b)];
             const pref = w.melee ? 0 : Math.min(w.range * 0.55, 380);
-            if (G.escape && b.lead && b.lead !== b && dist(b, b.lead) > 380) {
+            if (G.payload && b.team === 0 && !isHuman(b)) {
+                // (Payload: Blue keeps to the platform and shoots from it; chasing Red down is Red's job, not theirs)
+                const q = payloadSpotFor(b), dq = Math.hypot(q.x - b.x, q.y - b.y);
+                if (dq > 30) { const wp = dq > 160 ? routeTo(b, q.x, q.y) : q; dx = wp.x - b.x; dy = wp.y - b.y; }
+            } else if (G.escape && b.lead && b.lead !== b && dist(b, b.lead) > 380) {
                 // The group shoots on the move: nobody gets left behind
                 const wp = routeTo(b, b.lead.x, b.lead.y);
                 dx = wp.x - b.x; dy = wp.y - b.y;
@@ -18540,12 +18550,26 @@ function drawBullets(L, T, R, B) {
         if (b.zap) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = '#7fe9ff'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(b.x, b.y); for (let k = 1; k <= 4; k++) ctx.lineTo(b.x - b.vx * 0.006 * k + rand(-7, 7), b.y - b.vy * 0.006 * k + rand(-7, 7)); ctx.stroke(); ctx.fillStyle = '#e8ffff'; ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, TAU); ctx.fill(); ctx.restore(); continue; }
         if (b.rocket) { drawRocket(b); continue; }
         if (b.ball) {
-            // A glowing ball of blue energy
-            ctx.save(); ctx.globalCompositeOperation = 'lighter';
-            const r = b.ball.r, sp0 = Math.hypot(b.vx, b.vy) || 1;
-            ctx.fillStyle = 'rgba(95,212,255,0.25)'; ctx.beginPath(); ctx.arc(b.x - b.vx / sp0 * r, b.y - b.vy / sp0 * r, r * 1.6, 0, TAU); ctx.fill();
-            ctx.fillStyle = 'rgba(95,212,255,0.45)'; ctx.beginPath(); ctx.arc(b.x, b.y, r * 1.9, 0, TAU); ctx.fill();
-            ctx.fillStyle = '#d9f8ff'; ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, TAU); ctx.fill();
+            // A glowing ball of deep blue energy
+            // (drawn solid rather than as added light, so it stays a deep blue on sand and concrete too)
+            const r = b.ball.r, sp0 = Math.hypot(b.vx, b.vy) || 1, gl = b.ball.glow || '20,50,230';
+            ctx.fillStyle = `rgba(${gl},0.28)`; ctx.beginPath(); ctx.arc(b.x - b.vx / sp0 * r * 1.4, b.y - b.vy / sp0 * r * 1.4, r * 1.5, 0, TAU); ctx.fill();
+            ctx.fillStyle = `rgba(${gl},0.4)`; ctx.beginPath(); ctx.arc(b.x, b.y, r * 1.9, 0, TAU); ctx.fill();
+            ctx.fillStyle = b.ball.core || '#8fb0ff'; ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, TAU); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(b.x - r * 0.3, b.y - r * 0.3, r * 0.35, 0, TAU); ctx.fill();
+            continue;
+        }
+        if (b.bolt) {
+            // A crackling streak of electricity: a jagged line that flickers into a new shape every frame
+            const sp0 = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / sp0, uy = b.vy / sp0, len = 60, n = 7;
+            const pts = [];
+            for (let k = 0; k <= n; k++) { const t = k / n, j = k === 0 || k === n ? 0 : rand(-7, 7); pts.push([b.x - ux * len * t - uy * j, b.y - uy * len * t + ux * j]); }
+            ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineJoin = 'miter';
+            for (const [wd, col] of [[9, 'rgba(40,110,255,0.45)'], [4, 'rgba(120,220,255,0.95)'], [1.8, '#ffffff']]) {
+                ctx.strokeStyle = col; ctx.lineWidth = wd; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts) ctx.lineTo(q[0], q[1]); ctx.stroke();
+            }
+            // a little fork off the side now and then
+            if (Math.random() < 0.5) { const q = pts[randInt(1, n - 1)], a = Math.atan2(uy, ux) + (Math.random() < 0.5 ? 1 : -1) * rand(0.6, 1.2); ctx.strokeStyle = 'rgba(150,230,255,0.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(q[0] - Math.cos(a) * 12, q[1] - Math.sin(a) * 12); ctx.stroke(); }
             ctx.restore();
             continue;
         }
