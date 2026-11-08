@@ -1228,6 +1228,7 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'cavern') return generateCavern();
     if (type === 'haunted') return generateHaunted();
     if (type === 'sea') return generateSea();
+    if (type === 'chase') return generateChase();
     // Wasteland (the sniping map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
@@ -4630,7 +4631,7 @@ function findSpawn(avoid, minDist) {
     const W = CONFIG.WORLD_SIZE;
     for (let tries = 0; tries < 60; tries++) {
         const x = rand(200, W - 200), y = rand(200, W - 200);
-        let ok = !blockedAt(G.world.grid, x, y, 40) && (!G.world.cave || G.world.cave.inside(x, y, 200));
+        let ok = !blockedAt(G.world.grid, x, y, 40) && (!G.world.cave || G.world.cave.inside(x, y, 200)) && !(G.world.chase && chaseBad(x, y));
         if (ok && avoid) for (const a of avoid) if (Math.hypot(a.x - x, a.y - y) < minDist) { ok = false; break; }
         if (ok) return { x, y };
     }
@@ -4639,8 +4640,9 @@ function findSpawn(avoid, minDist) {
 
 // setup: { type: 'ffa' | 'epic' | 'escape', count }, { type: 'zombies', count, zombies } or { type: 'war' | 'hightech', teams, size }
 function newState(mode, setup) {
+    CONFIG.WORLD_SIZE = setup.type === 'chase' ? CHASE.world : 12000;  // (Chase is played on a world three times the size)
     const W = CONFIG.WORLD_SIZE;
-    const zombies = setup.type === 'zombies', escape = setup.type === 'escape', survival = setup.type === 'survival';
+    const zombies = setup.type === 'zombies', chase = setup.type === 'chase', escape = setup.type === 'escape' || chase, survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', bossFight = setup.type === 'boss';
     const ghostMode = setup.type === 'ghost', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
@@ -4655,7 +4657,7 @@ function newState(mode, setup) {
         // Zombies and Virus have no zone: the game ends when one side is gone
         zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
-        dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
+        dayCycle: mode === 'playing' && (setup.type === 'survival' || setup.type === 'chase'), dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
         layers: {}, layerKey: 'street', hq: null, nextReinf: 45000, squads: [], nextSquads: 0,
         traffic: [], fires: [], jets: [], bombs: [], pendingBooms: [],
@@ -4722,7 +4724,7 @@ function newState(mode, setup) {
         spawnLoot(s.x, s.y, key);
     }
     const caveK = G.world.cave ? 0.12 : 1;  // (the cavern is a lot smaller than the whole world)
-    const boxes = noLoot ? 0 : Math.min(800, 220 + cpuCount * 0.6) * caveK;
+    const boxes = noLoot ? 0 : Math.min(800, 220 + cpuCount * 0.6) * caveK * (setup.type === 'chase' ? 3 : 1);
     for (let i = 0; i < boxes; i++) {
         const s = findSpawn(null, 0);
         if (!blockedAt(G.world.grid, s.x, s.y, 34) && !buildingAt(s.x, s.y, 30)) addLootBox(s.x, s.y);
@@ -4739,14 +4741,15 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !duel && !navy) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !duel && !navy && !chase) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (navy) setupNavy(setup);
     else if (war) {
         spawnTeams(W / 2, setup.baseDist || W * 0.33);
     } else if (escape) {
         // (the title screen sets up its own small breakout instead)
-        if (mode === 'playing') spawnEscape(cpuCount, ESCAPE.people);
+        if (chase) { if (mode === 'playing') setupChase(); }
+        else if (mode === 'playing') spawnEscape(cpuCount, ESCAPE.people);
     } else {
         if (mode === 'playing') addPlayer(findSpawn(null, 0), null);
         const avoid = G.player ? [G.player] : null;
@@ -5248,7 +5251,7 @@ const navyLx = (s, x, y) => (x - s.x) * s.ca + (y - s.y) * s.sa;
 const navyLy = (s, x, y) => -(x - s.x) * s.sa + (y - s.y) * s.ca;
 const navyWx = (s, lx, ly) => s.x + lx * s.ca - ly * s.sa;
 const navyWy = (s, lx, ly) => s.y + lx * s.sa + ly * s.ca;
-const navyIsland = (x, y, m = 0) => G.navy.islands.some(q => (q.x - x) ** 2 + (q.y - y) ** 2 < (q.r + m) ** 2);
+const navyIsland = (x, y, m = 0) => G.chase ? !chaseWet(x, y, m) : G.navy.islands.some(q => (q.x - x) ** 2 + (q.y - y) ** 2 < (q.r + m) ** 2);
 // Afloat, somebody on it, and on the other side
 const navyHostile = (s, team) => !s.sinkAt && s.team !== team && s.crewN > 0;
 
@@ -5512,7 +5515,7 @@ function navyAction(p) {
         }
         return best;
     }
-    if (!s.helm.crew) {
+    if (!s.helm.crew || (G.chase && s.team === p.team && !isHuman(s.helm.crew))) {
         const d = Math.hypot(lx - s.helm.lx, ly - s.helm.ly);
         if (d < s.helm.r + 60) consider(d, { st: s.helm, text: s.team === p.team ? 'Take the wheel' : `Take the wheel: capture the ${s.name}` });
     }
@@ -5532,7 +5535,7 @@ function navyUse(p) {
     if (!act) return false;
     if (act.leave) navyLeave(p);
     else if (act.link) { p.room = act.to; if (p.isPlayer) addFloat(p.x, p.y - 30, act.text, '#fff7ec'); Sound.tone(act.to ? 180 : 260, 0.2, 'triangle', 0.08); }
-    else if (act.st) navyMan(p, act.st);
+    else if (act.st) { if (act.st.helm && act.st.crew && act.st.crew !== p) navyLeave(act.st.crew); navyMan(p, act.st); }
     else if (act.rack) navyTakeRack(p);
     else if (act.jump) {
         const s = p.ship, lx = navyLx(s, p.x, p.y), ly = navyLy(s, p.x, p.y), side = ly >= 0 ? 1 : -1, hw = navyHw(s.C, lx);
@@ -5548,6 +5551,7 @@ const navyLabel = p => { const a = G.navy && !p.car ? navyAction(p) : null; retu
 // How far out the camera sits: the big guns and the wheel need to see the whole fight
 function navyZoomK(f) {
     if (!f) return 0.75;
+    if (G.chase && !f.ship && !f.car) return 0.9;
     if (f.car) return 0.6;
     if (f.station) return f.station.helm ? 0.42 : f.station.D.zoom;
     return 0.75;
@@ -5619,14 +5623,14 @@ function navyStep(s, dt) {
     const C = s.C, h = s.helm.crew;
     if (s.sinkAt) { s.throttle = 0; s.rudder = 0; }
     else if (h && !isHuman(h)) {
-        if (G.time >= s.nextOrder) { s.nextOrder = G.time + 500; navyOrders(s); }
+        if (G.time >= s.nextOrder) { s.nextOrder = G.time + 500; if (G.chase) chaseShipOrders(s); else navyOrders(s); }
         s.throttle += clamp(s.wantThrottle - s.throttle, -dt * 0.4, dt * 0.4);
-        s.rudder = clamp(angleDiff(s.a, s.want) * 3, -1, 1);
+        s.rudder = clamp(angleDiff(s.a, s.want) * 3, -1, 1) * (G.chase && s.speed < 0 ? -1 : 1);
     } else if (!h) {
         // Nobody at the wheel: she holds her helm dead ahead and slowly loses way
         s.rudder *= Math.exp(-dt);
         s.throttle = Math.max(0.12, s.throttle - dt * 0.1);
-        if (s.crewN === 0) s.throttle = 0;
+        if (s.crewN === 0 || G.chase) s.throttle = 0;  // (in Chase an empty wheel means she's anchored)
     }
     const top = C.speed * s.throttle * (0.55 + 0.45 * Math.max(0, s.hp / s.maxHp));
     s.speed += clamp(top - s.speed, -C.accel * dt, C.accel * dt);
@@ -5683,6 +5687,7 @@ function navyCollide(dt) {
             const lx = clamp(navyLx(a, q.x, q.y), -aH, aH), px = a.x + ac * lx, py = a.y + as * lx, d = Math.hypot(px - q.x, py - q.y), min = q.r + a.C.beam / 2;
             if (d < min) { const nx = (px - q.x) / (d || 1), ny = (py - q.y) / (d || 1); a.x += nx * (min - d); a.y += ny * (min - d); if (Math.abs(a.speed) > 40) { navyHurt(a, Math.abs(a.speed) * dt * 12, null); a.speed *= Math.exp(-dt * 2); } }
         }
+        if (G.chase) chaseKeepAfloat(a, dt);
         const m = a.C.len / 2 + 60;
         a.x = clamp(a.x, m, W - m); a.y = clamp(a.y, m, W - m);
     }
@@ -5963,6 +5968,7 @@ function navyCheck() {
     const left = new Array(G.war ? G.war.teams : 2).fill(0);
     for (const s of N.ships) if (!s.sinkAt && s.crewN > 0) left[s.team]++;
     N.left = left;
+    if (N.chase) return;
     // Ships sinking doesn't end it on its own: crew can still be swimming, ashore on an island,
     // flying a helicopter, or standing aboard a ship they've boarded. Only a wholly dead team ends it.
     if (G.mode === 'demo') { if (!G.teamAlive[0] || !G.teamAlive[1]) N.over = true; return; }
@@ -6314,6 +6320,7 @@ function navyThink(b) {
     if (enemy && b.target !== enemy) b.engageAt = G.time + rand(150, 500) * AIK().react;
     b.target = enemy;
     b.nGoal = null; b.nStation = null;
+    if (!s && G.chase) { b.nSwimTo = chaseSwimGoal(b); return; }
     if (!s) {
         // In the water: the nearest hull, your own side's if it isn't much further
         let best = null, bq = Infinity;
@@ -6326,6 +6333,22 @@ function navyThink(b) {
         return;
     }
     b.nSwimTo = null;
+    if (s.team !== b.team && G.chase && !b.soldier) {
+        // Chase: one of the squad on a soldier boat goes back over to ours if she's alongside, or jumps for it
+        const home = G.chase.ship, pl = home && !home.sinkAt && s.planks.find(q => q.other === home);
+        if (pl) { const ly = navyLy(s, home.x, home.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, home.x, home.y), -s.C.len * 0.4, s.C.len * 0.4); b.nGoal = { lx, ly: ly * (navyHw(s.C, lx) + 30), over: true }; return; }
+        if (b.station) navyLeave(b);
+        const side = home && navyLy(s, home.x, home.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, b.x, b.y), -s.C.len * 0.4, s.C.len * 0.4);
+        b.x = navyWx(s, lx, side * (navyHw(s.C, lx) + 60)); b.y = navyWy(s, lx, side * (navyHw(s.C, lx) + 60));
+        b.ship = null; b.room = null; b.swim = true; b.noClimb = G.time + 1500;
+        return;
+    }
+    if (s.team !== b.team && G.chase) {
+        // Chase: soldiers who get aboard the runaways' boat fight whoever's on deck (they don't steal her)
+        const e = enemy && enemy.ship === s ? enemy : null;
+        b.nGoal = e ? { lx: navyLx(s, e.x, e.y), ly: navyLy(s, e.x, e.y) } : { lx: navyLx(s, b.x, b.y), ly: navyLy(s, b.x, b.y) };
+        return;
+    }
     if (s.team !== b.team) {
         // On an enemy ship: the wheel is the prize
         if (!s.helm.crew) { b.nStation = s.helm; if (!s.helm.claim || s.helm.claim.dead) s.helm.claim = b; }
@@ -6354,11 +6377,13 @@ function navyThink(b) {
     // Otherwise, line the rail on the side facing the enemy
     let foeS = null, fd = Infinity;
     for (const q of G.navy.ships) if (navyHostile(q, b.team)) { const d = (q.x - s.x) ** 2 + (q.y - s.y) ** 2; if (d < fd) { fd = d; foeS = q; } }
+    if (b.postX === undefined) { b.postX = rand(-0.42, 0.42) * s.C.len; b.postY = rand(0.35, 1); }
     const side = foeS ? (navyLy(s, foeS.x, foeS.y) >= 0 ? 1 : -1) : (b.postX > 0 ? 1 : -1);
     const lx = clamp(b.postX, -s.C.len / 2 + 60, s.C.len / 2 - 60);
     b.nGoal = { lx, ly: side * Math.max(0, navyHw(s.C, lx) - 40) * b.postY };
 }
 function navyBot(b, dt) {
+    if (G.chase && b.ship && b.ship === G.chase.ship && !b.soldier && chaseDisembark(b)) return;
     if (b.station) {
         b.vx = b.vy = 0; b._wantSpeed = 0;
         if (b.station.gun) {
@@ -7004,7 +7029,7 @@ function spawnNear(c, r, pad = 40, outdoors = false) {
     for (let tries = 0; tries < 40; tries++) {
         const a = rand(0, TAU), d = Math.sqrt(Math.random()) * r;
         const x = clamp(c.x + Math.cos(a) * d, 200, W - 200), y = clamp(c.y + Math.sin(a) * d, 200, W - 200);
-        if (!blockedAt(G.world.grid, x, y, pad) && !(outdoors && buildingAt(x, y, 40)) && (!G.world.cave || G.world.cave.inside(x, y, 150))) return { x, y };
+        if (!blockedAt(G.world.grid, x, y, pad) && !(outdoors && buildingAt(x, y, 40)) && (!G.world.cave || G.world.cave.inside(x, y, 150)) && !(G.world.chase && chaseBad(x, y))) return { x, y };
     }
     return { x: c.x, y: c.y };
 }
@@ -7071,6 +7096,650 @@ function updateTeamCenters() {
     }
     w.centers = sum.map(c => (c.n ? { x: c.x / c.n, y: c.y / c.n } : null));
     w.nextCenter = G.time + 1000;
+}
+
+// ---------- Chase ----------
+// A squad of 20 breaks out of a facility whose soldiers want them gone, crosses a desert of broken, abandoned buildings
+// while helicopters search for them, takes a mini ship down a river through a mountain range (or walks the banks to
+// dodge the soldier boats), crosses the ocean, and finds land with a giant airship waiting to fly them out.
+// It's meant to be a long game (on a world three times the size, with day and night): the squad has 500 health each, the soldiers 45.
+const CHASE = {
+    people: 20, hp: 500, soldierHp: 45, armor: 100, scale: 3, dayDark: 0.3, nightDark: 0.58,
+    oceanY: 3400, mountY: 7500, river: 340, bank: 430,
+    fac: { x0: 600, y0: 9300, x1: 3300, y1: 11500 },
+    island: { x: 10350, y: 1500, r: 1250 },
+    airship: { x: 10500, y: 1150, board: 230 },
+    riverPts: [[10900, 8350], [10860, 7300], [10300, 6500], [9100, 6150], [7700, 6600], [6300, 6250], [5000, 5450], [3700, 5750], [2500, 5250], [1700, 4500], [1500, 3500], [1550, 2800]],
+    seaPts: [[1550, 2800], [2600, 2300], [4500, 2000], [6500, 1800], [8650, 1600]],
+    guns: ['Assault Rifle', 'Assault Rifle', 'Mac10', 'Shotgun', 'Machine Gun', 'Sniper', 'Vector'],
+    desertSquads: 7, bankSquads: 6, helis: 3, riverShips: 3, seaShips: 2, shipCrew: 8,
+    reinforce: [70000, 100000], heliSight: 520, shipHull: 4, art: 12, soldierDmg: 0.45, alertR: 2600
+};
+// Everything is laid out on the normal map's 12000 and then stretched 3 times over (the river and the banks stay
+// the same width; there's just three times as far to go)
+(() => {
+    const k = CHASE.scale, W = CHASE.world = 12000 * k;
+    CHASE.oceanY *= k; CHASE.mountY *= k;
+    CHASE.riverPts = CHASE.riverPts.map(([x, y]) => [x * k, y * k]);
+    const I = CHASE.island = { x: 10350 * k, y: 1500 * k, r: 1900 };
+    CHASE.airship = { x: I.x + 150, y: I.y - 350, board: 230 };
+    CHASE.seaPts = CHASE.seaPts.map(([x, y]) => [x * k, y * k]);
+    CHASE.seaPts[CHASE.seaPts.length - 1] = [I.x - I.r - 430, I.y + 100];
+    CHASE.fac = { x0: 1200, y0: W - 2700, x1: 3900, y1: W - 500 };
+    for (const key of ['desertSquads', 'bankSquads', 'riverShips', 'seaShips']) CHASE[key] = Math.round(CHASE[key] * (key === 'seaShips' ? 2 : k * 0.8));
+    CHASE.helis = 5;
+})();
+const chaseCoast = x => CHASE.oceanY + Math.sin(x / 700) * 110 + Math.sin(x / 260 + 2) * 40;
+const chaseMount = x => CHASE.mountY + Math.sin(x / 900) * 150 + Math.sin(x / 310 + 1) * 70;
+function chaseSpline(pts, step) {
+    const out = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+        const n = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / step));
+        for (let k = 0; k < n; k++) {
+            const t = k / n, t2 = t * t, t3 = t2 * t;
+            const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+            out.push({ x: f(p0[0], p1[0], p2[0], p3[0]), y: f(p0[1], p1[1], p2[1], p3[1]) });
+        }
+    }
+    const L = pts[pts.length - 1];
+    out.push({ x: L[0], y: L[1] });
+    return out;
+}
+// The nearest bit of river to a point (through a coarse lookup grid, so it's cheap enough to ask every frame)
+function chaseNearIn(C, x, y) {
+    const list = C.hash[Math.floor(x / C.cell) + Math.floor(y / C.cell) * C.cols];
+    let bd = Infinity, bi = -1;
+    if (list && x >= 0 && y >= 0) for (const i of list) { const q = C.river[i], d = (q.x - x) ** 2 + (q.y - y) ** 2; if (d < bd) { bd = d; bi = i; } }
+    return { d: Math.sqrt(bd), i: bi };
+}
+const chaseRiverNear = (x, y) => chaseNearIn(G.world.chase, x, y);
+// Water at least m away from any shore (the ocean, the river); the piers and the island count as land
+function chaseWet(x, y, m = 0) {
+    const I = CHASE.island;
+    if (y < chaseCoast(x) - m) return (x - I.x) ** 2 + (y - I.y) ** 2 > (I.r + m) ** 2;
+    for (const p of G.world.chase.piers) if (x > p.x0 - m && x < p.x1 + m && y > p.y0 - m && y < p.y1 + m) return false;
+    return chaseRiverNear(x, y).d < CHASE.river - m;
+}
+// Mountain you can't walk through: everything in the range except the river and its banks
+function chaseRock(x, y) {
+    if (y <= chaseCoast(x) || y >= chaseMount(x)) return false;
+    const n = chaseRiverNear(x, y);
+    return n.i < 0 || n.d > CHASE.river + G.world.chase.river[n.i].bank;
+}
+const chaseBad = (x, y) => chaseRock(x, y) || chaseWet(x, y, -30);
+
+function generateChase() {
+    const W = CONFIG.WORLD_SIZE, grid = new Grid(256, 90), obstacles = [], lootSpots = [], F = CHASE.fac, I = CHASE.island;
+    const addCircle = o => { obstacles.push(o); grid.insert(o); }, addBox = o => { obstacles.push(o); grid.insertBox(o); };
+    // The river, and the whole route the boat takes (down the river, then across the sea to the landing)
+    const river = chaseSpline(CHASE.riverPts, 50);
+    river.forEach((q, i) => { q.bank = CHASE.bank + Math.sin(i * 0.09) * 130 + Math.sin(i * 0.031 + 1) * 90; });
+    const route = river.map(q => ({ x: q.x, y: q.y })).concat(chaseSpline(CHASE.seaPts, 100).slice(1));
+    let s = 0;
+    route.forEach((q, i) => { if (i) s += Math.hypot(q.x - route[i - 1].x, q.y - route[i - 1].y); q.s = s; });
+    const cell = 400, cols = Math.ceil(W / cell), hash = new Array(cols * cols);
+    river.forEach((q, i) => {
+        const R = CHASE.river + q.bank + 150;
+        for (let cy = Math.max(0, Math.floor((q.y - R) / cell)); cy <= Math.min(cols - 1, Math.floor((q.y + R) / cell)); cy++)
+            for (let cx = Math.max(0, Math.floor((q.x - R) / cell)); cx <= Math.min(cols - 1, Math.floor((q.x + R) / cell)); cx++)
+                (hash[cx + cy * cols] || (hash[cx + cy * cols] = [])).push(i);
+    });
+    // The boat waits at a pier where the river starts, at the edge of the desert
+    const di = river.findIndex(q => q.y < CHASE.riverPts[0][1] - 520), d0 = river[di], d1 = river[di + 1];
+    const dock = { x: d0.x, y: d0.y, a: Math.atan2(d1.y - d0.y, d1.x - d0.x) };
+    const piers = [{ x0: dock.x - CHASE.river - 120, x1: dock.x - 92, y0: dock.y - 55, y1: dock.y + 55 }];
+    const C = { river, route, hash, cell, cols, piers, dock, mouthS: route[river.length - 1].s, endS: s, ruins: [], gates: [], start: null, buildings: [] };
+    const rockAt = (x, y) => { if (y <= chaseCoast(x) || y >= chaseMount(x)) return false; const n = chaseNearIn(C, x, y); return n.i < 0 || n.d > CHASE.river + river[n.i].bank; };
+    const nearRiver = (x, y, r) => chaseNearIn(C, x, y).d < r;
+    const clearAt = (x, y, r) => !blockedAt(grid, x, y, r);
+    const mouth = river[river.length - 1];
+    C.mouth = { x: river[river.length - 8].x, y: river[river.length - 8].y };
+    C.landing = { x: route[route.length - 1].x, y: route[route.length - 1].y };
+
+    // --- The facility: a walled compound with two gates, a cell block, barracks, an HQ and watchtowers ---
+    const T = 30, gy = (F.y0 + F.y1) / 2, gx = F.x0 + (F.x1 - F.x0) * 0.68, wallCol = '#6d7076', ox = F.x0 - 600, oy = F.y0 - 9300;
+    const wall = (x0, y0, x1, y1, col = wallCol, extra = {}) => { if (x1 - x0 > 2 && y1 - y0 > 2) addBox({ type: 'wall', x: (x0 + x1) / 2, y: (y0 + y1) / 2, hw: (x1 - x0) / 2, hh: (y1 - y0) / 2, color: col, ...extra }); };
+    wall(F.x0, F.y0, gx - 140, F.y0 + T); wall(gx + 140, F.y0, F.x1, F.y0 + T);          // north wall, with a gate
+    wall(F.x0, F.y1 - T, F.x1, F.y1);                                                      // south wall
+    wall(F.x0, F.y0, F.x0 + T, F.y1);                                                      // west wall
+    wall(F.x1 - T, F.y0, F.x1, gy - 140); wall(F.x1 - T, gy + 140, F.x1, F.y1);           // east wall, with a gate
+    C.gates = [{ x: F.x1 + 60, y: gy }, { x: gx, y: F.y0 - 60 }];
+    for (const [x, y] of [[F.x0, F.y0], [F.x1, F.y0], [F.x0, F.y1], [F.x1, F.y1]]) wall(x - 45, y - 45, x + 45, y + 45, '#4f5257');
+    const building = (x0, y0, x1, y1, door, label) => {
+        const t = 22, dw = 130, cxm = (x0 + x1) / 2, cym = (y0 + y1) / 2;
+        if (door === 'n') { wall(x0, y0, cxm - dw / 2, y0 + t); wall(cxm + dw / 2, y0, x1, y0 + t); } else wall(x0, y0, x1, y0 + t);
+        if (door === 's') { wall(x0, y1 - t, cxm - dw / 2, y1); wall(cxm + dw / 2, y1 - t, x1, y1); } else wall(x0, y1 - t, x1, y1);
+        if (door === 'w') { wall(x0, y0, x0 + t, cym - dw / 2); wall(x0, cym + dw / 2, x0 + t, y1); } else wall(x0, y0, x0 + t, y1);
+        if (door === 'e') { wall(x1 - t, y0, x1, cym - dw / 2); wall(x1 - t, cym + dw / 2, x1, y1); } else wall(x1 - t, y0, x1, y1);
+        C.buildings.push({ x0, y0, x1, y1, label });
+    };
+    building(820 + ox, 9950 + oy, 1500 + ox, 10850 + oy, 'e', 'CELL BLOCK');
+    building(1850 + ox, 9550 + oy, 2650 + ox, 10000 + oy, 's', 'BARRACKS');
+    building(2150 + ox, 10650 + oy, 3050 + ox, 11300 + oy, 'n', 'HQ');
+    building(1750 + ox, 10450 + oy, 2050 + ox, 10800 + oy, 'e', 'ARMORY');
+    // cell walls inside the block
+    for (let y = 10100; y < 10800; y += 175) wall(840 + ox, y + oy, 1180 + ox, y + 12 + oy, '#5a5d63');
+    C.start = { x: 1330 + ox, y: 10400 + oy };
+    for (const [x, y] of [[2000, 9800], [2400, 9800], [2600, 10900], [2700, 11100], [1900, 10620]]) lootSpots.push({ x: x + ox, y: y + oy, box: true });
+    for (let i = 0; i < 26; i++) {
+        const x = rand(F.x0 + 1000, F.x1 - 120), y = rand(F.y0 + 120, F.y1 - 120);
+        if (C.buildings.some(b => x > b.x0 - 50 && x < b.x1 + 50 && y > b.y0 - 50 && y < b.y1 + 50) || !clearAt(x, y, 40)) continue;
+        if (Math.random() < 0.5) addBox({ type: 'crate', barrel: true, x, y, hw: 14, hh: 14, color: pick(['#5a5f3a', '#3b4a5a', '#7a3b22']) });
+        else { const horiz = Math.random() < 0.5; addBox({ type: 'wall', sandbags: true, x, y, hw: horiz ? 50 : 13, hh: horiz ? 13 : 50, color: '#8d7d5a' }); }
+    }
+
+    // --- The desert: broken, abandoned buildings everywhere (cover from the searching helicopters) ---
+    const inFac = (x, y, m) => x > F.x0 - m && x < F.x1 + m && y > F.y0 - m && y < F.y1 + m;
+    for (let i = 0, tries = 0; i < 230 && tries < 8000; tries++) {
+        const w = rand(220, 460), h = rand(200, 420), x = rand(500 + w / 2, W - 500 - w / 2), y = rand(chaseMount(0) + 550, W - 400 - h / 2);
+        if (y - h / 2 < chaseMount(x) + 250 || inFac(x, y, 450) || Math.hypot(x - dock.x, y - dock.y) < 900 || nearRiver(x, y, 900) || Math.hypot(x - C.start.x, y - C.start.y) < 2200) continue;
+        if (C.ruins.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + 260 && Math.abs(r.y - y) < (r.h + h) / 2 + 260)) continue;
+        const col = pick(['#9b8f7e', '#8a7f70', '#a39580', '#857868']), t = 18, x0 = x - w / 2, y0 = y - h / 2;
+        C.ruins.push({ x, y, w, h, col });
+        const side = (ax, ay, bx, by) => {
+            const len = Math.hypot(bx - ax, by - ay), n = Math.max(2, Math.round(len / 90));
+            for (let k = 0; k < n; k++) {
+                if (Math.random() > 0.55) continue;
+                const a = k / n, b = (k + rand(0.55, 1)) / n, horiz = ay === by;
+                const sx = ax + (bx - ax) * a, sy = ay + (by - ay) * a, ex = ax + (bx - ax) * b, ey = ay + (by - ay) * b;
+                const o = { type: 'wall', ruinWall: true, color: col, x: (sx + ex) / 2, y: (sy + ey) / 2, hw: horiz ? Math.abs(ex - sx) / 2 : t / 2, hh: horiz ? t / 2 : Math.abs(ey - sy) / 2, seed: randInt(1, 1e9) };
+                if (o.hw > 4 && o.hh > 4) addBox(o);
+            }
+        };
+        side(x0, y0, x0 + w, y0); side(x0, y0 + h, x0 + w, y0 + h); side(x0, y0, x0, y0 + h); side(x0 + w, y0, x0 + w, y0 + h);
+        // an inside wall half standing, and rubble everywhere
+        if (Math.random() < 0.6) side(x0 + w * 0.5, y0, x0 + w * 0.5, y0 + h);
+        for (let k = randInt(3, 6); k > 0; k--) { const q = makeWreck(x + rand(-w / 2 + 40, w / 2 - 40), y + rand(-h / 2 + 40, h / 2 - 40)); if (clearAt(q.x, q.y, Math.max(q.hw, q.hh) + 10)) addBox(q); }
+        for (let k = randInt(0, 2); k > 0; k--) { const q = makeWreck(x + rand(-w, w), y + rand(-h, h)); if (clearAt(q.x, q.y, Math.max(q.hw, q.hh) + 10)) addBox(q); }
+        if (Math.random() < 0.75) lootSpots.push({ x: x + rand(-w / 4, w / 4), y: y + rand(-h / 4, h / 4), box: true });
+        i++;
+    }
+    for (let i = 0; i < 700; i++) {
+        const x = rand(300, W - 300), y = rand(chaseMount(0) + 300, W - 300);
+        if (y < chaseMount(x) + 150 || inFac(x, y, 100) || nearRiver(x, y, 600) || !clearAt(x, y, 60)) continue;
+        addCircle({ type: 'rock', x, y, r: rand(18, 42), spr: randInt(0, 5), rot: rand(0, TAU) });
+    }
+
+    // --- The mountains: boulders along the edge of the banks, and big rocks all over the range ---
+    for (let i = 2; i < river.length - 2; i += 2) {
+        const q = river[i], q2 = river[i + 1], tl = Math.hypot(q2.x - q.x, q2.y - q.y) || 1, nx = -(q2.y - q.y) / tl, ny = (q2.x - q.x) / tl;
+        for (const side of [-1, 1]) {
+            const d = CHASE.river + q.bank + rand(20, 150), x = q.x + nx * side * d, y = q.y + ny * side * d;
+            if (!rockAt(x, y)) continue;
+            addCircle({ type: 'rock', x, y, r: rand(45, 95), spr: randInt(0, 5), rot: rand(0, TAU) });
+        }
+    }
+    for (let i = 0; i < 1600; i++) {
+        const x = rand(200, W - 200), y = rand(CHASE.oceanY, CHASE.mountY + 200);
+        if (!rockAt(x, y) || nearRiver(x, y, CHASE.river + 700)) continue;
+        addCircle({ type: 'rock', x, y, r: rand(60, 150), spr: randInt(0, 5), rot: rand(0, TAU) });
+    }
+
+    // --- The far shore: an island with trees, a supply point, and the airship moored on it ---
+    const island = { x: I.x, y: I.y, r: I.r, seed: 7, edge: new Array(28).fill(1), supply: [{ x: I.x - 350, y: I.y + 420 }] };
+    for (let k = 0; k < 120; k++) {
+        const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (I.r - 120), x = I.x + Math.cos(a) * d, y = I.y + Math.sin(a) * d;
+        if (Math.hypot(x - CHASE.airship.x, y - CHASE.airship.y) < 750 || !clearAt(x, y, 70) || Math.hypot(x - island.supply[0].x, y - island.supply[0].y) < 120) continue;
+        const o = { type: 'tree', x, y, r: 0, canopy: rand(70, 110), spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999, seed: randInt(1, 1e9) };
+        o.r = o.canopy * 0.27;
+        addCircle(o);
+    }
+
+    // --- The painted ground, at 1/6 scale ---
+    const S = CHASE.art, N = Math.ceil(W / S), [cv, g] = makeCanvas(N, N), rnd = seededRand(9090);
+    g.scale(1 / S, 1 / S);
+    g.fillStyle = '#d8b878'; g.fillRect(0, 0, W, W);
+    for (let i = 0; i < 5000; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(150,108,58,0.07)' : 'rgba(255,236,190,0.08)'; g.beginPath(); g.ellipse(rnd() * W, CHASE.mountY + rnd() * (W - CHASE.mountY), 120 + rnd() * 380, 40 + rnd() * 110, rnd() * 0.6 - 0.3, 0, TAU); g.fill(); }
+    g.strokeStyle = 'rgba(160,120,70,0.16)'; g.lineWidth = 10;
+    for (let i = 0; i < 1500; i++) { const x = rnd() * W, y = CHASE.mountY + rnd() * (W - CHASE.mountY), w = 150 + rnd() * 300; g.beginPath(); g.moveTo(x - w, y); g.quadraticCurveTo(x, y - 50, x + w, y); g.stroke(); }
+    for (const r of C.ruins) { g.fillStyle = shade(r.col, 0.28); g.fillRect(r.x - r.w / 2, r.y - r.h / 2, r.w, r.h); g.fillStyle = 'rgba(40,30,20,0.18)'; for (let k = 0; k < 6; k++) { g.beginPath(); g.arc(r.x + (rnd() - 0.5) * r.w, r.y + (rnd() - 0.5) * r.h, 20 + rnd() * 50, 0, TAU); g.fill(); } }
+    g.fillStyle = '#8f8d87'; g.fillRect(F.x0, F.y0, F.x1 - F.x0, F.y1 - F.y0);
+    g.strokeStyle = 'rgba(255,214,90,0.5)'; g.lineWidth = 12; g.setLineDash([60, 50]);
+    g.beginPath(); g.moveTo(F.x0 + 1500, gy); g.lineTo(F.x1, gy); g.moveTo(gx, F.y0); g.lineTo(gx, gy); g.stroke(); g.setLineDash([]);
+    for (const b of C.buildings) { g.fillStyle = '#a7a59e'; g.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
+    g.fillStyle = 'rgba(30,30,30,0.5)'; g.font = '900 70px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (const b of C.buildings) g.fillText(b.label, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    // the mountain range
+    g.fillStyle = '#6f665c';
+    g.beginPath(); g.moveTo(0, chaseCoast(0) - 50);
+    for (let x = 0; x <= W; x += 100) g.lineTo(x, chaseCoast(x) - 50);
+    for (let x = W; x >= 0; x -= 100) g.lineTo(x, chaseMount(x));
+    g.closePath(); g.fill();
+    g.save(); g.clip();
+    for (let i = 0; i < 14000; i++) { const x = rnd() * W, y = CHASE.oceanY - 100 + rnd() * (CHASE.mountY - CHASE.oceanY + 400), r = 40 + rnd() * 220; g.fillStyle = pick(['rgba(84,76,67,0.55)', 'rgba(128,118,104,0.5)', 'rgba(98,90,80,0.5)', 'rgba(60,54,48,0.4)']); g.beginPath(); g.ellipse(x, y, r, r * (0.4 + rnd() * 0.5), rnd() * TAU, 0, TAU); g.fill(); }
+    g.strokeStyle = 'rgba(40,34,30,0.35)'; g.lineWidth = 14;
+    for (let i = 0; i < 1600; i++) { const x = rnd() * W, y = CHASE.oceanY + rnd() * (CHASE.mountY - CHASE.oceanY), l = 200 + rnd() * 500, a = rnd() * TAU; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l * 0.5); g.stroke(); }
+    // snow on the peaks, well away from the river
+    for (let i = 0; i < 1600; i++) {
+        const x = rnd() * W, y = CHASE.oceanY + 300 + rnd() * (CHASE.mountY - CHASE.oceanY - 600);
+        if (nearRiver(x, y, CHASE.river + 1100)) continue;
+        const r = 120 + rnd() * 300;
+        g.fillStyle = 'rgba(232,238,242,0.9)'; g.beginPath(); g.ellipse(x, y, r, r * 0.7, rnd() * TAU, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(180,196,210,0.5)'; g.beginPath(); g.ellipse(x + r * 0.2, y + r * 0.15, r * 0.6, r * 0.35, rnd() * TAU, 0, TAU); g.fill();
+    }
+    g.restore();
+    // the banks, then the river itself
+    g.fillStyle = '#6a6650'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river + q.bank + 30, 0, TAU); g.fill(); }
+    g.fillStyle = '#8c8a62'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river + q.bank, 0, TAU); g.fill(); }
+    g.fillStyle = '#7d8a55'; for (let i = 0; i < 2700; i++) { const q = river[Math.floor(rnd() * river.length)], a = rnd() * TAU, d = CHASE.river + 40 + rnd() * q.bank * 0.9; g.beginPath(); g.arc(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, 20 + rnd() * 50, 0, TAU); g.fill(); }
+    g.fillStyle = '#b9ad84'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river + 30, 0, TAU); g.fill(); }
+    // the ocean
+    const coastPath = off => { g.beginPath(); g.moveTo(0, 0); g.lineTo(W, 0); for (let x = W; x >= 0; x -= 100) g.lineTo(x, chaseCoast(x) + off); g.closePath(); };
+    g.fillStyle = '#4fa6c2'; coastPath(30); g.fill();
+    g.fillStyle = '#2a7fa3'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river, 0, TAU); g.fill(); }
+    g.fillStyle = '#2f8ab0'; for (const q of river) { g.beginPath(); g.arc(q.x, q.y, CHASE.river * 0.55, 0, TAU); g.fill(); }
+    g.fillStyle = '#1c6e93'; coastPath(-40); g.fill();
+    // the island
+    g.fillStyle = '#5bb6c9'; g.beginPath(); g.arc(I.x, I.y, I.r + 70, 0, TAU); g.fill();
+    g.fillStyle = '#e4cf97'; g.beginPath(); g.arc(I.x, I.y, I.r + 6, 0, TAU); g.fill();
+    g.fillStyle = '#5c9a48'; g.beginPath(); g.arc(I.x, I.y, I.r - 90, 0, TAU); g.fill();
+    g.fillStyle = '#4c8a3c'; for (let i = 0; i < 60; i++) { const a = rnd() * TAU, d = rnd() * (I.r - 300); g.beginPath(); g.arc(I.x + Math.cos(a) * d, I.y + Math.sin(a) * d, 60 + rnd() * 140, 0, TAU); g.fill(); }
+    g.fillStyle = '#a99a7a'; g.beginPath(); g.ellipse(CHASE.airship.x, CHASE.airship.y + 60, 700, 330, 0, 0, TAU); g.fill();
+    // the pier
+    for (const p of piers) { g.fillStyle = '#6b4c2c'; g.fillRect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0); g.fillStyle = '#8a6440'; for (let x = p.x0; x < p.x1; x += 22) g.fillRect(x, p.y0 + 4, 16, p.y1 - p.y0 - 8); }
+    const [mm, mg] = makeCanvas(200, 200);
+    mg.drawImage(cv, 0, 0, 200, 200);
+    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'chase', islands: [island], chase: C, chaseArt: cv };
+}
+function drawChaseGround(L, T, R, B, now) {
+    const W = CONFIG.WORLD_SIZE, S = CHASE.art, cv = G.world.chaseArt;
+    ctx.fillStyle = '#1c6e93'; ctx.fillRect(L - 10, T - 10, R - L + 20, B - T + 20);
+    const x0 = clamp(L, 0, W), y0 = clamp(T, 0, W), x1 = clamp(R, 0, W), y1 = clamp(B, 0, W);
+    if (x1 > x0 && y1 > y0) ctx.drawImage(cv, x0 / S, y0 / S, (x1 - x0) / S, (y1 - y0) / S, x0, y0, x1 - x0, y1 - y0);
+    // waves rolling over the open sea
+    if (T < CHASE.oceanY && !lowDetail) {
+        if (!navySeaPat) drawSea(0, 0, 0, 0, now);
+        const pat = ctx.createPattern(navySeaPat, 'repeat'), I = CHASE.island;
+        if (pat) {
+            ctx.save(); ctx.beginPath(); ctx.rect(L, T, R - L, Math.min(B, CHASE.oceanY - 170) - T); ctx.arc(I.x, I.y, I.r + 80, 0, TAU, true); ctx.clip('evenodd');
+            const ox = (now * 9) % 512, oy = (now * 4) % 512;
+            ctx.translate(ox, oy); ctx.fillStyle = pat; ctx.fillRect(L - ox - 20, T - oy - 20, R - L + 40, B - T + 40); ctx.restore();
+        }
+    }
+    for (const q of G.navy.islands) for (const sp of q.supply) {
+        if (!inView(sp.x, sp.y, 60)) continue;
+        ctx.fillStyle = '#2f9e5b'; roundRect(ctx, sp.x - 30, sp.y - 30, 60, 60, 8); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.fillRect(sp.x - 19, sp.y - 6, 38, 12); ctx.fillRect(sp.x - 6, sp.y - 19, 12, 38);
+    }
+}
+
+// --- Setting off ---
+function chaseSoldier(s, i, guard) {
+    addSoldier(s, i, guard);
+    return G.fighters[G.fighters.length - 1];
+}
+function chaseAddHeli(x, y) {
+    const c = spawnVehicle('gunship', x, y);
+    c.color = '#4b5535';
+    const f = chaseSoldier({ x, y }, 500 + G.chase.helis.length, false);
+    enterCar(f, c);
+    f.driveUntil = Infinity;
+    G.chase.helis.push(c);
+    return c;
+}
+function chaseNoSubs(s) {
+    for (const bay of s.subbays) if (bay.car) bay.car.dead = true;
+    s.subbays = [];
+    G.world.cars = G.world.cars.filter(c => !c.dead);
+}
+function chaseSoldierShip(x, y, a, home) {
+    const s = addShip('mini', 1, x, y, a);
+    s.speed = 0; s.throttle = 0; s.chase = 'soldier'; s.home = home;
+    chaseNoSubs(s);
+    for (let i = 0; i < CHASE.shipCrew; i++) {
+        const o = navyDeckSpot(s), f = chaseSoldier({ x: navyWx(s, o.lx, o.ly), y: navyWy(s, o.lx, o.ly) }, 700 + i, false);
+        f.ship = s; f.swim = false; f.station = null; f.boarder = false; f.room = null;
+        f.postX = rand(-0.42, 0.42) * s.C.len; f.postY = rand(0.35, 1); f.nextThink = rand(0, 500);
+        const st = navyVacant(s, f);
+        if (st && !st.sub && !st.heli) navyMan(f, st);
+    }
+    return s;
+}
+function setupChase() {
+    const Cw = G.world.chase, F = CHASE.fac;
+    G.navy = { ships: [], wrecks: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n: 1, crew: 0, wake: 0, mini: true, chase: true, out: [] };
+    G.chase = { stage: 0, seen: null, alertAt: -1e9, nextReinf: 80000, helis: [], ship: null, boardedAt: 0, arrived: false };
+    G.extract = { x: CHASE.airship.x, y: CHASE.airship.y + 270 };
+    G.world.cars = [];
+    // The squad: you and 19 others, tough (450 health each) and armed
+    for (let i = 0; i < CHASE.people; i++) {
+        const s = spawnNear(Cw.start, 170, 30);
+        if (i === 0 && G.mode === 'playing') { addPlayer(s, 0); continue; }
+        G.fighters.push(createFighter(s.x, s.y, { name: botName(i), color: pick(BOT_COLORS), team: 0 }));
+    }
+    let slot = 0;
+    for (const f of G.fighters) {
+        if (f.team !== 0) continue;
+        if (!f.isPlayer) giveSlot(f, slot++, CHASE.people - 1);
+        f.hp = f.maxHp = CHASE.hp; f.armor = CHASE.armor;
+        f.items.bandage = 3; f.items.medkit = 1; f.items.grenade = 2;
+        f.inv[1] = null;
+        const gun = f.isPlayer ? 'Assault Rifle' : pick(CHASE.guns);
+        applyLoot(f, gun, -1);
+        if (f.isPlayer) f.ammo[gun] = 300;
+        switchSlot(f, Math.max(0, f.inv.indexOf(gun)), true);
+        f.likesCars = false;
+        f.postX = rand(-0.38, 0.38) * NAVY.ships.mini.len; f.postY = rand(0.1, 0.55); f.boarder = false;  // (well in from the rail, so a boat alongside doesn't sweep them off)
+    }
+    // The facility's soldiers: guards at both gates and round the yard, and a squad hunting you down inside
+    let n = 0;
+    for (const gate of Cw.gates) for (let i = 0; i < 6; i++) chaseSoldier(spawnNear({ x: gate.x - (gate === Cw.gates[0] ? 200 : 0), y: gate.y + (gate === Cw.gates[1] ? 200 : 0) }, 220, 30), n++, true);
+    for (let i = 0; i < 9; i++) chaseSoldier(spawnNear({ x: rand(F.x0 + 1200, F.x1 - 200), y: rand(F.y0 + 200, F.y1 - 200) }, 120, 30), n++, true);
+    spawnSquad(spawnNear({ x: F.x0 + 1650, y: F.y0 + 1350 }, 150, 30), 6, n, true); n += 6;
+    // Out in the desert: patrols among the ruins
+    for (let k = 0, tries = 0; k < CHASE.desertSquads && tries < 200; tries++) {
+        const W = CONFIG.WORLD_SIZE, c = spawnNear({ x: rand(W * 0.15, W * 0.95), y: rand(chaseMount(0) + 500, W - 500) }, 300, 30, true);
+        if (chaseBad(c.x, c.y) || c.y < chaseMount(c.x) + 300 || dist(c, Cw.start) < 4000) continue;
+        const size = randInt(4, 6);
+        spawnSquad(c, size, n, Math.random() < 0.2); n += size; k++;
+    }
+    // On the river banks: ambushes waiting along the way
+    const R = Cw.river;
+    for (let k = 0; k < CHASE.bankSquads; k++) {
+        const i = Math.floor(R.length * (0.15 + 0.72 * (k + 0.5) / CHASE.bankSquads)), q = R[i], q2 = R[i + 1], tl = Math.hypot(q2.x - q.x, q2.y - q.y) || 1, side = k % 2 ? 1 : -1;
+        const c = { x: q.x - (q2.y - q.y) / tl * side * (CHASE.river + q.bank * 0.5), y: q.y + (q2.x - q.x) / tl * side * (CHASE.river + q.bank * 0.5) };
+        if (chaseBad(c.x, c.y)) continue;
+        const size = randInt(4, 6);
+        spawnSquad(c, size, n, false); n += size;
+    }
+    // Helicopters searching the desert
+    for (let k = 0; k < CHASE.helis; k++) chaseAddHeli(rand(CONFIG.WORLD_SIZE * 0.2, CONFIG.WORLD_SIZE * 0.9), rand(chaseMount(0) + 800, CONFIG.WORLD_SIZE - 1000));
+    // The boat, waiting at the pier, and the soldier boats on the river and out at sea
+    const d = Cw.dock, ss = addShip('mini', 0, d.x, d.y, d.a);
+    ss.hp = ss.maxHp = ss.C.hp * CHASE.shipHull; ss.name = 'Runaway'; ss.chase = 'squad'; ss.speed = 0; ss.throttle = 0;
+    chaseNoSubs(ss);
+    G.chase.ship = ss;
+    for (let k = 0; k < CHASE.riverShips; k++) {
+        const s0 = Cw.mouthS * (0.4 + 0.5 * k / Math.max(1, CHASE.riverShips - 1)), P = chaseRoutePt(s0), P2 = chaseRoutePt(s0 - 30);
+        chaseSoldierShip(P.x, P.y, Math.atan2(P2.y - P.y, P2.x - P.x), s0);
+    }
+    for (let k = 0, tries = 0; k < CHASE.seaShips && tries < 200; tries++) {
+        const W = CONFIG.WORLD_SIZE, x = W * (0.25 + 0.55 * (k + Math.random()) / CHASE.seaShips), y = rand(1500, CHASE.oceanY - 1500);
+        if (!chaseWet(x, y, 600)) continue;
+        chaseSoldierShip(x, y, Math.PI, null); k++;
+    }
+    for (const s of G.navy.ships) s.crewN = 1;
+    if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
+}
+
+// --- The route: how far along it something is, and the point a given distance along ---
+function chaseRoutePt(s) {
+    const R = G.world.chase.route;
+    s = clamp(s, 0, R[R.length - 1].s);
+    let lo = 0, hi = R.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (R[m].s <= s) lo = m; else hi = m; }
+    const a = R[lo], b = R[hi], t = (s - a.s) / ((b.s - a.s) || 1);
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+function chaseRouteS(x, y) {
+    const R = G.world.chase.route;
+    let bd = Infinity, bs = 0;
+    for (const q of R) { const d = (q.x - x) ** 2 + (q.y - y) ** 2; if (d < bd) { bd = d; bs = q.s; } }
+    return bs;
+}
+const chaseLeader = () => G.player && !G.player.dead ? G.player : G.fighters.find(f => !f.dead && !f.soldier && f.team === 0) || null;
+
+// The boats' captains: ours sails the route (waiting for you, or keeping pace with you on the bank);
+// the soldier boats come up the river at it, bow first, and back down after it once it's past
+function chaseShipOrders(s) {
+    const Cw = G.world.chase, here = chaseRouteS(s.x, s.y);
+    s.routeS = here;
+    let target = here, off = 0, bowDown = true;
+    if (s.chase === 'squad') {
+        const p = chaseLeader();
+        if (!p) target = Cw.endS;
+        else if (p.ship === s) {
+            // (a moment at the pier for everyone to climb aboard)
+            if (!G.chase.boardedAt) G.chase.boardedAt = G.time;
+            const waiting = G.time - G.chase.boardedAt < 20000 && G.fighters.some(f => !f.dead && !f.soldier && f.team === 0 && !f.ship && !f.car && dist(f, s) < 1400);
+            target = waiting ? here : Cw.endS;
+            // (someone of ours in the water close by: ease off so they can catch up)
+            if (!waiting && G.fighters.some(f => f.swim && !f.dead && !f.soldier && f.team === 0 && !f.chaseOff && dist(f, s) < 900)) s.slowFor = G.time + 1000;
+        } else if (!p.ship && p.y < chaseMount(p.x) + 200) {
+            const ps = chaseRouteS(p.x, p.y);
+            if (ps > here + 250) target = Math.min(ps, Cw.mouthS - 400);
+        }
+    } else if (s.home === null) {
+        // Out at sea: the normal captain's plan (go for the nearest enemy ship) works fine in open water
+        const q = G.chase.ship;
+        if (q && !q.sinkAt && (q.routeS || 0) > Cw.mouthS - 900) { navyOrders(s); return; }
+        s.wantThrottle = 0; s.want = s.a; return;
+    } else {
+        const q = G.chase.ship;
+        target = q && !q.sinkAt && Math.abs((q.routeS || 0) - here) < 4500 && (q.routeS || 0) > 300 ? q.routeS : s.home + Math.sin(G.time / 9000 + s.home) * 500;
+        off = 150; bowDown = false;
+    }
+    if (s.chase === 'squad' && here > Cw.endS - 250) G.chase.arrived = true;
+    const gap = target - here, ad = Math.abs(gap), dir = gap >= 0 ? 1 : -1;
+    if (ad < 140 || (s.chase === 'squad' && gap < 0)) { s.wantThrottle = 0; s.want = s.a; return; }
+    const at = here + dir * 600, P = chaseRoutePt(at), P2 = chaseRoutePt(at + 20), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1;
+    if (off) { P.x += -(P2.y - P.y) / tl * off; P.y += (P2.x - P.x) / tl * off; }
+    const bowFirst = bowDown ? dir > 0 : dir < 0;
+    s.want = bowFirst ? Math.atan2(P.y - s.y, P.x - s.x) : Math.atan2(s.y - P.y, s.x - P.x);
+    const th = clamp(ad / 900, 0.25, 1) * clamp(Math.cos(angleDiff(s.a, s.want)), 0.3, 1) * (G.time < (s.slowFor || 0) ? 0.3 : 1);
+    s.wantThrottle = bowFirst ? th : -th * 0.6;
+}
+// Hulls stay in the water: any part of a ship over the bank or the beach is pushed back toward deep water
+function chaseKeepAfloat(s, dt) {
+    const C = s.C, h = C.len / 2 - C.beam / 2, rr = C.beam / 2, ca = Math.cos(s.a), sa = Math.sin(s.a);
+    let mx = 0, my = 0, n = 0, rot = 0, rl = 0;
+    for (let k = -2; k <= 2; k++) {
+        const lx = (k / 2) * h, x = s.x + ca * lx, y = s.y + sa * lx;
+        if (chaseWet(x, y, rr)) continue;
+        let px = 0, py = 0, best = Infinity;
+        const coast = chaseCoast(x) - rr, e0 = y - coast;
+        if (e0 > 0 && e0 < 1500) { best = e0; py = -e0; }
+        const nr = chaseRiverNear(x, y);
+        if (nr.i >= 0) { const q = G.world.chase.river[nr.i], e = nr.d - (CHASE.river - rr); if (e > 0 && e < best) { best = e; px = (q.x - x) / (nr.d || 1) * e; py = (q.y - y) / (nr.d || 1) * e; } }
+        if (best === Infinity) continue;
+        mx += px; my += py; n++;
+        rot += (-px * sa + py * ca) * lx; rl += lx * lx;
+    }
+    if (!n) return;
+    s.x += mx / n; s.y += my / n;
+    if (rl > 0) s.a += clamp(rot / rl, -0.04, 0.04);
+    if (Math.hypot(mx, my) / n > 3) s.speed *= Math.exp(-dt * 1.2);
+}
+
+// --- The squad's bots ---
+function chaseRunnerGoal(b) {
+    const s = G.chase.ship, L = b.lead;
+    if (!s || s.sinkAt || b.chaseOff || !L || L.ship !== s || dist(b, s) > 3200) return null;
+    return { x: s.x, y: s.y };
+}
+// Someone in the water swims for our boat (if that's where the group is) or for the nearest dry land
+function chaseSwimGoal(b) {
+    const s = G.chase.ship, L = chaseLeader();
+    if (!b.soldier && s && !s.sinkAt && !b.chaseOff && (dist(b, s) < 700 || (L && L.ship === s) || b.y < chaseCoast(b.x) - 600)) return s;
+    return chaseLandNear(b.x, b.y);
+}
+function chaseLandNear(x, y) {
+    const I = CHASE.island;
+    if (y < chaseCoast(x)) {
+        const di = Math.hypot(x - I.x, y - I.y), dc = chaseCoast(x) - y;
+        if (di - I.r < dc) return { x: I.x + (x - I.x) / (di || 1) * (I.r - 80), y: I.y + (y - I.y) / (di || 1) * (I.r - 80) };
+        return { x, y: chaseCoast(x) + 160 };
+    }
+    const n = chaseRiverNear(x, y), R = G.world.chase.river;
+    if (n.i < 0) return { x, y };
+    const q = R[n.i];
+    let dx = x - q.x, dy = y - q.y, d = Math.hypot(dx, dy);
+    if (d < 20) { const q2 = R[Math.min(n.i + 1, R.length - 1)]; dx = -(q2.y - q.y); dy = q2.x - q.x; d = Math.hypot(dx, dy) || 1; }
+    return { x: q.x + dx / d * (CHASE.river + 110), y: q.y + dy / d * (CHASE.river + 110) };
+}
+// At the far shore, everyone still aboard climbs off toward the airship once you have
+function chaseDisembark(b) {
+    const s = b.ship, L = chaseLeader();
+    if (!G.chase.arrived || (L && L.ship === s)) return false;
+    if (b.station) navyLeave(b);
+    const I = CHASE.island, side = navyLy(s, I.x, I.y) >= 0 ? 1 : -1, lx = clamp(navyLx(s, I.x, I.y), -s.C.len * 0.4, s.C.len * 0.4), hw = navyHw(s.C, lx);
+    b.x = navyWx(s, lx, side * (hw + 50)); b.y = navyWy(s, lx, side * (hw + 50));
+    b.ship = null; b.room = null; b.swim = true; b.noClimb = G.time + 1e9; b.chaseOff = true; b.nGoal = null; b.nStation = null;
+    return true;
+}
+
+// --- The helicopters: sweep the ground near where you were last seen, light you up, and open fire ---
+const chaseCovered = f => G.world.chase.ruins.some(r => Math.abs(f.x - r.x) < r.w / 2 && Math.abs(f.y - r.y) < r.h / 2);
+function chaseHeliBot(c, b, dt) {
+    const ctl = { up: false, down: false, left: false, right: false }, Ch = G.chase;
+    if (G.time >= (b.driveThink || 0)) {
+        b.driveThink = G.time + 500;
+        let prey = null, bd = Infinity;
+        for (const f of G.fighters) {
+            if (f.dead || f.car || !foe(b, f) || chaseStageOf(f) === 0) continue;
+            // (hiding inside a ruin, they only see you from right overhead)
+            const d = Math.hypot(f.x - c.x, f.y - c.y) * (chaseCovered(f) ? 2.6 : 1);
+            if (d < bd) { bd = d; prey = f; }
+        }
+        b.heliPrey = prey && (bd < CHASE.heliSight || (b.heliPrey === prey && bd < 1000)) ? prey : null;
+        if (b.heliPrey) { Ch.seen = { x: b.heliPrey.x, y: b.heliPrey.y, t: G.time }; chaseAlert(); }
+        if (!b.heliGoal || Math.hypot(b.heliGoal.x - c.x, b.heliGoal.y - c.y) < 250 || G.time > (b.heliGoalAt || 0)) {
+            const seen = Ch.seen && G.time - Ch.seen.t < 25000 ? Ch.seen : null, L = chaseLeader();
+            // (while you're still inside the facility they sweep the open desert, waiting for you to come out)
+            const base = seen || (L && Ch.stage > 0 ? { x: L.x + rand(-2000, 2000), y: L.y + rand(-2000, 2000) } : { x: rand(CONFIG.WORLD_SIZE * 0.35, CONFIG.WORLD_SIZE * 0.9), y: rand(chaseMount(0) + 800, CONFIG.WORLD_SIZE - 1000) });
+            b.heliGoal = { x: clamp(base.x + rand(-700, 700), 300, CONFIG.WORLD_SIZE - 300), y: clamp(base.y + rand(-700, 700), 300, CONFIG.WORLD_SIZE - 300) };
+            b.heliGoalAt = G.time + rand(6000, 10000);
+        }
+    }
+    const t = b.heliPrey && !b.heliPrey.dead ? b.heliPrey : null;
+    const g = t ? { x: t.x + Math.cos(G.time / 1500) * 320, y: t.y + Math.sin(G.time / 1500) * 320 } : b.heliGoal;
+    if (g) {
+        const want = Math.atan2(g.y - c.y, g.x - c.x), diff = angleDiff(c.a, want), d = Math.hypot(g.x - c.x, g.y - c.y);
+        if (diff > 0.1) ctl.right = true; else if (diff < -0.1) ctl.left = true;
+        ctl.up = d > 120 && Math.abs(diff) < 1.4 && (d > 500 || Math.abs(c.speed) < 240);
+    }
+    // (bursts from the machine gun only, no rockets: you've got to be able to run for cover)
+    if (t && G.time >= c.fireAt && dist(c, t) < 900) { c.rocketAt = G.time + 1e9; c.turret = Math.atan2(t.y - c.y, t.x - c.x) + rand(-0.12, 0.12) * AIK().aim; vehicleFire(c, b); c.fireAt = G.time + (Math.random() < 0.15 ? 1400 : 230); }
+    return ctl;
+}
+function chaseAlert() {
+    const Ch = G.chase;
+    if (G.time - Ch.alertAt < 25000) return;
+    Ch.alertAt = G.time;
+    if (G.mode === 'playing') { showBanner('SPOTTED!', true, 'A helicopter has found you. Soldiers are on their way. Hide in the ruins!'); Sound.tone(880, 0.25, 'square', 0.07, 660); }
+}
+function drawChaseLights() {
+    for (const c of G.chase.helis) {
+        if (c.dead || !c.driver || !inView(c.x, c.y, 800)) continue;
+        const b = c.driver, lit = b.heliPrey && !b.heliPrey.dead, x = lit ? b.heliPrey.x : c.x + Math.cos(c.a) * 170, y = lit ? b.heliPrey.y : c.y + Math.sin(c.a) * 170, R = CHASE.heliSight * 0.6;
+        ctx.fillStyle = lit ? 'rgba(255,120,90,0.07)' : 'rgba(255,248,210,0.07)';
+        ctx.beginPath(); ctx.moveTo(c.x, c.y - 24); ctx.lineTo(x - R * 0.55, y); ctx.lineTo(x + R * 0.55, y); ctx.closePath(); ctx.fill();
+        const gr = ctx.createRadialGradient(x, y, 0, x, y, R);
+        gr.addColorStop(0, lit ? 'rgba(255,110,80,0.32)' : 'rgba(255,248,210,0.3)'); gr.addColorStop(1, 'rgba(255,248,210,0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.fill();
+    }
+}
+
+// --- The airship, moored on the far shore ---
+function drawAirship(now) {
+    const A = CHASE.airship, x = A.x, y = A.y, door = G.extract;
+    if (!inView(x, y, 1000)) return;
+    ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(x + 80, y + 150, 600, 180, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(70,56,40,0.75)'; ctx.lineWidth = 4;
+    for (const [ox, oy] of [[-460, 230], [460, 230], [-460, -260], [460, -260]]) { ctx.beginPath(); ctx.moveTo(x + ox * 0.75, y - 40 + oy * 0.45); ctx.lineTo(x + ox, y + oy); ctx.stroke(); ctx.fillStyle = '#5a4630'; ctx.fillRect(x + ox - 8, y + oy - 8, 16, 16); }
+    const pulse = 0.5 + Math.sin(now * 4) * 0.5;
+    ctx.strokeStyle = `rgba(125,255,176,${0.45 + pulse * 0.45})`; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.arc(door.x, door.y, A.board * 0.55 + pulse * 22, 0, TAU); ctx.stroke();
+    ctx.fillStyle = '#7a5c3a'; ctx.fillRect(door.x - 42, y + 130, 84, door.y - y - 130);
+    ctx.fillStyle = '#5e4630'; for (let yy = y + 140; yy < door.y; yy += 22) ctx.fillRect(door.x - 42, yy, 84, 5);
+    // tail fins, envelope, gondola
+    ctx.fillStyle = '#8a1f2a';
+    ctx.beginPath(); ctx.moveTo(x - 470, y - 40); ctx.lineTo(x - 690, y - 230); ctx.lineTo(x - 610, y - 40); ctx.lineTo(x - 690, y + 150); ctx.closePath(); ctx.fill();
+    const grd = ctx.createLinearGradient(0, y - 240, 0, y + 160);
+    grd.addColorStop(0, '#e4e8ec'); grd.addColorStop(0.55, '#aeb6bf'); grd.addColorStop(1, '#78818b');
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(x, y - 40, 620, 200, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,70,80,0.25)'; ctx.lineWidth = 3;
+    for (let k = -5; k <= 5; k++) { const xx = x + k * 105, hh = 200 * Math.sqrt(Math.max(0, 1 - (k * 105 / 620) ** 2)); ctx.beginPath(); ctx.moveTo(xx, y - 40 - hh); ctx.lineTo(xx, y - 40 + hh); ctx.stroke(); }
+    ctx.fillStyle = '#b8342c'; ctx.fillRect(x - 600, y - 62, 1200, 44);
+    ctx.fillStyle = '#fff'; ctx.font = '900 62px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('FREEDOM', x, y - 38);
+    ctx.fillStyle = '#3d4450'; roundRect(ctx, x - 180, y + 40, 360, 100, 22); ctx.fill();
+    ctx.fillStyle = '#ffe9a8'; for (let i = 0; i < 7; i++) ctx.fillRect(x - 150 + i * 44, y + 72, 26, 22);
+    for (const px of [-260, 260]) {
+        ctx.fillStyle = '#4a515c'; ctx.fillRect(x + px - 30, y + 60, 60, 26);
+        ctx.save(); ctx.translate(x + px + (px > 0 ? 34 : -34), y + 73); ctx.rotate(now * 25);
+        ctx.fillStyle = 'rgba(40,44,50,0.6)'; ctx.fillRect(-6, -48, 12, 96); ctx.restore();
+    }
+}
+
+// --- How far you've got, and what's next ---
+function chaseStageOf(f) {
+    const F = CHASE.fac, I = CHASE.island;
+    if (Math.hypot(f.x - I.x, f.y - I.y) < I.r + 100) return 4;
+    if (f.y < chaseCoast(f.x)) return 3;
+    if (f.y < chaseMount(f.x)) return 2;
+    if (f.x > F.x0 && f.x < F.x1 && f.y > F.y0 && f.y < F.y1) return 0;
+    return 1;
+}
+const CHASE_STAGES = [
+    null,
+    ['YOU\'RE OUT!', 'Cross the desert to the boat on the river, far to the north-east. Helicopters are searching: hide in the ruins.'],
+    ['THE MOUNTAINS', 'Sail the boat down the river, or walk the banks to dodge the soldier boats. Ambushes wait along the way.'],
+    ['THE OCEAN', 'Head for the land in the north-east. Enemy ships are out here.'],
+    ['LAND!', 'The airship is waiting. Get everyone aboard!']
+];
+function chaseNext() {
+    const Cw = G.world.chase, st = G.chase.stage;
+    if (st === 0) return { ...Cw.gates[0], label: 'Break out of the facility' };
+    if (st === 1) return { x: Cw.dock.x, y: Cw.dock.y, label: 'Cross the desert to the boat' };
+    if (st === 2) return { ...Cw.mouth, label: 'Follow the river to the sea' };
+    if (st === 3) return { ...Cw.landing, label: 'Cross the ocean to land' };
+    return { x: G.extract.x, y: G.extract.y, label: 'Get to the airship' };
+}
+function chaseStatus(p) {
+    if (p.ship || p.car) return navyStatus(p);
+    const n = chaseNext();
+    return `${p.swim ? 'In the water! ' : ''}${n.label} · ${Math.round(dist(p, n) / 10)}m`;
+}
+function chaseTick(dt) {
+    const Ch = G.chase, p = G.player, L = chaseLeader();
+    if (L) {
+        const st = chaseStageOf(L);
+        if (st > Ch.stage) { Ch.stage = st; const b = CHASE_STAGES[st]; if (b) { showBanner(b[0], true, b[1]); Sound.tone(520, 0.4, 'triangle', 0.09, 780); } }
+    }
+    if (p && !p.dead && dist(p, G.extract) < CHASE.airship.board) { chaseWin(); return; }
+    if (G.time >= Ch.nextReinf) { chaseReinforce(); Ch.nextReinf = G.time + rand(...CHASE.reinforce); }
+}
+function chaseWin() {
+    const riders = G.fighters.filter(f => !f.dead && !f.soldier && dist(f, G.extract) < 1600);
+    G.escaped = riders.length;
+    for (const f of riders) { f.escaped = true; f.dead = true; f.diedAt = G.time; burst(f.x, f.y, 16, '#7dffb0', 220, 'glow'); }
+    G.alive -= riders.length;
+    const mins = Math.floor(G.time / 60000);
+    G.result = { won: true, place: 1, title: 'ESCAPED!', sub: `The airship lifts off with you and ${riders.length - 1} other${riders.length === 2 ? '' : 's'} after ${mins} minute${mins === 1 ? '' : 's'} on the run. ${CHASE.people - riders.length} didn't make it.` };
+    G.overAt = G.time + 2600;
+    startVictory(G.result.sub);
+}
+function chaseReinforce() {
+    const L = chaseLeader();
+    if (!L) return;
+    const st = G.chase.stage, Cw = G.world.chase, W = CONFIG.WORLD_SIZE;
+    if (st <= 1) {
+        if (G.chase.helis.filter(c => !c.dead).length < CHASE.helis) {
+            const a = rand(0, TAU);
+            chaseAddHeli(clamp(L.x + Math.cos(a) * 2600, 400, W - 400), clamp(L.y + Math.sin(a) * 2600, 400, W - 400));
+            showBanner('ANOTHER HELICOPTER', true, 'More of them have joined the search.');
+            return;
+        }
+        const a = rand(0, TAU), c = spawnNear({ x: clamp(L.x + Math.cos(a) * 1700, 400, W - 400), y: clamp(L.y + Math.sin(a) * 1700, 400, W - 400) }, 300, 30, true);
+        if (chaseBad(c.x, c.y)) return;
+        spawnSquad(c, randInt(5, 7), 0, true);
+        showBanner('SOLDIERS INBOUND', true, 'A squad is closing in. Keep moving!');
+    } else if (st === 2) {
+        const s0 = (L.ship ? L.ship.routeS || 0 : chaseRouteS(L.x, L.y)) + rand(1500, 2300);
+        if (s0 > Cw.mouthS - 300) return;
+        const P = chaseRoutePt(s0), P2 = chaseRoutePt(s0 + 20), tl = Math.hypot(P2.x - P.x, P2.y - P.y) || 1, side = Math.random() < 0.5 ? 1 : -1;
+        const c = { x: P.x - (P2.y - P.y) / tl * side * (CHASE.river + 200), y: P.y + (P2.x - P.x) / tl * side * (CHASE.river + 200) };
+        if (chaseBad(c.x, c.y)) return;
+        spawnSquad(c, randInt(4, 6), 0, true);
+        showBanner('AMBUSH AHEAD', true, 'Soldiers are waiting on the bank down the river.');
+    } else if (st === 3) {
+        if (G.navy.ships.filter(s => s.chase === "soldier" && !s.sinkAt && s.home === null).length >= 2) return;
+        const x = clamp(L.x + rand(2500, 3200), 1500, CHASE.island.x - 3000), y = rand(700, CHASE.oceanY - 1000);
+        if (!chaseWet(x, y, 500)) return;
+        chaseSoldierShip(x, y, Math.PI, null);
+        showBanner('ENEMY SHIP', true, 'Another soldier ship is coming after you.');
+    }
 }
 
 // ---------- Zombies & Virus ----------
@@ -7194,7 +7863,11 @@ function updateSquads() {
     for (const sq of G.squads) {
         const lead = sq.members.find(f => !f.dead);
         if (!lead) continue;
-        const prey = sq.hunter && nearestPrey(lead);
+        let prey = sq.hunter && nearestPrey(lead);
+        // Chase: a helicopter's sighting brings every squad nearby; nobody wades into the river after a boat
+        const seen = G.chase && G.chase.seen && G.time - G.chase.seen.t < 15000 ? G.chase.seen : null;
+        if (!prey && seen && dist(lead, seen) < CHASE.alertR) prey = seen;
+        if (prey && G.chase && chaseWet(prey.x, prey.y, -60)) prey = chaseLandNear(prey.x, prey.y);
         // Hunters close in from their own side, so two squads don't merge into one big blob
         if (prey && dist(lead, prey) < 3000) { sq.goal = { x: prey.x + Math.cos(sq.flank) * 320, y: prey.y + Math.sin(sq.flank) * 320 }; continue; }
         // Next patrol stop: somewhere on our beat that isn't where another squad is heading
@@ -7300,6 +7973,7 @@ function addSoldier(s, i, guard) {
     f.items.grenade = G.early ? 0 : 2;
     // Guards hold their pad; the rest patrol, and some sweep the city looking for the runners
     f.post = guard ? { x: s.x, y: s.y } : null;
+    if (G.chase) { f.hp = f.maxHp = CHASE.soldierHp; f.likesCars = false; f.dmgMul = CHASE.soldierDmg; }
     G.fighters.push(f);
 }
 
@@ -7351,6 +8025,8 @@ function updateOutbreak(dt) {
         G.result = { won: true, place: 1, title: 'BOSS DEFEATED!', sub: G.bossF.killedBy === p ? 'You landed the final blow!' : 'Your team brought the giant down.' };
         G.overAt = G.time + 2600;
         startVictory(G.result.sub);
+    } else if (G.chase) {
+        chaseTick(dt);
     } else if (G.escape) {
         const heli = G.world.floor ? G.world.floor.heli : G.extract;
         if (heli && !p.dead && dist(p, heli) < ESCAPE.heliR) boardHelicopter();
@@ -7393,7 +8069,7 @@ function newDemo() {
         G.cam.x = G.bossF.x; G.cam.y = G.bossF.y;
         return;
     }
-    if (id === 'escape') {
+    if (id === 'escape' || id === 'chase') {
         // A small breakout: the people in the middle, soldiers around them, pads at the arena edge
         newState('demo', { type: 'escape', count: 0 });
         spawnEscapeDemo({ x: c, y: c });
@@ -8491,6 +9167,8 @@ function damage(t, amount, attacker, weapon) {
     if (t.downed) { t.downHp -= amount * (G.war && attacker && attacker !== t ? closeGameMul(attacker.team, t.team) : 1); t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
     let dmg = amount;
     if (G.war && attacker && attacker !== t) dmg *= closeGameMul(attacker.team, t.team);
+    // Chase: the soldiers' ship guns and helicopter guns are fearsome, but not instant death
+    if (G.chase && attacker && attacker.soldier && (attacker.station || attacker.car)) dmg *= attacker.station && attacker.station.kind === 'mg' ? 0.02 : attacker.station ? 0.08 : 0.4;
     if (t.isPlayer && G.strikeCam) G.strikeCam = null;  // (watching a boss strike: getting hurt brings the camera back)
     // Escape: stray airstrikes, bombs and burning cars only half hurt the group
     if (G.escape && !attacker && !t.soldier) dmg *= ESCAPE.ambient;
@@ -9162,6 +9840,8 @@ function botThink(b) {
         if (!b.soldier) {
             const near = nearestLoot(b.x, b.y, 160, l => botWants(b, l.key) && !claimedByOther(l, b) && !gaveUpOn(b, l));
             if (near) { b.mode = 'loot'; b.goal = near; near.claim = b; return; }
+            const cg = G.chase && chaseRunnerGoal(b);
+            if (cg) { b.mode = 'zone'; b.goal = cg; return; }
             if (b.lead && b.lead !== b) {
                 b.mode = 'follow';
                 b.goal = b.lead;
@@ -9171,7 +9851,7 @@ function botThink(b) {
                 for (const off of [0, 0.5, -0.5, 1, -1]) {
                     for (const k of [1, 0.6]) {
                         const r = (b.slotR || 150) * k, q = { x: t.x + Math.cos(a0 + off) * r, y: t.y + Math.sin(a0 + off) * r };
-                        if (!blockedAt(G.world.grid, q.x, q.y, b.r + 2) && lineOfSight(t, q)) { pt = q; a = a0 + off; break; }
+                        if (!blockedAt(G.world.grid, q.x, q.y, b.r + 2) && !(G.chase && chaseBad(q.x, q.y)) && lineOfSight(t, q)) { pt = q; a = a0 + off; break; }
                     }
                     if (pt) break;
                 }
@@ -9435,7 +10115,7 @@ function findPath(b, gx, gy, reach = 50, opt = PATH) {
 function updateBot(b, dt) {
     // Downed: lying there waiting for help
     if (b.downed) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
-    if (G.navy) { navyBot(b, dt); return; }
+    if (G.navy && (!G.chase || b.ship || b.swim)) { navyBot(b, dt); return; }
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
     if (G.duel && b.duel && duelBotMove(b, dt)) return;
@@ -10556,6 +11236,11 @@ const pitchDark = () => !!G && (G.zombies || G.ghostMode) && G.mode !== 'demo'; 
 function darkness() {
     if ((G.zombies || G.ghostMode) && G.mode !== 'demo') return ZOMBIE_DARK;
     if (G.world.terrain === 'cavern') return CAVERN.dark;
+    if (G.chase) {
+        // Chase is always a bit dark: dim by day, darker at night, never pitch black
+        const t = dayT(), n = t < 0.45 ? 0 : t < 0.55 ? (t - 0.45) / 0.1 : t < 0.9 ? 1 : (1 - t) / 0.1;
+        return CHASE.dayDark + n * (CHASE.nightDark - CHASE.dayDark);
+    }
     if (!G.dayCycle || G.world.floor) return 0;
     const t = dayT();
     if (t < 0.45) return 0;
@@ -10619,6 +11304,12 @@ function drawLighting(camX, camY, zoom) {
         g.fillStyle = grad;
         g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, len, p.angle - 0.35, p.angle + 0.35); g.closePath(); g.fill();
         if (!pitch) for (const f of G.fighters) if (f !== p && !f.dead && f.team !== null && f.team === p.team && Math.abs(f.x - p.x) < 1400 && Math.abs(f.y - p.y) < 1000) light(f.x, f.y, 120, 0.5);
+    }
+    // Chase: the helicopters' searchlights light up the ground
+    if (G.chase) for (const c of G.chase.helis) {
+        if (c.dead || !c.driver) continue;
+        const b = c.driver, lit = b.heliPrey && !b.heliPrey.dead;
+        light(lit ? b.heliPrey.x : c.x + Math.cos(c.a) * 170, lit ? b.heliPrey.y : c.y + Math.sin(c.a) * 170, CHASE.heliSight * 0.7, 0.95);
     }
     if (pitch) {
         // Everyone else carries a flashlight too (zombies don't): you see their beams sweep the dark
@@ -12399,6 +13090,7 @@ function mazeRoute(b, gx, gy) {
 
 // The extraction helicopter waiting at the end of the maze or on the summit
 function drawExtraction(now) {
+    if (G.chase) { drawAirship(now); return; }
     const e = G.extract;
     if (!e || G.world.floor || !inView(e.x, e.y, 300)) return;
     ctx.fillStyle = '#2f3a33';
@@ -13474,6 +14166,7 @@ const canDrive = b => !isHuman(b) && !b.zombie && !b.decoy && !b.riding && !b.up
 
 // Steer toward a point, swerving round anything in the way; back up and try again when stuck
 function botDrive(c, b, dt) {
+    if (G.chase && vt(c).fly) return chaseHeliBot(c, b, dt);
     if (G.navy) return navyPilot(c, b, dt);
     const T = vt(c);
     if (G.time >= (b.driveThink || 0)) {
@@ -14256,6 +14949,8 @@ function moveFighter(f, dt) {
             f.y = o.y + (dy / d) * min;
         }
     });
+    // Chase: the mountains are a wall, except along the river and its banks
+    if (G.chase && !f.ship && chaseRock(f.x, f.y)) { if (!chaseRock(f.x, oy)) f.y = oy; else if (!chaseRock(ox, f.y)) f.x = ox; else { f.x = ox; f.y = oy; } }
     const W = CONFIG.WORLD_SIZE;
     f.x = clamp(f.x, f.r, W - f.r);
     f.y = clamp(f.y, f.r, W - f.r);
@@ -14599,7 +15294,8 @@ function render() {
 
     // Ground
     const W = CONFIG.WORLD_SIZE;
-    if (G.navy) drawSea(L, T, R, B, now);
+    if (G.chase) drawChaseGround(L, T, R, B, now);
+    else if (G.navy) drawSea(L, T, R, B, now);
     else if (G.world.floor) drawFloorBase(L, T, R, B);
     else if (G.world.city) drawCity(L, T, R, B);
     else {
@@ -14711,6 +15407,7 @@ function render() {
 
     if (G.navy) drawNavy(L, T, R, B, now);
     if (G.navy) drawNavyInterior(L, T, R, B, now);
+    if (G.chase) drawChaseLights();
     // Fighters
     const visible = [];
     const deckOf = f => (f && f.room && f.ship ? f.ship : null), myDeck = G.player ? G.player.room || null : null, myShip = deckOf(G.player);
@@ -16419,7 +17116,7 @@ function updateHUD() {
     if (G.revolution) {
         const Rv = G.revolution;
         setHTML(hud.teamScore, 'teams', [0, 1].map(t => `<div class="ts${t === p.team ? ' mine' : ''}${revoLeft(t) === 0 ? ' out' : ''}"><i style="background:${REVO.sides[t].flag}"></i><b>${G.teamAlive[t]}</b><span>${revoName(t)} · ${Rv.bases[t].fallen ? 'base fallen' : `base ${Math.round(baseHealth(Rv.bases[t]) * 100)}% · strike ${Math.floor(Rv.bases[t].strike.ammo / 100) / 10}k/${REVO.strike.cost / 1000}k`}</span></div>`).join('<em>vs</em>'));
-    } else if (G.navy) {
+    } else if (G.navy && !G.chase) {
         const left = G.navy.left || [0, 0], chip = t => `<div class="ts${t === p.team ? ' mine' : ''}${left[t] === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${left[t]}</b><span>${t === p.team ? 'Your ships' : 'Enemy ships'} · ${G.teamAlive[t]} people</span></div>`;
         if (G.navy.ffa) { const k = G.war.teams, still = k - G.navy.out.filter(Boolean).length; setHTML(hud.teamScore, 'teams', chip(p.team).replace('Your ships', 'Your ship') + '<em>vs</em>' + `<div class="ts"><i style="background:#fff7ec"></i><b>${Math.max(0, still - 1)}</b><span>Other squads left</span></div>`); }
         else setHTML(hud.teamScore, 'teams', chip(0) + '<em>vs</em>' + chip(1));
@@ -16438,7 +17135,8 @@ function updateHUD() {
     }
 
     let zt;
-    if (G.navy) zt = navyStatus(p);
+    if (G.chase) zt = chaseStatus(p);
+    else if (G.navy) zt = navyStatus(p);
     else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
@@ -16686,7 +17384,7 @@ function drawMinimap() {
                 g.fillRect(st.x * k - 5, st.y * k - 5, 10, 10);
             }
         }
-        const goal = !F ? (G.extract || { x: G.hq.cx, y: G.hq.cy }) : F.heli || (F.b.hq ? G.world.stairs.find(s => s.dir === 'up') : null);
+        const goal = !F ? (G.chase ? chaseNext() : G.extract || { x: G.hq.cx, y: G.hq.cy }) : F.heli || (F.b.hq ? G.world.stairs.find(s => s.dir === 'up') : null);
         if (!F) {
             g.fillStyle = '#ffd166'; g.strokeStyle = '#160e28'; g.lineWidth = 2;
             g.beginPath(); g.arc(goal.x * k, goal.y * k, 7, 0, TAU); g.fill(); g.stroke();
@@ -16782,6 +17480,7 @@ const MODES = [
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
     { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
+    { id: 'chase', name: 'CHASE', desc: 'Your squad of 20 breaks out of an army facility, crosses a desert of ruins while helicopters hunt for you, takes a boat down a river through the mountains, crosses the ocean and reaches a giant airship. A long game, by day and by night: you have 500 health, the soldiers 45.' },
     { id: 'navy', name: 'BATTLESHIPS', desc: 'Two fleets at sea. Giant ships with turning cannons, deck guns, torpedoes and helicopters, up to 100 people on each. Take the wheel, man the guns, fly, or board the enemy and capture their ship.' }
 ];
 let ghostRolePick = 'hunter', navyRolePick = 'captain';
@@ -16803,7 +17502,7 @@ function setMenuMode(i, dir) {
     $('mode-desc').textContent = m.desc;
     $('settings-navy').classList.toggle('hidden', m.id !== 'navy');
     $('solo-friends').classList.toggle('hidden', !soloMap(m.id));
-    $('settings-ffa').classList.toggle('hidden', m.id === 'navy' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-ffa').classList.toggle('hidden', m.id === 'navy' || m.id === 'chase' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
     document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : 'Opponents';
@@ -16850,7 +17549,7 @@ function drawModePreview(now) {
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     if (id === 'zombies') { drawZombiePreview(g, Wd, Ht, now); return; }
     if (id === 'navy') { drawNavyPreview(g, Wd, Ht, now); return; }
-    if (id === 'escape') { drawEscapePreview(g, Wd, Ht, now); return; }
+    if (id === 'escape' || id === 'chase') { drawEscapePreview(g, Wd, Ht, now); return; }
     g.save();
     g.fillStyle = SPR.grass;
     g.fillRect(0, 0, Wd, Ht);
@@ -17188,9 +17887,16 @@ const BRIEF = {
 };
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
+BRIEF.chase = [['🏃', '<b>Goal:</b> get your squad of 20 all the way to the giant airship at the far end of the world. It\'s a long journey across a huge world, through day and night: you each have <b>500 health</b>, and every soldier has 45.'],
+    ['🏭', '<b>1. The facility.</b> You start in the cell block. The soldiers want you gone: fight your way out through the east or north gate.'],
+    ['🏜️', '<b>2. The desert.</b> Broken, abandoned buildings everywhere. Helicopters sweep the sand with searchlights: out in the open they spot you and call in soldiers, so move from ruin to ruin. The boat waits at a pier where the river starts, far to the north-east.'],
+    ['⛰️', '<b>3. The mountains.</b> Walk onto the boat and it sails down the river through the mountain range (take the wheel yourself if you like). Soldier boats patrol the river: you can also walk the banks beside it, and the boat keeps pace with you. Ambushes wait on the banks.'],
+    ['🌊', '<b>4. The ocean.</b> The river runs out to sea. Cross it to the land in the north-east, past the enemy ships.'],
+    ['🎈', '<b>5. The airship.</b> Walk up the ramp under the airship and everyone near you flies away with you.'],
+    ['🤝', 'Your squad follows you. The mountains are a wall: only the river valley gets through them. In the water you slowly drown.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
+const BRIEF_MAP = { chase: 'Desert, mountains and ocean', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
@@ -17222,11 +17928,11 @@ function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'chase' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'duel' || id === 'navy' || id === 'chase') openMapSelect(); else openTypeSelect(); }
     else { const map = BRIEF_STAGE.map; quickMatch(() => startGame(map)); }
 });
 $('brief-back').addEventListener('click', () => {
@@ -17234,7 +17940,7 @@ $('brief-back').addEventListener('click', () => {
     // (a mode with only one map never showed the map screen: back to whatever came before it)
     if (BRIEF_STAGE.stage === 'desc') screens.menu.classList.remove('hidden');
     else if (!soloMap(MODES[menuMode].id)) screens.mapsel.classList.remove('hidden');
-    else if (['ghost', 'navy'].includes(MODES[menuMode].id)) openDescription();
+    else if (['ghost', 'navy', 'chase'].includes(MODES[menuMode].id)) openDescription();
     else openTypeSelect();
 });
 
@@ -17242,11 +17948,12 @@ $('brief-back').addEventListener('click', () => {
 let lastMap = 'ordinary';
 function mapAllowed(id, m) {
     if (id === 'navy') return m === 'sea';
-    return !(m === 'sea' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
+    if (id === 'chase') return m === 'chase';
+    return !(m === 'sea' || m === 'chase' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
 // The one map a mode can be played on, if there's only one: then there's nothing to choose
 function soloMap(id) {
-    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea'].filter(m => mapAllowed(id, m));
+    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'chase'].filter(m => mapAllowed(id, m));
     return all.length === 1 ? all[0] : null;
 }
 function openMapSelect() {
@@ -17404,15 +18111,17 @@ function startGame(map = lastMap) {
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
+    if (id === 'chase') map = 'chase'; else if (map === 'chase') map = 'ordinary';
     lastMap = map;
     const setup = id === 'navy' ? (navyFleet === 'ffa' ? { type: id, teams: navyFfaCount(), size: NAVY_FFA.crew, ships: 1, crew: NAVY_FFA.crew, role: navyRolePick, fleet: 'ffa' } : navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
+        : id === 'chase' ? { type: id, count: 0 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'ghost' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'ghost' || id === 'duel' || id === 'navy' || id === 'chase' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -17435,7 +18144,8 @@ function startGame(map = lastMap) {
     hud.energyBar.classList.toggle('hidden', !G.survival);
     hud.cells.water.classList.toggle('hidden', !G.survival);
     hud.cells.bucket.classList.toggle('hidden', !G.survival);
-    if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
+    if (G.chase) showBanner('CHASE', true, 'The soldiers want you gone. Break out of the facility with your squad of 20!');
+    else if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
     else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
