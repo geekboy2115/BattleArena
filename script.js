@@ -6598,13 +6598,13 @@ function navyIslandShape(g, q, baseR) {
     }
     g.closePath();
 }
-const SHIPWRECK = { alpha: 0.42, scale: 0.86 };
+const SHIPWRECK = { alpha: 0.24, scale: 0.76 };
 function drawNavyWreck(w, al) {
     const art = navyArt(w.kind, w.team);
     ctx.globalAlpha = al;
     ctx.drawImage(art, -art.width / 2, -art.height / 2);
     // (green-blue water over her, darker the deeper she lies)
-    ctx.globalAlpha = al * 0.9; ctx.fillStyle = 'rgba(10,52,72,0.6)'; navyHullPath(ctx, w.C, 14); ctx.fill();
+    ctx.globalAlpha = Math.min(1, al * 2.6); ctx.fillStyle = 'rgba(8,46,66,0.75)'; navyHullPath(ctx, w.C, 14); ctx.fill();
     ctx.globalAlpha = 1;
 }
 function drawNavy(L, T, R, B, now) {
@@ -6621,7 +6621,7 @@ function drawNavy(L, T, R, B, now) {
         ctx.save();
         ctx.translate(s.x, s.y);
         ctx.rotate(s.a + sink * 0.09);
-        if (sink) { ctx.globalAlpha = clamp(1.25 - sink * 1.3, SHIPWRECK.alpha, 1); const k = 1 - sink * 0.14; ctx.scale(k, k); }
+        if (sink) { ctx.globalAlpha = clamp(1.25 - sink * 1.3, SHIPWRECK.alpha, 1); const k = 1 - sink * (1 - SHIPWRECK.scale); ctx.scale(k, k); }
         ctx.fillStyle = 'rgba(0,30,50,0.32)';
         ctx.save(); ctx.translate(16, 24); navyHullPath(ctx, C, 14); ctx.fill(); ctx.restore();
         if (s.sunk) { drawNavyWreck(s, SHIPWRECK.alpha); ctx.restore(); continue; }
