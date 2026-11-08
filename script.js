@@ -5121,7 +5121,7 @@ function generateTemple() {
     for (let i = 0; i < 80 && traps.filter(q => q.kind === 'leafpit').length < 14; i++) { const q = Math.random() < 0.5 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'leafpit', x: q.x, y: q.y, r: 44, open: 0 }); }
     for (let i = 0; i < 60 && traps.filter(q => q.kind === 'snake').length < 10; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y)) traps.push({ kind: 'snake', x, y, bite: 0 }); }
     const chests = [];
-    for (let i = 0; i < 60 && chests.length < 12; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y) && !nearPath(x, y, 60)) chests.push({ x, y, full: true, at: 0 }); }
+    for (let i = 0; i < 60 && chests.length < 12; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y) && !nearPath(x, y, 60)) chests.push({ x, y, full: true, at: 0, trapped: Math.random() < 0.4 }); }
     // Tunnels from the jungle straight into the maze, near the altar chamber
     const ringCells = freeCells().filter(([i, j]) => Math.max(Math.abs(i - m), Math.abs(j - m)) === 2 || Math.max(Math.abs(i - m), Math.abs(j - m)) === 3);
     for (let k = 0; k < 4 && k < ringCells.length; k++) {
@@ -5142,16 +5142,44 @@ function generateTemple() {
     // Carved symbols all over the temple floor (the tunnels and switches hide among them)
     const glyphs = [];
     for (let k = 0; k < 420; k++) glyphs.push({ x: ox + rand(30, size - 30), y: oy + rand(30, size - 30), glyph: randInt(0, 6), rot: rand(0, TAU), s: rand(14, 22) });
+    // Booby traps: some of the symbols puff out poison gas when stepped on
+    for (const g2 of shuffle(glyphs.slice()).slice(0, 18)) traps.push({ kind: 'gas', x: g2.x, y: g2.y, ready: 0, cloud: 0 });
+    // Tripwires across corridors (an explosion), loose floor slabs that set off jets of flame, and ceilings that drop rocks
+    take(16, (i, j) => {
+        const w = wallsOf(i, j), c = cellC(i, j), h = cs / 2 - T / 2;
+        if (w.n && w.s && !w.w && !w.e) { traps.push({ kind: 'wire', x: c.x, y: c.y, x1: c.x, y1: c.y - h, x2: c.x, y2: c.y + h, armed: true, at: 0 }); return true; }
+        if (w.w && w.e && !w.n && !w.s) { traps.push({ kind: 'wire', x: c.x, y: c.y, x1: c.x - h, y1: c.y, x2: c.x + h, y2: c.y, armed: true, at: 0 }); return true; }
+        return false;
+    });
+    take(14, (i, j) => {
+        const w = wallsOf(i, j), c = cellC(i, j);
+        const side = w.n ? [0, -1] : w.s ? [0, 1] : w.w ? [-1, 0] : w.e ? [1, 0] : null;
+        if (!side) return false;
+        traps.push({ kind: 'flame', x: c.x + rand(-40, 40), y: c.y + rand(-40, 40), ex: c.x + side[0] * (cs / 2 - T / 2), ey: c.y + side[1] * (cs / 2 - T / 2), dx: -side[0], dy: -side[1], ready: 0, active: 0 });
+        return true;
+    });
+    take(14, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'ceiling', x: c.x, y: c.y, ready: 0, fallAt: 0, rubble: 0 }); return true; });
+    // Some cracked walls hide a stairway down behind them: open the wall and a tunnel appears beside it
+    for (const o of shuffle(secrets.filter(q => !q.hiddenSecret)).slice(0, 16)) {
+        const [i, j, d] = o.cell, near = d === 'e' ? cellC(Math.random() < 0.5 ? i : i + 1, j) : cellC(i, Math.random() < 0.5 ? j : j + 1);
+        const fc = shuffle(freeCells().filter(([a, b]) => Math.abs(a - i) + Math.abs(b - j) > 7))[0];
+        if (!fc) continue;
+        const far = cellC(...fc);
+        o.tunnel = { a: { x: (near.x + o.x) / 2, y: (near.y + o.y) / 2, glyph: randInt(0, 6), rot: rand(0, TAU) }, b: { x: far.x - 40, y: far.y - 40, glyph: randInt(0, 6), rot: rand(0, TAU) }, behind: true };
+    }
     for (const ps of passages) for (const h of [ps.a, ps.b]) { h.glyph = randInt(0, 6); h.rot = rand(0, TAU); }
     // Vines: hanging down the temple walls, creeping across the floor, and all through the jungle
     const vines = [];
-    for (const o of obstacles) if (o.temple && (o.vines || Math.random() < 0.35)) {
+    for (const o of obstacles) if (o.temple && (o.vines || Math.random() < 0.7)) {
         const long = o.hw > o.hh, L2 = (long ? o.hw : o.hh) * 2, nV = Math.max(1, Math.round(L2 / 90));
         for (let k = 0; k < nV; k++) { const t = (k + 0.5) / nV - 0.5; vines.push({ x: long ? o.x + t * L2 : o.x + rand(-6, 6), y: long ? o.y + rand(-6, 6) : o.y + t * L2, a: long ? Math.PI / 2 + rand(-0.4, 0.4) : rand(-0.4, 0.4) + (Math.random() < 0.5 ? 0 : Math.PI), len: rand(40, o.vines ? 110 : 80), seed: Math.random() * 100, thick: o.vines ? 1 : 0.7 }); }
     }
     for (const o of secrets) if (o.vines) for (let k = 0; k < 5; k++) vines.push({ x: o.x + rand(-o.hw, o.hw), y: o.y + rand(-o.hh, o.hh), a: rand(0, TAU), len: rand(50, 90), seed: Math.random() * 100, thick: 1.2 });
-    for (let k = 0; k < 260; k++) vines.push({ x: ox + rand(0, size), y: oy + rand(0, size), a: rand(0, TAU), len: rand(60, 160), seed: Math.random() * 100, thick: 0.8 });
-    for (let k = 0; k < 520; k++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (!inTemple(x, y, 40)) vines.push({ x, y, a: rand(0, TAU), len: rand(80, 200), seed: Math.random() * 100, thick: 1 }); }
+    for (let k = 0; k < 650; k++) vines.push({ x: ox + rand(0, size), y: oy + rand(0, size), a: rand(0, TAU), len: rand(60, 170), seed: Math.random() * 100, thick: 0.8 });
+    // (vines creep over traps and hatches too, so they're even harder to spot)
+    for (const t of traps) if (Math.random() < 0.55) for (let k = 0; k < 2; k++) vines.push({ x: t.x + rand(-50, 50), y: t.y + rand(-50, 50), a: rand(0, TAU), len: rand(60, 120), seed: Math.random() * 100, thick: 0.85 });
+    for (const ps of passages) for (const h of [ps.a, ps.b]) if (Math.random() < 0.6) vines.push({ x: h.x + rand(-30, 30), y: h.y + rand(-30, 30), a: rand(0, TAU), len: rand(50, 90), seed: Math.random() * 100, thick: 0.85 });
+    for (let k = 0; k < 950; k++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (!inTemple(x, y, 40)) vines.push({ x, y, a: rand(0, TAU), len: rand(80, 200), seed: Math.random() * 100, thick: 1 }); }
     // The map picture
     const [mm, g] = makeCanvas(200, 200), k2 = 200 / W;
     g.fillStyle = '#2f5a28'; g.fillRect(0, 0, 200, 200);
@@ -5217,6 +5245,7 @@ function openSecret(o) {
     const Wt = G.world.temple, [i, j, d] = o.cell;
     o.open = true; o.closeAt = G.time + 40000;
     G.world.grid.removeBox(o);
+    if (o.tunnel && !o.tunnel.shown) { o.tunnel.shown = true; Wt.passages.push(o.tunnel); if (inView(o.x, o.y, 200) && G.player && dist(G.player, o) < 300) addFloat(o.x, o.y - 30, 'A STAIRWAY DOWN!', '#7ef9ff', true); }
     if (d === 'e') Wt.east[i][j] = false; else Wt.south[i][j] = false;
     for (const f of G.fighters) f.mzKey = null;
     if (inView(o.x, o.y, 120)) { burst(o.x, o.y, 22, '#c9b48a', 200); G.particles.push({ type: 'smoke', x: o.x, y: o.y, vx: 0, vy: 0, life: 1, max: 1, size: 30, color: '190,170,130' }); }
@@ -5283,9 +5312,9 @@ function templeKeepReachable() {
         setMover(fix[0], false);
     }
 }
-const nearSecret = (f, r = 70) => G.world.temple.secrets.find(o => !o.open && !o.hiddenSecret && Math.abs(f.x - o.x) < o.hw + r && Math.abs(f.y - o.y) < o.hh + r && Math.hypot(f.x - o.x, f.y - o.y) < Math.max(o.hw, o.hh) + r);
-const nearPassage = f => { for (const p of G.world.temple.passages) { if (Math.hypot(f.x - p.a.x, f.y - p.a.y) < 46) return { p, to: p.b }; if (Math.hypot(f.x - p.b.x, f.y - p.b.y) < 46) return { p, to: p.a }; } return null; };
-const nearSwitch = f => G.world.temple.switches.find(w => Math.hypot(f.x - w.x, f.y - w.y) < 36);
+const nearSecret = (f, r = 44) => G.world.temple.secrets.find(o => !o.open && !o.hiddenSecret && Math.abs(f.x - o.x) < o.hw + r && Math.abs(f.y - o.y) < o.hh + r && Math.hypot(f.x - o.x, f.y - o.y) < Math.max(o.hw, o.hh) + r);
+const nearPassage = f => { for (const p of G.world.temple.passages) { if (Math.hypot(f.x - p.a.x, f.y - p.a.y) < 34) return { p, to: p.b }; if (Math.hypot(f.x - p.b.x, f.y - p.b.y) < 34) return { p, to: p.a }; } return null; };
+const nearSwitch = f => G.world.temple.switches.find(w => Math.hypot(f.x - w.x, f.y - w.y) < 30);
 const nearChest = f => G.world.temple.chests.find(c => c.full && Math.hypot(f.x - c.x, f.y - c.y) < 55);
 // F (or the use button): open a cracked wall, drop through a hidden tunnel, or dig up a chest
 function templeUse(f) {
@@ -5308,8 +5337,15 @@ function templeUse(f) {
         return true;
     }
     const c = nearChest(f);
+    if (!c) {
+        // searched and found nothing
+        if (f.isPlayer && templeUseLabel(f) && G.time - (f.searchAt || 0) > 700) { f.searchAt = G.time; addFloat(f.x, f.y - 34, 'Nothing here...', '#c9c3dd'); }
+        return false;
+    }
     if (c) {
         c.full = false; c.at = G.time + 60000;
+        if (c.trapped) { blast(c.x, c.y, null, 120, 50, 'Booby-trapped chest'); c.trapped = Math.random() < 0.4; return true; }
+        c.trapped = Math.random() < 0.4;
         spawnLoot(c.x + 20, c.y, pick(TEMPLE.guns)); spawnLoot(c.x - 20, c.y, pick(['medkit', 'bandage']));
         if (inView(c.x, c.y, 80)) burst(c.x, c.y, 18, '#ffd166', 220, 'glow');
         Sound.tone(700, 0.2, 'square', 0.07 * Sound.volAt(c.x, c.y), 1100);
@@ -5317,12 +5353,14 @@ function templeUse(f) {
     }
     return false;
 }
+// (the button never gives a secret away: next to any wall, on any symbol or by any mossy stone it just says SEARCH)
 function templeUseLabel(f) {
-    if (nearSecret(f)) return 'OPEN CRACKED WALL';
-    const sw = nearSwitch(f); if (sw && !sw.wall.open) return 'PRESS THE SYMBOL';
-    if (nearPassage(f)) return 'DROP INTO TUNNEL';
-    if (nearChest(f)) return 'DIG UP CHEST';
-    return '';
+    const Wt = G.world.temple;
+    if (nearSecret(f) || nearPassage(f) || nearChest(f) || nearSwitch(f)) return 'SEARCH';
+    let near = false;
+    G.world.grid.query(f.x, f.y, 60, o => { if (!near && o.temple && Math.abs(f.x - o.x) < o.hw + 40 && Math.abs(f.y - o.y) < o.hh + 40) near = true; });
+    if (!near) for (const g2 of Wt.glyphs) if (Math.abs(g2.x - f.x) < 30 && Math.abs(g2.y - f.y) < 30) { near = true; break; }
+    return near ? 'SEARCH' : '';
 }
 // The Trap Trigger: sets off every trap near where you aim
 function triggerTraps(x, y, R, by) {
@@ -5370,6 +5408,13 @@ function updateTemple(dt) {
         }
         if (t.kind === 'web' && t.burnt && now > t.burnt) t.burnt = 0;
         if (t.kind === 'leafpit' && t.open && now > t.open) t.open = 0;
+        if (t.kind === 'wire' && !t.armed && now > t.at) t.armed = true;
+        if (t.kind === 'ceiling' && t.fallAt && now >= t.fallAt) {
+            t.fallAt = 0; t.rubble = now + 9000;
+            G.fgrid.query(t.x, t.y, 100, f => { if (!f.dead && Math.hypot(f.x - t.x, f.y - t.y) < 80) { damage(f, 45, null, 'Falling rocks'); f.stunUntil = G.time + 600; } });
+            if (inView(t.x, t.y, 120)) { burst(t.x, t.y, 26, '#8f8678', 240); G.particles.push({ type: 'smoke', x: t.x, y: t.y, vx: 0, vy: 0, life: 1.2, max: 1.2, size: 50, color: '160,150,135' }); G.shake = Math.max(G.shake, 6); }
+            Sound.tone(70, 0.6, 'sawtooth', 0.12 * Sound.volAt(t.x, t.y), 40);
+        }
     }
     for (const f of G.fighters) {
         if (f.dead) continue;
@@ -5414,6 +5459,15 @@ function updateTemple(dt) {
                     break;
                 case 'sand': { const d = Math.hypot(dx, dy); if (d < t.r) { slow = Math.min(slow, 0.35); if (d < t.r * 0.5 && now - (f.sandAt || 0) > 1000) { f.sandAt = now; damage(f, 6, null, 'Quicksand'); } } break; }
                 case 'leafpit': if (!t.open && Math.hypot(dx, dy) < t.r) { t.open = now + 20000; templeFall(f, t.x, t.y, t.r + f.r + 8); } break;
+                case 'wire': {
+                    if (!t.armed) break;
+                    const lx = t.x2 - t.x1, ly = t.y2 - t.y1, L2 = lx * lx + ly * ly, u = clamp(((f.x - t.x1) * lx + (f.y - t.y1) * ly) / L2, 0, 1);
+                    if (Math.hypot(f.x - (t.x1 + lx * u), f.y - (t.y1 + ly * u)) < f.r * 0.7) { t.armed = false; t.at = now + 25000; blast(t.x, t.y, null, 120, 55, 'Tripwire'); }
+                    break;
+                }
+                case 'flame': if (Math.hypot(dx, dy) < 34 && now > t.ready) { t.ready = now + 9000; t.active = now + 1600; Sound.tone(120, 0.8, 'sawtooth', 0.09 * Sound.volAt(t.x, t.y), 300); } break;
+                case 'gas': if (Math.hypot(dx, dy) < 26 && now > t.ready) { t.ready = now + 16000; t.cloud = now + 6000; Sound.tone(300, 0.6, 'sine', 0.05 * Sound.volAt(t.x, t.y), 120); } break;
+                case 'ceiling': if (Math.hypot(dx, dy) < 55 && now > t.ready) { t.ready = now + 22000; t.fallAt = now + 750; Sound.tone(50, 0.7, 'sawtooth', 0.08 * Sound.volAt(t.x, t.y), 35); } break;
                 case 'snake':
                     if (Math.hypot(dx, dy) < 80 && now - t.bite > 1100) { t.bite = now; damage(f, 10, null, 'Snake'); f.poisonUntil = now + 3000; f.poisonBy = null; Sound.tone(1800, 0.15, 'sawtooth', 0.04 * Sound.volAt(t.x, t.y), 2400); }
                     break;
@@ -5421,6 +5475,20 @@ function updateTemple(dt) {
         }
         if (I.carrier === f) slow *= TEMPLE.carrySlow;
         f.slowK = slow;
+    }
+    for (const t of Wt.traps) {
+        if (t.kind === 'flame' && now < t.active) {
+            G.fgrid.query(t.ex + t.dx * 110, t.ey + t.dy * 110, 160, f => {
+                if (f.dead) return;
+                const along = (f.x - t.ex) * t.dx + (f.y - t.ey) * t.dy, side = Math.abs((f.x - t.ex) * -t.dy + (f.y - t.ey) * t.dx);
+                if (along > 0 && along < TEMPLE.cs && side < 40 && now - (f.flameAt || 0) > 400) { f.flameAt = now; damage(f, 10, null, 'Flame jet'); f.burnUntil = now + 2500; f.burnBy = null; }
+            });
+            if (inView(t.ex, t.ey, 220) && Math.random() < 0.9) for (let k = 0; k < 3; k++) { const d = rand(0, TEMPLE.cs); G.particles.push({ type: 'glow', x: t.ex + t.dx * d + rand(-14, 14), y: t.ey + t.dy * d + rand(-14, 14), vx: t.dx * 200, vy: t.dy * 200, life: 0.3, max: 0.3, size: rand(8, 14), color: k ? '#ff8a3d' : '#ffd166' }); }
+        }
+        if (t.kind === 'gas' && now < t.cloud) {
+            G.fgrid.query(t.x, t.y, 130, f => { if (!f.dead && Math.hypot(f.x - t.x, f.y - t.y) < 120) { f.poisonUntil = now + 2500; f.poisonBy = null; } });
+            if (inView(t.x, t.y, 160) && Math.random() < 0.5) G.particles.push({ type: 'smoke', x: t.x + rand(-80, 80), y: t.y + rand(-80, 80), vx: rand(-20, 20), vy: rand(-20, 20), life: 1.4, max: 1.4, size: rand(26, 44), color: '120,190,70' });
+        }
     }
     // Rolling boulders
     for (const b of T2.boulders) {
@@ -5471,7 +5539,7 @@ function templeFall(f, x, y, R) {
     const a = Math.atan2(f.y - y, f.x - x) || rand(0, TAU);
     f.x = x + Math.cos(a) * R; f.y = y + Math.sin(a) * R; f.vx = f.vy = 0;
     f.stunUntil = G.time + 700;
-    damage(f, 40, null, 'Pit');
+    damage(f, 28, null, 'Pit');
     if (f.isPlayer) { G.shake = Math.max(G.shake, 6); G.flash = 0.25; G.flashColor = '20,14,8'; }
     if (inView(x, y, 100)) burst(x, y, 14, '#5a4a32', 180, 'smoke');
 }
@@ -5607,7 +5675,7 @@ function drawTempleGround(L, T, R, B) {
     for (const g2 of Wt.glyphs) if (g2.x > L - 30 && g2.x < R + 30 && g2.y > T - 30 && g2.y < B + 30) drawGlyph(g2.x, g2.y, g2.glyph, g2.rot, g2.s, 'rgba(58,44,26,0.45)');
     // switches look like every other symbol, until you're standing right by one
     const pl = G.player;
-    for (const w of Wt.switches) if (inView(w.x, w.y, 40)) { const close = pl && Math.hypot(pl.x - w.x, pl.y - w.y) < 60 && !w.wall.open; drawGlyph(w.x, w.y, w.glyph, w.rot, 18, close ? `rgba(255,209,102,${0.6 + Math.sin(now * 6) * 0.3})` : 'rgba(58,44,26,0.5)'); }
+    for (const w of Wt.switches) if (inView(w.x, w.y, 40)) { const close = pl && Math.hypot(pl.x - w.x, pl.y - w.y) < 30 && !w.wall.open; drawGlyph(w.x, w.y, w.glyph, w.rot, 18, close ? `rgba(255,209,102,${0.6 + Math.sin(now * 6) * 0.3})` : 'rgba(58,44,26,0.5)'); }
     for (const v of Wt.vines) if (v.x > ox && v.x < ox + size && v.y > oy && v.y < oy + size && v.x > L - 200 && v.x < R + 200 && v.y > T - 200 && v.y < B + 200 && v.thick < 0.9) drawVine(v);
     // camps
     for (const t of [0, 1]) {
@@ -5619,34 +5687,52 @@ function drawTempleGround(L, T, R, B) {
         ctx.fillStyle = t ? TEMPLE.red : TEMPLE.blue; ctx.beginPath(); ctx.moveTo(c.x + 3, c.y - 60); ctx.lineTo(c.x + 40, c.y - 48); ctx.lineTo(c.x + 3, c.y - 36); ctx.closePath(); ctx.fill();
         ctx.font = '800 22px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = `rgba(${col},0.8)`; ctx.fillText(t ? 'RED CAMP' : 'BLUE CAMP', c.x, c.y + 40);
     }
-    const nowMs = G.time;
+    const nowMs = G.time, me = G.player;
+    // how well you can make a hidden thing out: nothing from afar, faintly as you get close
+    const seeK = (x, y, R) => me && !me.dead ? clamp(1 - Math.hypot(me.x - x, me.y - y) / R, 0, 1) : 0;
     for (const t of Wt.traps) {
         if (!inView(t.x, t.y, 200)) continue;
         switch (t.kind) {
             case 'spikes': {
-                const cyc = (nowMs + t.ph) % 3200, up = nowMs < t.forced || cyc > 2000, soon = cyc > 1600 && !up;
-                ctx.fillStyle = '#5a5248'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2);
-                ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 3; ctx.strokeRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2);
+                const cyc = (nowMs + t.ph) % 3200, up = nowMs < t.forced || cyc > 2000, k = seeK(t.x, t.y, 150);
                 for (let a = -t.s + 14; a < t.s; a += 28) for (let b2 = -t.s + 14; b2 < t.s; b2 += 28) {
                     if (up) { ctx.fillStyle = '#d8dde4'; ctx.beginPath(); ctx.moveTo(t.x + a, t.y + b2 - 9); ctx.lineTo(t.x + a + 6, t.y + b2 + 5); ctx.lineTo(t.x + a - 6, t.y + b2 + 5); ctx.closePath(); ctx.fill(); }
-                    else { ctx.fillStyle = soon && Math.sin(nowMs / 60) > 0 ? '#8a7a6a' : '#2a2520'; ctx.beginPath(); ctx.arc(t.x + a, t.y + b2, 3.5, 0, TAU); ctx.fill(); }
+                    else if (k > 0) { ctx.fillStyle = `rgba(40,34,26,${0.5 * k})`; ctx.beginPath(); ctx.arc(t.x + a, t.y + b2, 2.5, 0, TAU); ctx.fill(); }
                 }
                 break;
             }
             case 'pit':
                 if (t.state === 'open') { ctx.fillStyle = '#0d0a07'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2); ctx.fillStyle = 'rgba(60,45,25,0.8)'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, 8); }
                 else {
-                    ctx.strokeStyle = t.state === 'cracking' ? 'rgba(30,20,10,0.9)' : 'rgba(60,48,30,0.35)'; ctx.lineWidth = t.state === 'cracking' ? 3 : 1.5;
+                    const k = t.state === 'cracking' ? 1 : seeK(t.x, t.y, 110) * 0.35;
+                    if (k <= 0) break;
+                    ctx.strokeStyle = `rgba(30,20,10,${k * 0.9})`; ctx.lineWidth = t.state === 'cracking' ? 3 : 1.3;
                     ctx.beginPath(); ctx.moveTo(t.x - t.s * 0.7, t.y - t.s * 0.2); ctx.lineTo(t.x - 6, t.y + 4); ctx.lineTo(t.x + t.s * 0.6, t.y - t.s * 0.5); ctx.moveTo(t.x - 6, t.y + 4); ctx.lineTo(t.x + 10, t.y + t.s * 0.6); ctx.moveTo(t.x - 6, t.y + 4); ctx.lineTo(t.x - t.s * 0.4, t.y + t.s * 0.7); ctx.stroke();
                 }
                 break;
-            case 'darts':
-                ctx.fillStyle = 'rgba(70,58,40,0.45)'; ctx.fillRect(t.x - 30, t.y - 30, 60, 60);
-                ctx.fillStyle = '#2a2520'; for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.arc(t.ex + -t.dy * k * 26, t.ey + t.dx * k * 26, 4, 0, TAU); ctx.fill(); }
+            case 'darts': {
+                // (just tiny holes in the wall, if you look closely)
+                const k = seeK(t.ex, t.ey, 130);
+                if (k > 0) { ctx.fillStyle = `rgba(30,24,16,${0.7 * k})`; for (let q = -2; q <= 2; q++) { ctx.beginPath(); ctx.arc(t.ex + -t.dy * q * 26, t.ey + t.dx * q * 26, 3, 0, TAU); ctx.fill(); } }
                 break;
-            case 'boulder':
-                ctx.fillStyle = 'rgba(70,58,40,0.45)'; ctx.fillRect(t.x - 28, t.y - 28, 56, 56);
-                ctx.strokeStyle = 'rgba(40,30,20,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(t.x - 22, t.y - 22, 44, 44);
+            }
+            case 'boulder': break;
+            case 'wire': {
+                const k = t.armed ? seeK(t.x, t.y, 95) * 0.6 : 0;
+                if (k > 0) { ctx.strokeStyle = `rgba(220,215,200,${k})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(t.x1, t.y1); ctx.lineTo(t.x2, t.y2); ctx.stroke(); }
+                break;
+            }
+            case 'flame': {
+                const k = seeK(t.ex, t.ey, 110);
+                if (k > 0) { ctx.fillStyle = `rgba(20,14,8,${0.6 * k})`; ctx.beginPath(); ctx.arc(t.ex, t.ey, 7, 0, TAU); ctx.fill(); }
+                break;
+            }
+            case 'gas':
+                if (nowMs < t.cloud) { const a = clamp((t.cloud - nowMs) / 1500, 0, 1); ctx.fillStyle = `rgba(110,180,60,${0.28 * a})`; ctx.beginPath(); ctx.arc(t.x, t.y, 120, 0, TAU); ctx.fill(); }
+                break;
+            case 'ceiling':
+                if (t.fallAt) { const k = 1 - (t.fallAt - nowMs) / 750; ctx.fillStyle = `rgba(0,0,0,${0.15 + k * 0.35})`; ctx.beginPath(); ctx.arc(t.x, t.y, 40 + k * 40, 0, TAU); ctx.fill(); }
+                else if (nowMs < t.rubble) { ctx.fillStyle = 'rgba(120,110,95,0.8)'; for (let q = 0; q < 9; q++) { const a = q * 2.1, d = (q % 3) * 22; ctx.beginPath(); ctx.arc(t.x + Math.cos(a) * d, t.y + Math.sin(a) * d, 9 - (q % 3) * 2, 0, TAU); ctx.fill(); } }
                 break;
             case 'web': {
                 if (t.burnt) { ctx.fillStyle = 'rgba(30,20,10,0.35)'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r * 0.8, 0, TAU); ctx.fill(); break; }
@@ -5658,7 +5744,7 @@ function drawTempleGround(L, T, R, B) {
             }
             case 'sand': {
                 const gr = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, t.r);
-                gr.addColorStop(0, '#9a7a4a'); gr.addColorStop(0.7, '#b8955c'); gr.addColorStop(1, 'rgba(184,149,92,0)');
+                gr.addColorStop(0, 'rgba(120,96,58,0.55)'); gr.addColorStop(0.7, 'rgba(110,100,60,0.3)'); gr.addColorStop(1, 'rgba(110,100,60,0)');
                 ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU); ctx.fill();
                 ctx.strokeStyle = 'rgba(110,85,50,0.5)'; ctx.lineWidth = 2;
                 for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.arc(t.x, t.y, t.r * k / 4, now * k * 0.6, now * k * 0.6 + 4); ctx.stroke(); }
@@ -5666,12 +5752,17 @@ function drawTempleGround(L, T, R, B) {
             }
             case 'leafpit':
                 if (t.open) { ctx.fillStyle = '#0d0a07'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU); ctx.fill(); }
-                else { for (let k = 0; k < 9; k++) { const a = k * 2.4, d = (k % 3) * 12; ctx.fillStyle = k % 2 ? '#4f7a32' : '#6a8a3a'; ctx.beginPath(); ctx.ellipse(t.x + Math.cos(a) * d, t.y + Math.sin(a) * d, 16, 8, a, 0, TAU); ctx.fill(); } }
+                else { for (let k = 0; k < 9; k++) { const a = k * 2.4, d = (k % 3) * 12; ctx.fillStyle = k % 2 ? 'rgba(70,110,45,0.45)' : 'rgba(90,120,50,0.4)'; ctx.beginPath(); ctx.ellipse(t.x + Math.cos(a) * d, t.y + Math.sin(a) * d, 16, 8, a, 0, TAU); ctx.fill(); } }
                 break;
             case 'snake': {
-                ctx.strokeStyle = '#3f6a2a'; ctx.lineWidth = 7;
+                // (curled up in the undergrowth: you only see it close up)
+                const k = seeK(t.x, t.y, 170);
+                if (k <= 0) break;
+                ctx.globalAlpha = Math.min(1, k * 1.5);
+                ctx.strokeStyle = '#2f5420'; ctx.lineWidth = 6;
                 ctx.beginPath(); for (let k = 0; k < 14; k++) { const a = k * 0.55, r = 4 + k * 1.6; ctx.lineTo(t.x + Math.cos(a) * r, t.y + Math.sin(a) * r); } ctx.stroke();
-                ctx.fillStyle = '#2f5a1f'; ctx.beginPath(); ctx.arc(t.x + Math.cos(now * 2) * 4, t.y + Math.sin(now * 2) * 4, 6, 0, TAU); ctx.fill();
+                ctx.fillStyle = '#244a18'; ctx.beginPath(); ctx.arc(t.x + Math.cos(now * 2) * 4, t.y + Math.sin(now * 2) * 4, 6, 0, TAU); ctx.fill();
+                ctx.globalAlpha = 1;
                 break;
             }
         }
@@ -5679,7 +5770,7 @@ function drawTempleGround(L, T, R, B) {
     // Hidden tunnels: inside the temple just another carved symbol; out in the jungle a mossy flat stone
     for (const ps of Wt.passages) for (const h of [ps.a, ps.b]) {
         if (!inView(h.x, h.y, 60)) continue;
-        const close = pl && Math.hypot(pl.x - h.x, pl.y - h.y) < 60;
+        const close = pl && Math.hypot(pl.x - h.x, pl.y - h.y) < 34;
         const inT = h.x > ox && h.x < ox + size && h.y > oy && h.y < oy + size;
         if (!inT) { ctx.fillStyle = '#6f6a58'; ctx.beginPath(); ctx.ellipse(h.x, h.y, 30, 24, 0.3, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(70,110,50,0.7)'; ctx.beginPath(); ctx.ellipse(h.x - 8, h.y - 4, 16, 10, 0.5, 0, TAU); ctx.fill(); }
         drawGlyph(h.x, h.y, h.glyph || 0, h.rot || 0, 16, close ? `rgba(126,249,255,${0.5 + Math.sin(now * 5) * 0.3})` : inT ? 'rgba(58,44,26,0.5)' : 'rgba(50,46,36,0.5)');
@@ -5687,7 +5778,7 @@ function drawTempleGround(L, T, R, B) {
     // Buried chests: a faint X in the dirt
     for (const c of Wt.chests) {
         if (!c.full || !inView(c.x, c.y, 60)) continue;
-        ctx.strokeStyle = 'rgba(120,70,30,0.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(c.x - 16, c.y - 16); ctx.lineTo(c.x + 16, c.y + 16); ctx.moveTo(c.x + 16, c.y - 16); ctx.lineTo(c.x - 16, c.y + 16); ctx.stroke();
+        ctx.strokeStyle = `rgba(110,70,30,${0.12 + seeK(c.x, c.y, 200) * 0.4})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(c.x - 16, c.y - 16); ctx.lineTo(c.x + 16, c.y + 16); ctx.moveTo(c.x + 16, c.y - 16); ctx.lineTo(c.x - 16, c.y + 16); ctx.stroke();
     }
     // The altar
     const a = Wt.altar;
@@ -5698,7 +5789,7 @@ function drawTempleProps(now) {
     const Wt = G.world.temple, T2 = G.temple, p = G.player;
     for (const o of Wt.secrets) {
         if (o.open || o.hiddenSecret || !inView(o.x, o.y, 160)) continue;
-        const dd = p ? Math.hypot(p.x - o.x, p.y - o.y) - Math.max(o.hw, o.hh) : 1e9, see = o.vines ? 40 : 110;
+        const dd = p ? Math.hypot(p.x - o.x, p.y - o.y) - Math.max(o.hw, o.hh) : 1e9, see = o.vines ? 22 : 55;
         if (dd > see) continue;
         const near = dd < see * 0.5;
         ctx.strokeStyle = `rgba(40,28,14,${near ? 0.8 : 0.4})`; ctx.lineWidth = near ? 2.2 : 1.4;
