@@ -5748,7 +5748,7 @@ function drawWake(o, now) {
 function drawNavyWakes(L, T, R, B, now) {
     const inBox = o => { const t = o.trail; if (!t || !t.length) return false; const q = t[t.length - 1], m = 900; return q.x > L - m && q.x < R + m && q.y > T - m && q.y < B + m; };
     for (const s of G.navy.ships) if (inBox(s)) drawWake(s, now);
-    for (const c of G.world.cars) if (c.trail && inBox(c)) drawWake(c, now);
+    for (const c of G.world.cars) if (c.trail && inBox(c) && !(G.player && subHidden(c, G.player.team, G.player.x, G.player.y))) drawWake(c, now);
     for (const b of G.bullets) if (b.trail && inBox(b)) drawWake(b, now);
     // Bow waves: white water curling off the front of anything under way
     for (const s of G.navy.ships) {
@@ -6021,17 +6021,18 @@ function navyGunBot(b, g, dt) {
         g.tgt = null;
         if (g.kind === 'mg') {
             let bd = D.range * AIK().sight;
-            G.fgrid.query(wx, wy, bd, f => { if (f.dead || f.riding || !foe(b, f) || (f.ship === s && !f.car)) return; const d = Math.hypot(f.x - wx, f.y - wy); if (d < bd) { bd = d; g.tgt = f; } });
+            G.fgrid.query(wx, wy, bd, f => { if (f.dead || f.riding || !foe(b, f) || (f.ship === s && !f.car) || subHidden(f.car, b.team)) return; const d = Math.hypot(f.x - wx, f.y - wy); if (d < bd) { bd = d; g.tgt = f; } });
         } else {
             let bd = D.range;
             for (const q of G.navy.ships) if (navyHostile(q, b.team)) { const d = Math.hypot(q.x - wx, q.y - wy); if (d < bd) { bd = d; g.tgt = q; } }
             // (a torpedo launcher would rather hunt an enemy submarine close by)
-            if (g.kind === 'torp') for (const c of G.world.cars) if (!c.dead && vt(c).torp && !c.onShip && c.driver && foe(b, c.driver)) { const d = Math.hypot(c.x - wx, c.y - wy) * 0.6; if (d < bd) { bd = d; g.tgt = c; } }
+            if (g.kind === 'torp') for (const c of G.world.cars) if (!c.dead && vt(c).torp && !c.onShip && c.driver && foe(b, c.driver) && !subHidden(c, b.team)) { const d = Math.hypot(c.x - wx, c.y - wy) * 0.6; if (d < bd) { bd = d; g.tgt = c; } }
             g.sc = rand(-1, 1); g.sd = rand(-1, 1);
         }
     }
     const t = g.tgt;
-    if (!t || t.dead || t.sinkAt) { g.rel += clamp(angleDiff(g.rel, g.lx < 0 && g.kind === 'main' ? Math.PI : 0), -D.turn * dt, D.turn * dt); return; }
+    if (t && !t.C && t.type && subHidden(t, b.team)) g.tgt = null;
+    if (!g.tgt || t.dead || t.sinkAt) { g.rel += clamp(angleDiff(g.rel, g.lx < 0 && g.kind === 'main' ? Math.PI : 0), -D.turn * dt, D.turn * dt); return; }
     let tx = t.x, ty = t.y;
     const d0 = Math.hypot(tx - wx, ty - wy);
     if (t.ship !== undefined && !t.C) {
@@ -6238,7 +6239,7 @@ function navyThink(b) {
     b.nextThink = G.time + rand(420, 780) * AIK().think;
     let enemy = null, bd = 1050 * AIK().sight;
     G.fgrid.query(b.x, b.y, bd, f => {
-        if (f.dead || f === b || f.riding || !foe(b, f) || !navySees(b, f)) return;
+        if (f.dead || f === b || f.riding || !foe(b, f) || !navySees(b, f) || subHidden(f.car, b.team, b.x, b.y)) return;
         // (a look at the person who's a real threat: anyone aboard this ship first)
         const d = Math.hypot(f.x - b.x, f.y - b.y) * (f.ship && f.ship === s ? 0.45 : 1);
         if (d < bd) { bd = d; enemy = f; }
@@ -6349,13 +6350,21 @@ function navyBot(b, dt) {
     if (face && (dx || dy)) b.angle += angleDiff(b.angle, Math.atan2(dy, dx)) * Math.min(1, dt * 8);
 }
 // A helicopter pilot circles the nearest enemy ship, spraying the deck and rocketing the hull
+// A dived submarine is hard to spot: her enemies can't see her at all, except for a few seconds after she fires
+// (the torpedo trail gives her away) or when they're right on top of her
+const SUB_HIDE = { seen: 2000, near: 260 };
+function subReveal(c) { return c.firedAt ? clamp(1 - (G.time - c.firedAt) / SUB_HIDE.seen, 0, 1) : 0; }
+function subHidden(c, team, x, y) {
+    if (!c || !c.submerged || c.onShip || !c.driver || c.driver.team === team || subReveal(c) > 0) return false;
+    return x === undefined || (c.x - x) ** 2 + (c.y - y) ** 2 > SUB_HIDE.near ** 2;
+}
 function navySubBot(c, b, dt) {
     const T = vt(c), ctl = { up: true, down: false, left: false, right: false };
     if (G.time >= (b.driveThink || 0)) {
         b.driveThink = G.time + 500;
         let tgt = null, bd = Infinity;
         for (const q of G.navy.ships) if (navyHostile(q, b.team)) { const d = Math.hypot(q.x - c.x, q.y - c.y); if (d < bd) { bd = d; tgt = q; } }
-        for (const o of G.world.cars) if (!o.dead && o !== c && vt(o).water && !o.onShip && o.driver && foe(b, o.driver)) { const d = Math.hypot(o.x - c.x, o.y - c.y) * 0.7; if (d < bd) { bd = d; tgt = o; } }
+        for (const o of G.world.cars) if (!o.dead && o !== c && vt(o).water && !o.onShip && o.driver && foe(b, o.driver) && !subHidden(o, b.team, c.x, c.y)) { const d = Math.hypot(o.x - c.x, o.y - c.y) * 0.7; if (d < bd) { bd = d; tgt = o; } }
         b.subTgt = tgt;
         // (stuck on a beach: back off and turn for a moment)
         if (Math.abs(c.speed) < 25 && G.time > (b.subUnstick || 0)) b.subStuck = (b.subStuck || 0) + 1; else b.subStuck = 0;
@@ -6363,7 +6372,7 @@ function navySubBot(c, b, dt) {
     }
     if (G.time < (b.subUnstick || 0)) { ctl.up = false; ctl.down = true; ctl.right = true; return ctl; }
     const t = b.subTgt;
-    if (!t || t.dead || t.sinkAt) { ctl.up = false; return ctl; }
+    if (!t || t.dead || t.sinkAt || (!t.C && subHidden(t, b.team, c.x, c.y))) { ctl.up = false; b.driveThink = 0; return ctl; }
     const d = Math.hypot(t.x - c.x, t.y - c.y), spd = t.C ? t.speed : t.speed || 0;
     // Close to firing range, then hold off and swing round it
     const goA = d > 1700 ? Math.atan2(t.y - c.y, t.x - c.x) : Math.atan2(t.y - c.y, t.x - c.x) + Math.PI / 2, diff = angleDiff(c.a, goA);
@@ -6384,7 +6393,7 @@ function navyPilot(c, b, dt) {
         for (const q of G.navy.ships) if (navyHostile(q, b.team)) { const d = Math.hypot(q.x - c.x, q.y - c.y); if (d < fd) { fd = d; foeS = q; } }
         b.heliShip = foeS;
         let enemy = null, bd = 800;
-        G.fgrid.query(c.x, c.y, bd, f => { if (f.dead || f === b || f.riding || !foe(b, f)) return; const d = Math.hypot(f.x - c.x, f.y - c.y); if (d < bd) { bd = d; enemy = f; } });
+        G.fgrid.query(c.x, c.y, bd, f => { if (f.dead || f === b || f.riding || !foe(b, f) || subHidden(f.car, b.team)) return; const d = Math.hypot(f.x - c.x, f.y - c.y); if (d < bd) { bd = d; enemy = f; } });
         b.driveEnemy = enemy;
         if (b.orbitA === undefined) b.orbitA = rand(0, TAU);
     }
@@ -13273,7 +13282,13 @@ function drawCars(only) {
         ctx.save();
         ctx.translate(c.x, c.y);
         ctx.rotate(c.a);
-        if (c.submerged) ctx.globalAlpha = 0.4;
+        if (c.submerged) {
+            // (an enemy sub under the water: invisible, except just after she fires, fading back out)
+            let al = 0.4;
+            if (G.player && c.driver && c.driver.team !== G.player.team && !c.onShip) al = 0.4 * Math.max(subReveal(c), (c.x - G.player.x) ** 2 + (c.y - G.player.y) ** 2 < SUB_HIDE.near ** 2 ? 0.6 : 0);
+            if (al < 0.02) { ctx.restore(); continue; }
+            ctx.globalAlpha = al;
+        }
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         if (T.animal) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(5, 7, L * 0.48, Wd * 0.55, 0, 0, TAU); ctx.fill(); }  // a soft shadow, not a car's box
         else if (!T.round) ctx.fillRect(-L / 2 + 5, -Wd / 2 + 7, L, Wd);
@@ -13588,6 +13603,7 @@ function navySeekSub(b, dt) {
         for (const c of G.world.cars) {
             if (c.dead || c.onShip || !vt(c).torp || !c.driver || !foe(b.owner, c.driver)) continue;
             const d = Math.hypot(c.x - b.x, c.y - b.y);
+            if (d > 700 && subHidden(c, b.owner.team)) continue;
             if (d < bd && Math.abs(angleDiff(a, Math.atan2(c.y - b.y, c.x - b.x))) < 1.3) { bd = d; b.seek = c; }
         }
     }
@@ -17071,7 +17087,7 @@ const BRIEF = {
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
-BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
+BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
 const BRIEF_MAP = { sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
