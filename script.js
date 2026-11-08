@@ -7125,7 +7125,7 @@ const CHASE = {
     CHASE.airship = { x: I.x + 150, y: I.y - 350, board: 230 };
     CHASE.seaPts = CHASE.seaPts.map(([x, y]) => [x * k, y * k]);
     CHASE.seaPts[CHASE.seaPts.length - 1] = [I.x - I.r - 430, I.y + 100];
-    CHASE.fac = { x0: 1200, y0: W - 2700, x1: 3900, y1: W - 500 };
+    CHASE.fac = { x0: 1200, y0: W - 5300, x1: 7200, y1: W - 500 };
     for (const key of ['desertSquads', 'bankSquads', 'riverShips', 'seaShips']) CHASE[key] = Math.round(CHASE[key] * (key === 'seaShips' ? 2 : k * 0.8));
     CHASE.helis = 5;
 })();
@@ -7197,67 +7197,125 @@ function generateChase() {
     C.mouth = { x: river[river.length - 8].x, y: river[river.length - 8].y };
     C.landing = { x: route[route.length - 1].x, y: route[route.length - 1].y };
 
-    // --- The facility: a walled compound with two gates, a cell block, barracks, an HQ and watchtowers ---
-    const T = 30, gy = (F.y0 + F.y1) / 2, gx = F.x0 + (F.x1 - F.x0) * 0.68, wallCol = '#6d7076', ox = F.x0 - 600, oy = F.y0 - 9300;
+    // --- The facility: a big walled base. A fenced prison yard with the cell block on the west side, and beyond the
+    // fence barracks, an armory, a mess hall, a garage, the HQ and watchtowers, with gates out to the east and north ---
+    const T = 34, gy = (F.y0 + F.y1) / 2, gx = F.x0 + (F.x1 - F.x0) * 0.7, wallCol = '#6d7076';
+    const at = (x, y) => [F.x0 + x, F.y0 + y];
     const wall = (x0, y0, x1, y1, col = wallCol, extra = {}) => { if (x1 - x0 > 2 && y1 - y0 > 2) addBox({ type: 'wall', x: (x0 + x1) / 2, y: (y0 + y1) / 2, hw: (x1 - x0) / 2, hh: (y1 - y0) / 2, color: col, ...extra }); };
-    wall(F.x0, F.y0, gx - 140, F.y0 + T); wall(gx + 140, F.y0, F.x1, F.y0 + T);          // north wall, with a gate
+    wall(F.x0, F.y0, gx - 160, F.y0 + T); wall(gx + 160, F.y0, F.x1, F.y0 + T);          // north wall, with a gate
     wall(F.x0, F.y1 - T, F.x1, F.y1);                                                      // south wall
     wall(F.x0, F.y0, F.x0 + T, F.y1);                                                      // west wall
-    wall(F.x1 - T, F.y0, F.x1, gy - 140); wall(F.x1 - T, gy + 140, F.x1, F.y1);           // east wall, with a gate
+    wall(F.x1 - T, F.y0, F.x1, gy - 160); wall(F.x1 - T, gy + 160, F.x1, F.y1);           // east wall, with a gate
     C.gates = [{ x: F.x1 + 60, y: gy }, { x: gx, y: F.y0 - 60 }];
-    for (const [x, y] of [[F.x0, F.y0], [F.x1, F.y0], [F.x0, F.y1], [F.x1, F.y1]]) wall(x - 45, y - 45, x + 45, y + 45, '#4f5257');
+    // the prison yard's fence, with two gaps
+    const fx = F.x0 + 1750;
+    wall(fx, F.y0, fx + 20, F.y0 + 1100, '#5a5d63'); wall(fx, F.y0 + 1400, fx + 20, F.y0 + 3500, '#5a5d63'); wall(fx, F.y0 + 3800, fx + 20, F.y1, '#5a5d63');
+    for (const [x, y] of [[F.x0, F.y0], [F.x1, F.y0], [F.x0, F.y1], [F.x1, F.y1], [(F.x0 + F.x1) / 2, F.y0], [(F.x0 + F.x1) / 2, F.y1], [F.x0, gy], [fx + 10, F.y0 + 2450]]) wall(x - 50, y - 50, x + 50, y + 50, '#4f5257');
     const building = (x0, y0, x1, y1, door, label) => {
-        const t = 22, dw = 130, cxm = (x0 + x1) / 2, cym = (y0 + y1) / 2;
+        [x0, y0] = at(x0, y0); [x1, y1] = at(x1, y1);
+        const t = 24, dw = 140, cxm = (x0 + x1) / 2, cym = (y0 + y1) / 2;
         if (door === 'n') { wall(x0, y0, cxm - dw / 2, y0 + t); wall(cxm + dw / 2, y0, x1, y0 + t); } else wall(x0, y0, x1, y0 + t);
         if (door === 's') { wall(x0, y1 - t, cxm - dw / 2, y1); wall(cxm + dw / 2, y1 - t, x1, y1); } else wall(x0, y1 - t, x1, y1);
         if (door === 'w') { wall(x0, y0, x0 + t, cym - dw / 2); wall(x0, cym + dw / 2, x0 + t, y1); } else wall(x0, y0, x0 + t, y1);
         if (door === 'e') { wall(x1 - t, y0, x1, cym - dw / 2); wall(x1 - t, cym + dw / 2, x1, y1); } else wall(x1 - t, y0, x1, y1);
         C.buildings.push({ x0, y0, x1, y1, label });
+        return { x0, y0, x1, y1 };
     };
-    building(820 + ox, 9950 + oy, 1500 + ox, 10850 + oy, 'e', 'CELL BLOCK');
-    building(1850 + ox, 9550 + oy, 2650 + ox, 10000 + oy, 's', 'BARRACKS');
-    building(2150 + ox, 10650 + oy, 3050 + ox, 11300 + oy, 'n', 'HQ');
-    building(1750 + ox, 10450 + oy, 2050 + ox, 10800 + oy, 'e', 'ARMORY');
-    // cell walls inside the block
-    for (let y = 10100; y < 10800; y += 175) wall(840 + ox, y + oy, 1180 + ox, y + 12 + oy, '#5a5d63');
-    C.start = { x: 1330 + ox, y: 10400 + oy };
-    for (const [x, y] of [[2000, 9800], [2400, 9800], [2600, 10900], [2700, 11100], [1900, 10620]]) lootSpots.push({ x: x + ox, y: y + oy, box: true });
-    for (let i = 0; i < 26; i++) {
-        const x = rand(F.x0 + 1000, F.x1 - 120), y = rand(F.y0 + 120, F.y1 - 120);
-        if (C.buildings.some(b => x > b.x0 - 50 && x < b.x1 + 50 && y > b.y0 - 50 && y < b.y1 + 50) || !clearAt(x, y, 40)) continue;
-        if (Math.random() < 0.5) addBox({ type: 'crate', barrel: true, x, y, hw: 14, hh: 14, color: pick(['#5a5f3a', '#3b4a5a', '#7a3b22']) });
-        else { const horiz = Math.random() < 0.5; addBox({ type: 'wall', sandbags: true, x, y, hw: horiz ? 50 : 13, hh: horiz ? 13 : 50, color: '#8d7d5a' }); }
+    const cb = building(300, 1600, 1450, 3300, 'e', 'CELL BLOCK');
+    for (let y = cb.y0 + 160; y < cb.y1 - 100; y += 180) { wall(cb.x0 + 20, y, cb.x0 + 420, y + 12, '#5a5d63'); wall(cb.x0 + 20, y, cb.x0 + 32, y + 120, '#5a5d63'); }
+    building(2100, 300, 3500, 1000, 's', 'BARRACKS');
+    building(3900, 300, 5300, 1000, 's', 'BARRACKS');
+    const ar = building(2200, 1700, 2950, 2500, 'e', 'ARMORY');
+    const gr = building(3500, 1500, 4900, 2600, 'w', 'GARAGE');
+    building(2100, 3300, 3300, 4200, 'n', 'MESS HALL');
+    const hq = building(3800, 3200, 5500, 4300, 'n', 'HQ');
+    wall(hq.x0 + 600, hq.y0 + 24, hq.x0 + 624, hq.y1 - 300, wallCol); wall(hq.x0 + 1100, hq.y0 + 300, hq.x0 + 1124, hq.y1 - 24, wallCol);
+    // trucks parked in the garage, and racks of supplies
+    for (let k = 0; k < 4; k++) addBox({ type: 'crate', car: true, rust: true, x: gr.x0 + 300 + k * 280, y: (gr.y0 + gr.y1) / 2 + (k % 2 ? 160 : -160), hw: 19, hh: 40, color: pick(['#4b5535', '#5a5f3a', '#3d4430']), horiz: false, seed: randInt(1, 1e9) });
+    C.start = { x: cb.x1 - 160, y: (cb.y0 + cb.y1) / 2 };
+    for (let k = 0; k < 4; k++) lootSpots.push({ x: ar.x0 + 150 + (k % 2) * 400, y: ar.y0 + 200 + Math.floor(k / 2) * 380, box: true });
+    for (const [x, y] of [[2500, 600], [3100, 650], [4300, 600], [4900, 650], [4200, 3800], [5100, 3900], [2600, 3800]]) { const [px, py] = at(x, y); lootSpots.push({ x: px, y: py, box: true }); }
+    for (let i = 0; i < 90; i++) {
+        const x = rand(fx + 150, F.x1 - 150), y = rand(F.y0 + 150, F.y1 - 150);
+        if (C.buildings.some(b => x > b.x0 - 60 && x < b.x1 + 60 && y > b.y0 - 60 && y < b.y1 + 60) || !clearAt(x, y, 50)) continue;
+        const r = Math.random();
+        if (r < 0.4) addBox({ type: 'crate', barrel: true, x, y, hw: 14, hh: 14, color: pick(['#5a5f3a', '#3b4a5a', '#7a3b22']) });
+        else if (r < 0.75) { const horiz = Math.random() < 0.5; addBox({ type: 'wall', sandbags: true, x, y, hw: horiz ? 50 : 13, hh: horiz ? 13 : 50, color: '#8d7d5a' }); }
+        else addBox({ type: 'crate', x, y, hw: 20, hh: 20 });
     }
 
-    // --- The desert: broken, abandoned buildings everywhere (cover from the searching helicopters) ---
+    // --- The desert: not the same everywhere. Ruined towns, the odd huge broken building, lone ruins, and fields of
+    // boulders (all of it cover from the searching helicopters) ---
     const inFac = (x, y, m) => x > F.x0 - m && x < F.x1 + m && y > F.y0 - m && y < F.y1 + m;
-    for (let i = 0, tries = 0; i < 230 && tries < 8000; tries++) {
-        const w = rand(220, 460), h = rand(200, 420), x = rand(500 + w / 2, W - 500 - w / 2), y = rand(chaseMount(0) + 550, W - 400 - h / 2);
-        if (y - h / 2 < chaseMount(x) + 250 || inFac(x, y, 450) || Math.hypot(x - dock.x, y - dock.y) < 900 || nearRiver(x, y, 900) || Math.hypot(x - C.start.x, y - C.start.y) < 2200) continue;
-        if (C.ruins.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + 260 && Math.abs(r.y - y) < (r.h + h) / 2 + 260)) continue;
-        const col = pick(['#9b8f7e', '#8a7f70', '#a39580', '#857868']), t = 18, x0 = x - w / 2, y0 = y - h / 2;
+    const desertOk = (x, y, m) => y - m > chaseMount(x) + 250 && y + m < W - 300 && x - m > 300 && x + m < W - 300 && !inFac(x, y, 500 + m) && Math.hypot(x - dock.x, y - dock.y) > 900 + m && !nearRiver(x, y, 900 + m) && Math.hypot(x - C.start.x, y - C.start.y) > 2500;
+    const ruin = (x, y, w, h, big) => {
+        if (!desertOk(x, y, Math.max(w, h) / 2)) return false;
+        if (C.ruins.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + 160 && Math.abs(r.y - y) < (r.h + h) / 2 + 160)) return false;
+        const col = pick(['#9b8f7e', '#8a7f70', '#a39580', '#857868', '#9a8a72']), t = big ? 24 : 18, x0 = x - w / 2, y0 = y - h / 2;
         C.ruins.push({ x, y, w, h, col });
-        const side = (ax, ay, bx, by) => {
+        const side = (ax, ay, bx, by, keep) => {
             const len = Math.hypot(bx - ax, by - ay), n = Math.max(2, Math.round(len / 90));
             for (let k = 0; k < n; k++) {
-                if (Math.random() > 0.55) continue;
+                if (Math.random() > keep) continue;
                 const a = k / n, b = (k + rand(0.55, 1)) / n, horiz = ay === by;
                 const sx = ax + (bx - ax) * a, sy = ay + (by - ay) * a, ex = ax + (bx - ax) * b, ey = ay + (by - ay) * b;
                 const o = { type: 'wall', ruinWall: true, color: col, x: (sx + ex) / 2, y: (sy + ey) / 2, hw: horiz ? Math.abs(ex - sx) / 2 : t / 2, hh: horiz ? t / 2 : Math.abs(ey - sy) / 2, seed: randInt(1, 1e9) };
                 if (o.hw > 4 && o.hh > 4) addBox(o);
             }
         };
-        side(x0, y0, x0 + w, y0); side(x0, y0 + h, x0 + w, y0 + h); side(x0, y0, x0, y0 + h); side(x0 + w, y0, x0 + w, y0 + h);
-        // an inside wall half standing, and rubble everywhere
-        if (Math.random() < 0.6) side(x0 + w * 0.5, y0, x0 + w * 0.5, y0 + h);
-        for (let k = randInt(3, 6); k > 0; k--) { const q = makeWreck(x + rand(-w / 2 + 40, w / 2 - 40), y + rand(-h / 2 + 40, h / 2 - 40)); if (clearAt(q.x, q.y, Math.max(q.hw, q.hh) + 10)) addBox(q); }
-        for (let k = randInt(0, 2); k > 0; k--) { const q = makeWreck(x + rand(-w, w), y + rand(-h, h)); if (clearAt(q.x, q.y, Math.max(q.hw, q.hh) + 10)) addBox(q); }
-        if (Math.random() < 0.75) lootSpots.push({ x: x + rand(-w / 4, w / 4), y: y + rand(-h / 4, h / 4), box: true });
+        const keep = big ? 0.68 : 0.55;
+        side(x0, y0, x0 + w, y0, keep); side(x0, y0 + h, x0 + w, y0 + h, keep); side(x0, y0, x0, y0 + h, keep); side(x0 + w, y0, x0 + w, y0 + h, keep);
+        if (big) {
+            // what's left of the rooms inside
+            for (let rx = x0 + rand(250, 340); rx < x0 + w - 150; rx += rand(250, 360)) side(rx, y0, rx, y0 + h, 0.4);
+            for (let ry = y0 + rand(250, 340); ry < y0 + h - 150; ry += rand(250, 360)) side(x0, ry, x0 + w, ry, 0.4);
+        } else if (Math.random() < 0.6) side(x0 + w * 0.5, y0, x0 + w * 0.5, y0 + h, keep);
+        const n = big ? randInt(10, 18) : randInt(3, 6);
+        for (let k = n; k > 0; k--) { const q = makeWreck(x + rand(-w / 2 + 40, w / 2 - 40), y + rand(-h / 2 + 40, h / 2 - 40)); if (clearAt(q.x, q.y, Math.max(q.hw, q.hh) + 10)) addBox(q); }
+        for (let k = randInt(0, big ? 5 : 2); k > 0; k--) { const q = makeWreck(x + rand(-w, w), y + rand(-h, h)); if (clearAt(q.x, q.y, Math.max(q.hw, q.hh) + 10)) addBox(q); }
+        for (let k = big ? randInt(2, 4) : Math.random() < 0.75 ? 1 : 0; k > 0; k--) lootSpots.push({ x: x + rand(-w / 3, w / 3), y: y + rand(-h / 3, h / 3), box: true });
+        return true;
+    };
+    const boulders = (cx, cy, R) => {
+        for (let k = Math.round(R / 14); k > 0; k--) {
+            const a = rand(0, TAU), d = Math.sqrt(Math.random()) * R, x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d, r = Math.random() < 0.2 ? rand(90, 160) : rand(28, 80);
+            if (!desertOk(x, y, r) || !clearAt(x, y, r + 25)) continue;
+            addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU) });
+        }
+        C.rockFields.push({ x: cx, y: cy, r: R });
+    };
+    C.rockFields = [];
+    const spot = () => ({ x: rand(800, W - 800), y: rand(chaseMount(0) + 800, W - 800) });
+    // ruined towns: a cluster of buildings, big and small, round what was once a crossroads
+    for (let i = 0, tries = 0; i < 16 && tries < 400; tries++) {
+        const c = spot();
+        if (!desertOk(c.x, c.y, 1200) || C.ruins.some(r => Math.hypot(r.x - c.x, r.y - c.y) < 2400)) continue;
+        for (let k = randInt(7, 13), t2 = 0; k > 0 && t2 < 80; t2++) {
+            const big = Math.random() < 0.15, w = big ? rand(600, 900) : rand(220, 480), h = big ? rand(500, 800) : rand(200, 440);
+            if (ruin(c.x + rand(-1300, 1300), c.y + rand(-1100, 1100), w, h, big)) k--;
+        }
         i++;
+    }
+    // huge broken buildings standing on their own
+    for (let i = 0, tries = 0; i < 14 && tries < 400; tries++) {
+        const c = spot();
+        if (ruin(c.x, c.y, rand(900, 1500), rand(800, 1300), true)) i++;
+    }
+    // boulder fields
+    for (let i = 0, tries = 0; i < 18 && tries < 300; tries++) {
+        const c = spot(), R = rand(600, 1300);
+        if (!desertOk(c.x, c.y, R * 0.5) || C.ruins.some(r => Math.hypot(r.x - c.x, r.y - c.y) < R + 400) || C.rockFields.some(q => Math.hypot(q.x - c.x, q.y - c.y) < q.r + R + 800)) continue;
+        boulders(c.x, c.y, R); i++;
+    }
+    // lone ruins scattered in between (some stretches stay open sand)
+    for (let i = 0, tries = 0; i < 70 && tries < 3000; tries++) {
+        const c = spot();
+        if (Math.sin(c.x / 4100) + Math.sin(c.y / 3300 + 2) < -0.6) continue;  // (wide empty stretches of open desert)
+        if (ruin(c.x, c.y, rand(220, 460), rand(200, 420), false)) i++;
     }
     for (let i = 0; i < 700; i++) {
         const x = rand(300, W - 300), y = rand(chaseMount(0) + 300, W - 300);
-        if (y < chaseMount(x) + 150 || inFac(x, y, 100) || nearRiver(x, y, 600) || !clearAt(x, y, 60)) continue;
+        if (!desertOk(x, y, 0) || !clearAt(x, y, 60)) continue;
         addCircle({ type: 'rock', x, y, r: rand(18, 42), spr: randInt(0, 5), rot: rand(0, TAU) });
     }
 
@@ -7294,9 +7352,11 @@ function generateChase() {
     g.strokeStyle = 'rgba(160,120,70,0.16)'; g.lineWidth = 10;
     for (let i = 0; i < 1500; i++) { const x = rnd() * W, y = CHASE.mountY + rnd() * (W - CHASE.mountY), w = 150 + rnd() * 300; g.beginPath(); g.moveTo(x - w, y); g.quadraticCurveTo(x, y - 50, x + w, y); g.stroke(); }
     for (const r of C.ruins) { g.fillStyle = shade(r.col, 0.28); g.fillRect(r.x - r.w / 2, r.y - r.h / 2, r.w, r.h); g.fillStyle = 'rgba(40,30,20,0.18)'; for (let k = 0; k < 6; k++) { g.beginPath(); g.arc(r.x + (rnd() - 0.5) * r.w, r.y + (rnd() - 0.5) * r.h, 20 + rnd() * 50, 0, TAU); g.fill(); } }
+    for (const q of C.rockFields) { g.fillStyle = 'rgba(120,96,66,0.22)'; g.beginPath(); g.arc(q.x, q.y, q.r * 1.15, 0, TAU); g.fill(); }
     g.fillStyle = '#8f8d87'; g.fillRect(F.x0, F.y0, F.x1 - F.x0, F.y1 - F.y0);
     g.strokeStyle = 'rgba(255,214,90,0.5)'; g.lineWidth = 12; g.setLineDash([60, 50]);
-    g.beginPath(); g.moveTo(F.x0 + 1500, gy); g.lineTo(F.x1, gy); g.moveTo(gx, F.y0); g.lineTo(gx, gy); g.stroke(); g.setLineDash([]);
+    g.beginPath(); g.moveTo(F.x0 + 1750, gy); g.lineTo(F.x1, gy); g.moveTo(gx, F.y0); g.lineTo(gx, gy); g.moveTo(F.x0 + 1750, F.y0 + 1250); g.lineTo(gx, F.y0 + 1250); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#7d7b74'; g.fillRect(F.x0, F.y0, 1750, F.y1 - F.y0);  // (the prison yard: bare dirt)
     for (const b of C.buildings) { g.fillStyle = '#a7a59e'; g.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
     g.fillStyle = 'rgba(30,30,30,0.5)'; g.font = '900 70px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const b of C.buildings) g.fillText(b.label, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
@@ -7425,8 +7485,10 @@ function setupChase() {
     // The facility's soldiers: guards at both gates and round the yard, and a squad hunting you down inside
     let n = 0;
     for (const gate of Cw.gates) for (let i = 0; i < 6; i++) chaseSoldier(spawnNear({ x: gate.x - (gate === Cw.gates[0] ? 200 : 0), y: gate.y + (gate === Cw.gates[1] ? 200 : 0) }, 220, 30), n++, true);
-    for (let i = 0; i < 9; i++) chaseSoldier(spawnNear({ x: rand(F.x0 + 1200, F.x1 - 200), y: rand(F.y0 + 200, F.y1 - 200) }, 120, 30), n++, true);
-    spawnSquad(spawnNear({ x: F.x0 + 1650, y: F.y0 + 1350 }, 150, 30), 6, n, true); n += 6;
+    for (let i = 0; i < 20; i++) chaseSoldier(spawnNear({ x: rand(F.x0 + 1950, F.x1 - 200), y: rand(F.y0 + 200, F.y1 - 200) }, 120, 30), n++, true);
+    for (let i = 0; i < 4; i++) chaseSoldier(spawnNear({ x: F.x0 + 1850, y: F.y0 + (i < 2 ? 1250 : 3650) }, 80, 30), n++, true);  // (at the gaps in the fence)
+    spawnSquad(spawnNear({ x: F.x0 + 2600, y: F.y0 + 2900 }, 150, 30), 6, n, true); n += 6;
+    spawnSquad(spawnNear({ x: F.x0 + 4300, y: F.y0 + 1250 }, 150, 30), 6, n, false); n += 6;
     // Out in the desert: patrols among the ruins
     for (let k = 0, tries = 0; k < CHASE.desertSquads && tries < 200; tries++) {
         const W = CONFIG.WORLD_SIZE, c = spawnNear({ x: rand(W * 0.15, W * 0.95), y: rand(chaseMount(0) + 500, W - 500) }, 300, 30, true);
