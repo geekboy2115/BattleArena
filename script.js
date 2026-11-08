@@ -63,6 +63,13 @@ const WEAPONS = {
     'Energy Gun': { damage: 14, range: 650, rate: 260, speed: 1400, spread: 0, mag: 999, rarity: 'legendary', len: 34, w: 11, sound: 'light', shake: 2, charge: 1100 },
     'Guided Rocket': { damage: 40, range: 2600, rate: 1300, speed: 600, spread: 0, mag: 999, rarity: 'mythic', len: 50, w: 12, sound: 'heavy', shake: 8, rocket: true, guided: true },
     'Burst Minigun': { damage: 12, range: 1300, rate: 55, speed: 1600, spread: 0.12, mag: 999, rarity: 'mythic', len: 44, w: 13, sound: 'mid', shake: 1.6, clip: 8, reload: 1300 },
+    // Treasure Temple's weapons
+    'Machete': { damage: 32, range: 48, rate: 420, speed: 0, spread: 0, mag: 0, rarity: 'uncommon', len: 30, w: 6, sound: 'light', shake: 1, melee: true, blade: 'sword' },
+    'Blowgun': { damage: 9, range: 900, rate: 650, speed: 1300, spread: 0.01, mag: 999, rarity: 'uncommon', len: 34, w: 4, sound: 'light', shake: 0.3, silent: true, dart: true, poison: 4000 },
+    'Whip': { damage: 18, range: 120, rate: 650, speed: 0, spread: 0, mag: 0, rarity: 'rare', len: 20, w: 5, sound: 'light', shake: 1, melee: true, whip: true, knock: -520 },
+    'Torch': { damage: 14, range: 64, rate: 450, speed: 0, spread: 0, mag: 0, rarity: 'rare', len: 26, w: 6, sound: 'light', shake: 0.5, melee: true, torch: true, burn: 3500 },
+    'Blunderbuss': { damage: 9, count: 8, range: 520, rate: 1100, speed: 1000, spread: 0.36, mag: 999, rarity: 'epic', len: 32, w: 10, sound: 'heavy', shake: 7 },
+    'Trap Trigger': { damage: 0, range: 700, rate: 4000, speed: 0, spread: 0, mag: 999, rarity: 'legendary', len: 14, w: 9, sound: 'light', shake: 0, trigger: true },
     'Shock Pistol': { damage: 24, range: 1050, rate: 260, speed: 1500, spread: 0.02, mag: 15, rarity: 'hyper', len: 18, w: 8, sound: 'light', shake: 1.6, hyper: true, chain: 2, spark: true },  // Chase: everyone's sidearm, its bolts arc on to 2 more enemies
     'Tesla Cannon': { damage: 32, range: 900, rate: 420, speed: 1300, spread: 0.02, mag: 12, rarity: 'hyper', len: 34, w: 13, sound: 'heavy', shake: 4, hyper: true, chain: 3 },  // arcs to 3 more enemies
     'Laser Beam': { damage: 7, range: 950, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 36, w: 9, sound: 'mid', shake: 0.3, hyper: true, beam: true },  // hold it on them
@@ -587,6 +594,7 @@ function playerAction(p, code) {
         // F: launch the boss strike, get out of the car, pick up what's at your feet, or get into a car nearby
         // (up on the castle walkway, the only thing to get into is a corner gun)
         if (G.prop && p.prop) { propChange(p); return; }
+        if (G.temple && templeUse(p)) return;
         if (G.navy && navyUse(p)) return;
         if (tryLaunchStrike(p)) return;
         if (nearOwnPad(p)) { if (p.remote) loadAllAmmo(p); else openStrikeLoad(p); return; }
@@ -758,7 +766,7 @@ function buildSprites() {
     SPR.bushes = [];
     for (let i = 0; i < 4; i++) SPR.bushes.push(makeBush(rand(85, 125)));
     SPR.loot = {};
-    for (const k of [...Object.keys(WEAPONS), ...Object.keys(ITEMS)]) if (!WEAPONS[k] || !WEAPONS[k].melee || WEAPONS[k].blade) SPR.loot[k] = makeLootSprite(k);
+    for (const k of [...Object.keys(WEAPONS), ...Object.keys(ITEMS)]) if (!WEAPONS[k] || !WEAPONS[k].melee || WEAPONS[k].blade || WEAPONS[k].whip || WEAPONS[k].torch) SPR.loot[k] = makeLootSprite(k);
 }
 
 function makeGrassPattern() {
@@ -1237,6 +1245,7 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'sea') return generateSea();
     if (type === 'chase') return generateChase();
     if (PAYLOAD_MAPS.includes(type)) return generatePayload(type);
+    if (type === 'temple') return generateTemple();
     // Wasteland (the sniping map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
@@ -4648,12 +4657,12 @@ function findSpawn(avoid, minDist) {
 
 // setup: { type: 'ffa' | 'epic' | 'escape', count }, { type: 'zombies', count, zombies } or { type: 'war' | 'hightech', teams, size }
 function newState(mode, setup) {
-    CONFIG.WORLD_SIZE = setup.type === 'chase' ? CHASE.world : setup.type === 'payload' ? PAYLOAD.W : 12000;  // (Chase is played on a world three times the size)
+    CONFIG.WORLD_SIZE = setup.type === 'chase' ? CHASE.world : setup.type === 'payload' ? PAYLOAD.W : setup.type === 'temple' ? TEMPLE.W : 12000;  // (Chase is played on a world three times the size)
     const W = CONFIG.WORLD_SIZE;
     const zombies = setup.type === 'zombies', chase = setup.type === 'chase', escape = setup.type === 'escape' || chase, survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', bossFight = setup.type === 'boss';
-    const ghostMode = setup.type === 'ghost', propHunt = setup.type === 'prop', payloadMode = setup.type === 'payload', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
+    const ghostMode = setup.type === 'ghost', propHunt = setup.type === 'prop', payloadMode = setup.type === 'payload', templeMode = setup.type === 'temple', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution || navy ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4663,7 +4672,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies && !escape), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, prop: null, payload: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || escape || bossFight, bossFight, bossF: null, ghostMode, prop: null, payload: null, temple: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && (setup.type === 'survival' || setup.type === 'chase'), dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4713,7 +4722,7 @@ function newState(mode, setup) {
     };
     setNextZoneTarget(G.zone);
     // (no red zone at all in Survival)
-    if (G.noZone || revolution || survival || navy || payloadMode) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    if (G.noZone || revolution || survival || navy || payloadMode || templeMode) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Ghost is played in one fixed circle in the middle of the map
     const arena = ghostMode ? GHOST.arena : propHunt ? PROP.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
@@ -4723,7 +4732,7 @@ function newState(mode, setup) {
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
-    const noLoot = duel || navy || propHunt || payloadMode;
+    const noLoot = duel || navy || propHunt || payloadMode || templeMode;
     if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
@@ -4749,7 +4758,7 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !propHunt && !payloadMode && !duel && !navy && !chase) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !propHunt && !payloadMode && !templeMode && !duel && !navy && !chase) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (navy) setupNavy(setup);
     else if (war) {
@@ -4781,6 +4790,7 @@ function newState(mode, setup) {
     if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
     if (propHunt) setupProp(setup);
     if (payloadMode) setupPayload(setup);
+    if (templeMode) setupTemple(setup);
     G.alive = G.fighters.length;
 }
 
@@ -5835,6 +5845,682 @@ function drawCharges() {
         ctx.fillStyle = '#1f4dff'; ctx.beginPath(); ctx.arc(x, y, r * (0.8 + Math.sin(G.time * 0.03) * 0.1), 0, TAU); ctx.fill();
         ctx.restore();
     }
+}
+
+// ---------- Treasure Temple ----------
+// Two teams of explorers race from their jungle camps into a giant temple maze to grab the golden idol from the altar
+// in the middle and carry it home. First team to bring it home 3 times wins. The maze is full of traps (spikes, rolling
+// boulders, collapsing floors, swinging axes, dart walls, spider webs) and secrets (cracked walls that open, hidden
+// tunnels). The jungle round it has its own: quicksand, leaf-covered pits, snake nests, buried chests and tunnels in.
+const TEMPLE = {
+    W: 6400, n: 21, cs: 210, T: 32, players: 10, time: 600000, wins: 3, respawn: 5000, protect: 2500, safeR: 230, safeDmg: 30,
+    idolHome: 25000, carrySlow: 0.72, blue: '#3d8bff', red: '#ff4b4b', regenAfter: 5000, regen: 6,
+    guns: ['Whip', 'Torch', 'Crossbow', 'Blunderbuss', 'Trap Trigger'], start: ['Machete', 'Blowgun']
+};
+let templeSidePick = 'blue';
+function generateTemple() {
+    const W = TEMPLE.W, n = TEMPLE.n, cs = TEMPLE.cs, T = TEMPLE.T, size = n * cs, ox = (W - size) / 2, oy = (W - size) / 2;
+    const grid = new Grid(256, 90), obstacles = [], lootSpots = [], decor = [];
+    const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
+    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
+    const cellC = (i, j) => ({ x: ox + (i + 0.5) * cs, y: oy + (j + 0.5) * cs });
+    const mid = (n - 1) / 2, inCenter = (i, j) => Math.abs(i - mid) <= 1 && Math.abs(j - mid) <= 1;
+    // The maze: a random walk carves it, then extra gaps make loops, and the middle 3x3 is the altar chamber
+    const east = [], south = [], seen = [];
+    for (let i = 0; i < n; i++) { east.push(new Array(n).fill(true)); south.push(new Array(n).fill(true)); seen.push(new Array(n).fill(false)); }
+    const stack = [[0, 0]]; seen[0][0] = true;
+    while (stack.length) {
+        const [i, j] = stack[stack.length - 1];
+        const next = [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]].filter(([a, b]) => a >= 0 && b >= 0 && a < n && b < n && !seen[a][b]);
+        if (!next.length) { stack.pop(); continue; }
+        const [a, b] = pick(next);
+        if (a > i) east[i][j] = false; else if (a < i) east[a][j] = false; else if (b > j) south[i][j] = false; else south[i][b] = false;
+        seen[a][b] = true; stack.push([a, b]);
+    }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        if (i < n - 1 && east[i][j] && Math.random() < 0.035) east[i][j] = false;
+        if (j < n - 1 && south[i][j] && Math.random() < 0.035) south[i][j] = false;
+        if (inCenter(i, j)) { if (i < n - 1 && inCenter(i + 1, j)) east[i][j] = false; if (j < n - 1 && inCenter(i, j + 1)) south[i][j] = false; }
+    }
+    // (the altar chamber has a doorway on each side)
+    const m = mid;
+    east[m - 2][m] = false; east[m + 1][m] = false; south[m][m - 2] = false; south[m][m + 1] = false;
+    const stone = () => pick(['#6b5838', '#665334', '#71603e', '#5f4e31']);
+    const walls = { e: {}, s: {} };
+    const seg = (x0, y0, x1, y1, extra) => addBox({ type: 'wall', x: (x0 + x1) / 2, y: (y0 + y1) / 2, hw: Math.max(T / 2, (x1 - x0) / 2), hh: Math.max(T / 2, (y1 - y0) / 2), color: stone(), temple: true, ...extra });
+    // Outer walls, with an entrance in the middle of each side
+    for (let k = 0; k < n; k++) {
+        if (k !== m) {
+            seg(ox + k * cs - T / 2, oy - T / 2, ox + (k + 1) * cs + T / 2, oy + T / 2);
+            seg(ox + k * cs - T / 2, oy + size - T / 2, ox + (k + 1) * cs + T / 2, oy + size + T / 2);
+            seg(ox - T / 2, oy + k * cs - T / 2, ox + T / 2, oy + (k + 1) * cs + T / 2);
+            seg(ox + size - T / 2, oy + k * cs - T / 2, ox + size + T / 2, oy + (k + 1) * cs + T / 2);
+        }
+    }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        if (i < n - 1 && east[i][j]) walls.e[i + ',' + j] = seg(ox + (i + 1) * cs - T / 2, oy + j * cs - T / 2, ox + (i + 1) * cs + T / 2, oy + (j + 1) * cs + T / 2, { cell: [i, j, 'e'] });
+        if (j < n - 1 && south[i][j]) walls.s[i + ',' + j] = seg(ox + i * cs - T / 2, oy + (j + 1) * cs - T / 2, ox + (i + 1) * cs + T / 2, oy + (j + 1) * cs + T / 2, { cell: [i, j, 's'] });
+    }
+    // Secret walls: cracked ones that slide open
+    const secrets = [];
+    const inner = [...Object.values(walls.e), ...Object.values(walls.s)].filter(o => { const [i, j] = o.cell; return !inCenter(i, j) && !(o.cell[2] === 'e' ? inCenter(i + 1, j) : inCenter(i, j + 1)); });
+    for (const o of shuffle(inner).slice(0, 40)) { o.secret = true; o.open = false; secrets.push(o); }
+    // What's in each cell
+    const used = new Set(), key = (i, j) => i + ',' + j;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (inCenter(i, j) || i === m || j === m && (i === 0 || i === n - 1)) used.add(key(i, j));
+    for (const [i, j] of [[0, m], [n - 1, m], [m, 0], [m, n - 1]]) used.add(key(i, j));
+    const freeCells = () => { const out = []; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (!used.has(key(i, j))) out.push([i, j]); return shuffle(out); };
+    const wallsOf = (i, j) => ({ w: i === 0 || east[i - 1][j], e: i === n - 1 || east[i][j], n: j === 0 || south[i][j - 1], s: j === n - 1 || south[i][j] });
+    const traps = [];
+    // Rolling boulders: down long straight corridors, set off by a plate partway along
+    const runs = [];
+    for (let j = 0; j < n; j++) { let s0 = 0; for (let i = 1; i <= n; i++) { if (i === n || east[i - 1][j]) { if (i - s0 >= 4) runs.push({ h: true, a: s0, b: i - 1, k: j }); s0 = i; } } }
+    for (let i = 0; i < n; i++) { let s0 = 0; for (let j = 1; j <= n; j++) { if (j === n || south[i][j - 1]) { if (j - s0 >= 4) runs.push({ h: false, a: s0, b: j - 1, k: i }); s0 = j; } } }
+    for (const r of shuffle(runs).slice(0, 10)) {
+        const cells = []; for (let t = r.a; t <= r.b; t++) cells.push(r.h ? [t, r.k] : [r.k, t]);
+        if (cells.some(([i, j]) => inCenter(i, j))) continue;
+        const fwd = Math.random() < 0.5, A = cellC(...cells[fwd ? 0 : cells.length - 1]), B = cellC(...cells[fwd ? cells.length - 1 : 0]);
+        const plate = cellC(...cells[Math.floor(cells.length * 0.6)]);
+        traps.push({ kind: 'boulder', x0: A.x, y0: A.y, x1: B.x, y1: B.y, x: plate.x, y: plate.y, ready: 0 });
+        used.add(key(...cells[Math.floor(cells.length * 0.6)]));
+    }
+    const take = (k, fn) => { let c = 0; for (const [i, j] of freeCells()) { if (c >= k) break; if (fn(i, j)) { used.add(key(i, j)); c++; } } };
+    take(34, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'spikes', x: c.x, y: c.y, s: 70, ph: rand(0, 3000), forced: 0 }); return true; });
+    take(22, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'pit', x: c.x, y: c.y, s: 58, state: 'solid', t: 0 }); return true; });
+    take(16, (i, j) => {
+        const w = wallsOf(i, j), c = cellC(i, j);
+        // a corridor running straight through: the axe swings across it
+        if (w.n && w.s && !w.w && !w.e) { traps.push({ kind: 'axe', x: c.x, y: c.y, ax: 0, ay: 1, ph: rand(0, TAU), len: cs * 0.42 }); return true; }
+        if (w.w && w.e && !w.n && !w.s) { traps.push({ kind: 'axe', x: c.x, y: c.y, ax: 1, ay: 0, ph: rand(0, TAU), len: cs * 0.42 }); return true; }
+        return false;
+    });
+    take(9, (i, j) => {
+        const w = wallsOf(i, j), c = cellC(i, j);
+        const side = w.n ? [0, -1] : w.s ? [0, 1] : w.w ? [-1, 0] : w.e ? [1, 0] : null;
+        if (!side) return false;
+        traps.push({ kind: 'darts', x: c.x, y: c.y, ex: c.x + side[0] * (cs / 2 - T / 2 - 4), ey: c.y + side[1] * (cs / 2 - T / 2 - 4), dx: -side[0], dy: -side[1], ready: 0 });
+        return true;
+    });
+    take(14, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'web', x: c.x + rand(-30, 30), y: c.y + rand(-30, 30), r: rand(80, 105), burnt: 0 }); return true; });
+    // Hidden tunnels: a carved hatch you can drop into and come out of the other one
+    const passages = [];
+    const far = freeCells().filter(([i, j]) => Math.max(Math.abs(i - m), Math.abs(j - m)) >= 4);
+    for (let k = 0; k + 1 < far.length && passages.length < 6; k += 2) {
+        const a = far[k], b = far.slice(k + 1).find(q => Math.abs(q[0] - a[0]) + Math.abs(q[1] - a[1]) >= 9);
+        if (!b) continue;
+        used.add(key(...a)); used.add(key(...b));
+        const A = cellC(...a), B = cellC(...b);
+        passages.push({ a: { x: A.x + 50, y: A.y + 50 }, b: { x: B.x + 50, y: B.y + 50 } });
+    }
+    // Weapons waiting in dead ends
+    const spots = [];
+    take(12, (i, j) => { const w = wallsOf(i, j); if (w.n + w.s + w.w + w.e < 3) return false; const c = cellC(i, j); spots.push({ x: c.x, y: c.y, key: null, every: 30000 }); return true; });
+    // The jungle: camps on the west and east, dirt paths to the four entrances, and trees everywhere else
+    const camps = [{ x: 480, y: W / 2 }, { x: W - 480, y: W / 2 }];
+    const ents = [{ x: ox - 160, y: oy + size / 2, ix: ox + cs / 2, iy: oy + size / 2 }, { x: ox + size + 160, y: oy + size / 2, ix: ox + size - cs / 2, iy: oy + size / 2 }, { x: ox + size / 2, y: oy - 160, ix: ox + size / 2, iy: oy + cs / 2 }, { x: ox + size / 2, y: oy + size + 160, ix: ox + size / 2, iy: oy + size - cs / 2 }];
+    const paths = [];
+    for (const c of camps) for (const e of ents) {
+        const pts = [{ x: c.x, y: c.y }], k = 6;
+        for (let t = 1; t < k; t++) pts.push({ x: lerp(c.x, e.x, t / k) + rand(-180, 180), y: lerp(c.y, e.y, t / k) + rand(-180, 180) });
+        pts.push({ x: e.x, y: e.y });
+        // (the far entrances go round the temple, not through it)
+        if (Math.abs(e.x - c.x) > size) continue;
+        paths.push(pts);
+    }
+    // Paths round the outside of the temple to the north and south entrances
+    for (const c of camps) for (const e of ents.slice(2)) {
+        const cornerY = e.y < W / 2 ? oy - 300 : oy + size + 300, cornerX = c.x < W / 2 ? ox - 300 : ox + size + 300;
+        paths.push([{ x: c.x, y: c.y }, { x: cornerX, y: lerp(c.y, cornerY, 0.5) + rand(-100, 100) }, { x: cornerX, y: cornerY }, { x: lerp(cornerX, e.x, 0.5), y: cornerY + rand(-80, 80) }, { x: e.x, y: e.y }]);
+    }
+    const nearPath = (x, y, d) => paths.some(pts => pts.some((p, i) => i > 0 && segHitsCircle(pts[i - 1].x, pts[i - 1].y, p.x, p.y, x, y, d)));
+    const inTemple = (x, y, mm = 0) => x > ox - mm && x < ox + size + mm && y > oy - mm && y < oy + size + mm;
+    const nearCamp = (x, y, d) => camps.some(c => Math.hypot(c.x - x, c.y - y) < d);
+    for (const [x, y, hw, hh] of [[W / 2, 20, W / 2, 20], [W / 2, W - 20, W / 2, 20], [20, W / 2, 20, W / 2], [W - 20, W / 2, 20, W / 2]]) addBox({ type: 'wall', x, y, hw, hh, color: '#2d4a22' });
+    const jungleFree = (x, y, r) => x > 120 && y > 120 && x < W - 120 && y < W - 120 && !inTemple(x, y, 120) && !nearCamp(x, y, 330) && !nearPath(x, y, 70 + r * 0.5) && !blockedAt(grid, x, y, r);
+    for (let i = 0; i < 1500; i++) { const x = rand(100, W - 100), y = rand(100, W - 100), canopy = rand(110, 175); if (jungleFree(x, y, 40)) addCircle({ type: 'tree', x, y, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 }); }
+    for (let i = 0; i < 900; i++) { const x = rand(100, W - 100), y = rand(100, W - 100); if (jungleFree(x, y, 30)) addCircle({ type: 'bush', x, y, r: rand(30, 46), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999 }); }
+    for (let i = 0; i < 140; i++) { const x = rand(100, W - 100), y = rand(100, W - 100); if (jungleFree(x, y, 40)) addCircle({ type: 'rock', x, y, r: rand(24, 60), spr: randInt(0, 5), rot: rand(0, TAU) }); }
+    // Broken statues and pillars round the temple
+    for (let i = 0; i < 40; i++) { const a = rand(0, TAU), d = rand(size * 0.55, size * 0.75), x = W / 2 + Math.cos(a) * d, y = W / 2 + Math.sin(a) * d; if (!inTemple(x, y, 60) && !nearPath(x, y, 80) && !blockedAt(grid, x, y, 40)) addBox({ type: 'wall', x, y, hw: 22, hh: 22, color: '#8a7a5c', pillar: true }); }
+    for (let i = 0; i < 1100; i++) decor.push({ x: rand(0, W), y: rand(0, W), s: rand(0.5, 1.3), spr: randInt(0, Math.max(0, SPR.patches.length - 1)) });
+    // Jungle traps and secrets: some right on the paths
+    const jt = (x, y) => !inTemple(x, y, 160) && !nearCamp(x, y, 420) && !blockedAt(grid, x, y, 50);
+    const onPath = () => { const pts = pick(paths), i = randInt(1, pts.length - 1), t = Math.random(); return { x: lerp(pts[i - 1].x, pts[i].x, t), y: lerp(pts[i - 1].y, pts[i].y, t) }; };
+    for (let i = 0; i < 60 && traps.filter(q => q.kind === 'sand').length < 9; i++) { const q = Math.random() < 0.4 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'sand', x: q.x, y: q.y, r: rand(80, 120) }); }
+    for (let i = 0; i < 80 && traps.filter(q => q.kind === 'leafpit').length < 14; i++) { const q = Math.random() < 0.5 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'leafpit', x: q.x, y: q.y, r: 44, open: 0 }); }
+    for (let i = 0; i < 60 && traps.filter(q => q.kind === 'snake').length < 10; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y)) traps.push({ kind: 'snake', x, y, bite: 0 }); }
+    const chests = [];
+    for (let i = 0; i < 60 && chests.length < 12; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y) && !nearPath(x, y, 60)) chests.push({ x, y, full: true, at: 0 }); }
+    // Tunnels from the jungle straight into the maze, near the altar chamber
+    const ringCells = freeCells().filter(([i, j]) => Math.max(Math.abs(i - m), Math.abs(j - m)) === 2 || Math.max(Math.abs(i - m), Math.abs(j - m)) === 3);
+    for (let k = 0; k < 4 && k < ringCells.length; k++) {
+        for (let t = 0; t < 30; t++) {
+            const a = rand(0, TAU), d = rand(size * 0.62, size * 0.8), x = W / 2 + Math.cos(a) * d, y = W / 2 + Math.sin(a) * d;
+            if (!jt(x, y)) continue;
+            used.add(key(...ringCells[k])); const c = cellC(...ringCells[k]);
+            passages.push({ a: { x, y }, b: { x: c.x - 50, y: c.y + 50 }, jungle: true });
+            break;
+        }
+    }
+    for (let i = 0; i < 8; i++) { const q = onPath(); if (!blockedAt(grid, q.x, q.y, 30) && !nearCamp(q.x, q.y, 400)) spots.push({ x: q.x + rand(-40, 40), y: q.y + rand(-40, 40), key: null, every: 30000 }); }
+    // The map picture
+    const [mm, g] = makeCanvas(200, 200), k2 = 200 / W;
+    g.fillStyle = '#2f5a28'; g.fillRect(0, 0, 200, 200);
+    g.strokeStyle = '#8a6a44'; g.lineWidth = 2; for (const pts of paths) { g.beginPath(); for (const p of pts) g.lineTo(p.x * k2, p.y * k2); g.stroke(); }
+    for (const o of obstacles) if (o.type === 'tree') { g.fillStyle = '#1f4019'; g.beginPath(); g.arc(o.x * k2, o.y * k2, Math.max(0.8, o.canopy * 0.45 * k2), 0, TAU); g.fill(); }
+    g.fillStyle = '#b8a27a'; g.fillRect(ox * k2, oy * k2, size * k2, size * k2);
+    g.fillStyle = '#5a4a32'; for (const o of obstacles) if (o.temple && !o.secret) g.fillRect((o.x - o.hw) * k2, (o.y - o.hh) * k2, Math.max(1, o.hw * 2 * k2), Math.max(1, o.hh * 2 * k2));
+    g.fillStyle = '#ffd166'; g.beginPath(); g.arc(W / 2 * k2, W / 2 * k2, 3, 0, TAU); g.fill();
+    for (const [c, col] of [[camps[0], TEMPLE.blue], [camps[1], TEMPLE.red]]) { g.fillStyle = col; g.beginPath(); g.arc(c.x * k2, c.y * k2, 5, 0, TAU); g.fill(); }
+    const decorGrid = new Grid(512, 900);
+    for (const d of decor) decorGrid.insert(d);
+    return { obstacles, grid, decorGrid, buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'temple',
+        temple: { ox, oy, size, n, cs, east, south, secrets, traps, passages, spots, camps, ents, paths, chests, altar: { x: W / 2, y: W / 2 } } };
+}
+function setupTemple(setup) {
+    const Wt = G.world.temple, T2 = G.temple = {
+        score: [0, 0], endAt: TEMPLE.time, queue: [], idol: { x: Wt.altar.x, y: Wt.altar.y, carrier: null, dropAt: 0, home: true },
+        spots: Wt.spots.map(s => ({ ...s, loot: null, next: 0 })), boulders: [], overtime: false
+    };
+    const all = G.fighters.slice(), p = G.player, others = all.filter(f => f !== p).sort(() => Math.random() - 0.5);
+    const mySide = setup.side === 'red' ? 1 : 0, half = Math.ceil(all.length / 2), blues = new Set();
+    if (p && mySide === 0) blues.add(p);
+    for (const f of others) if (blues.size < (p && mySide === 1 ? Math.floor(all.length / 2) : half)) blues.add(f);
+    for (const f of all) {
+        f.team = blues.has(f) ? 0 : 1;
+        f.color = f.team ? TEMPLE.red : TEMPLE.blue; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
+        templeSpawn(f);
+    }
+    if (p) { G.cam.x = p.x; G.cam.y = p.y; }
+}
+const templeCamp = t => G.world.temple.camps[t];
+const inCamp = (f, t) => G.temple && Math.hypot(f.x - templeCamp(t).x, f.y - templeCamp(t).y) < TEMPLE.safeR;
+function templeSpawn(f) {
+    const c = templeCamp(f.team);
+    let s = null;
+    for (let i = 0; i < 40 && !s; i++) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (TEMPLE.safeR - 40), x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d; if (!blockedAt(G.world.grid, x, y, 24)) s = { x, y }; }
+    s = s || c;
+    f.x = s.x; f.y = s.y; f.vx = f.vy = 0;
+    f.inv = [null, null]; f.maxSlots = 3; f.inv.push(null); f.slot = 0; f.ammo = {};
+    for (const k of TEMPLE.start) applyLoot(f, k, -1);
+    switchSlot(f, 0, true);
+    f.hp = f.maxHp = CONFIG.MAX_HEALTH; f.armor = 0; f.items.bandage = 2;
+    f.protectUntil = G.time + TEMPLE.protect; f.poisonUntil = 0; f.burnUntil = 0; f.dotAcc = 0;
+    f.mode = 'wander'; f.target = null; f.goal = null; f.nextThink = G.time;
+}
+function templeDeath(t, killer) {
+    const I = G.temple.idol;
+    if (I.carrier === t) { I.carrier = null; I.x = t.x; I.y = t.y; I.dropAt = G.time; if (G.mode === 'playing') showBanner('THE IDOL WAS DROPPED', false, `${t.isPlayer ? 'You' : t.name} dropped it. Grab it!`); }
+    G.temple.queue.push({ f: t, at: G.time + TEMPLE.respawn });
+    if (t.isPlayer && G.mode === 'playing') { G.flash = 0.4; G.flashColor = '255,40,70'; Sound.death(); }
+}
+function templeRespawn(f) {
+    const fresh = createFighter(f.x, f.y, { isPlayer: f.isPlayer, name: f.name, color: f.color, team: f.team });
+    Object.assign(f, fresh, { remote: f.remote, kills: f.kills, nextThink: G.time, cook: null, healing: null, car: null, up: null });
+    templeSpawn(f);
+    G.fighters.push(f);
+    G.alive++;
+    if (f.isPlayer) { canvas.classList.remove('dead'); G.timeScale = 1; G.cam.x = f.x; G.cam.y = f.y; }
+}
+// Secret walls: slide open (and close again a while later, once nobody's standing in the gap)
+function openSecret(o) {
+    if (o.open) return;
+    const Wt = G.world.temple, [i, j, d] = o.cell;
+    o.open = true; o.closeAt = G.time + 40000;
+    G.world.grid.removeBox(o);
+    if (d === 'e') Wt.east[i][j] = false; else Wt.south[i][j] = false;
+    for (const f of G.fighters) f.mzKey = null;
+    if (inView(o.x, o.y, 120)) { burst(o.x, o.y, 22, '#c9b48a', 200); G.particles.push({ type: 'smoke', x: o.x, y: o.y, vx: 0, vy: 0, life: 1, max: 1, size: 30, color: '190,170,130' }); }
+    Sound.tone(80, 0.6, 'sawtooth', 0.08 * Sound.volAt(o.x, o.y), 50);
+}
+function closeSecret(o) {
+    const Wt = G.world.temple, [i, j, d] = o.cell;
+    if (G.fighters.some(f => !f.dead && Math.abs(f.x - o.x) < o.hw + f.r + 4 && Math.abs(f.y - o.y) < o.hh + f.r + 4)) { o.closeAt = G.time + 3000; return; }
+    o.open = false;
+    G.world.grid.insertBox(o);
+    if (d === 'e') Wt.east[i][j] = true; else Wt.south[i][j] = true;
+    for (const f of G.fighters) f.mzKey = null;
+}
+const nearSecret = (f, r = 70) => G.world.temple.secrets.find(o => !o.open && Math.abs(f.x - o.x) < o.hw + r && Math.abs(f.y - o.y) < o.hh + r && Math.hypot(f.x - o.x, f.y - o.y) < Math.max(o.hw, o.hh) + r);
+const nearPassage = f => { for (const p of G.world.temple.passages) { if (Math.hypot(f.x - p.a.x, f.y - p.a.y) < 46) return { p, to: p.b }; if (Math.hypot(f.x - p.b.x, f.y - p.b.y) < 46) return { p, to: p.a }; } return null; };
+const nearChest = f => G.world.temple.chests.find(c => c.full && Math.hypot(f.x - c.x, f.y - c.y) < 55);
+// F (or the use button): open a cracked wall, drop through a hidden tunnel, or dig up a chest
+function templeUse(f) {
+    if (!G.temple || f.dead) return false;
+    const s = nearSecret(f);
+    if (s) { openSecret(s); return true; }
+    const ps = nearPassage(f);
+    if (ps) {
+        f.x = ps.to.x + rand(-10, 10); f.y = ps.to.y + rand(-10, 10); f.vx = f.vy = 0; f.mzKey = null; f.path = null;
+        if (f.isPlayer) { G.cam.x = f.x; G.cam.y = f.y; G.flash = 0.3; G.flashColor = '20,16,10'; }
+        if (inView(f.x, f.y, 80)) burst(f.x, f.y, 12, '#8a6a44', 160, 'smoke');
+        Sound.tone(160, 0.25, 'triangle', 0.08 * Sound.volAt(f.x, f.y), 90);
+        return true;
+    }
+    const c = nearChest(f);
+    if (c) {
+        c.full = false; c.at = G.time + 60000;
+        spawnLoot(c.x + 20, c.y, pick(TEMPLE.guns)); spawnLoot(c.x - 20, c.y, pick(['medkit', 'bandage']));
+        if (inView(c.x, c.y, 80)) burst(c.x, c.y, 18, '#ffd166', 220, 'glow');
+        Sound.tone(700, 0.2, 'square', 0.07 * Sound.volAt(c.x, c.y), 1100);
+        return true;
+    }
+    return false;
+}
+function templeUseLabel(f) {
+    if (nearSecret(f)) return 'OPEN CRACKED WALL';
+    if (nearPassage(f)) return 'DROP INTO TUNNEL';
+    if (nearChest(f)) return 'DIG UP CHEST';
+    return '';
+}
+// The Trap Trigger: sets off every trap near where you aim
+function triggerTraps(x, y, R, by) {
+    for (const t of G.world.temple.traps) {
+        if (Math.hypot(t.x - x, t.y - y) > R) continue;
+        if (t.kind === 'boulder') fireBoulder(t, by);
+        else if (t.kind === 'darts') fireDarts(t, by);
+        else if (t.kind === 'spikes') t.forced = G.time + 1400;
+        else if (t.kind === 'pit' && t.state === 'solid') { t.state = 'open'; t.t = G.time; }
+    }
+    if (inView(x, y, R)) G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: R, color: '#ffb347' });
+}
+function fireBoulder(t, by) {
+    if (G.time < t.ready) return;
+    t.ready = G.time + 12000;
+    const d = Math.hypot(t.x1 - t.x0, t.y1 - t.y0) || 1;
+    G.temple.boulders.push({ x: t.x0, y: t.y0, ux: (t.x1 - t.x0) / d, uy: (t.y1 - t.y0) / d, left: d + 60, r: 40, by: by || null, hit: new Set(), spin: 0 });
+    Sound.tone(60, 1.2, 'sawtooth', 0.12 * Sound.volAt(t.x0, t.y0), 40);
+}
+function fireDarts(t, by) {
+    if (G.time < t.ready) return;
+    t.ready = G.time + 5000;
+    const px = -t.dy, py = t.dx;
+    for (let k = -2; k <= 2; k++) G.bullets.push({ x: t.ex + px * k * 26, y: t.ey + py * k * 26, vx: t.dx * 900, vy: t.dy * 900, dmg: 12, owner: by || null, left: TEMPLE.cs, weapon: 'Dart Trap', dart: true, poison: 12 });
+    Sound.tone(1200, 0.08, 'square', 0.06 * Sound.volAt(t.x, t.y), 700);
+}
+function updateTemple(dt) {
+    const T2 = G.temple, Wt = G.world.temple, I = T2.idol, p = G.player, now = G.time;
+    if (T2.queue.length) { const due = T2.queue.filter(q => now >= q.at); T2.queue = T2.queue.filter(q => now < q.at); for (const q of due) templeRespawn(q.f); }
+    for (const sp of T2.spots) {
+        if (sp.loot && !sp.loot.gone) continue;
+        if (sp.loot) { sp.loot = null; sp.next = now + sp.every; }
+        if (now >= sp.next) sp.loot = spawnLoot(sp.x, sp.y, sp.key || pick(TEMPLE.guns));
+    }
+    for (const c of Wt.chests) if (!c.full && now >= c.at) c.full = true;
+    for (const o of Wt.secrets) if (o.open && now >= o.closeAt) closeSecret(o);
+    // Traps that tick on their own, and the ones that go off when stepped on
+    for (const t of Wt.traps) {
+        if (t.kind === 'pit') {
+            if (t.state === 'cracking' && now - t.t > 700) { t.state = 'open'; t.t = now; }
+            else if (t.state === 'open' && now - t.t > 9000) t.state = 'solid';
+        }
+        if (t.kind === 'web' && t.burnt && now > t.burnt) t.burnt = 0;
+        if (t.kind === 'leafpit' && t.open && now > t.open) t.open = 0;
+    }
+    for (const f of G.fighters) {
+        if (f.dead) continue;
+        let slow = 1;
+        for (const k of f.inv) if (k && f.ammo[k] !== Infinity && !WEAPONS[k].melee) f.ammo[k] = Infinity;
+        if (now - f.lastHurt > TEMPLE.regenAfter && f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + TEMPLE.regen * dt);
+        if (inCamp(f, f.team)) f.hp = Math.min(f.maxHp, f.hp + 40 * dt);
+        else if (inCamp(f, 1 - f.team) && G.mode === 'playing') damage(f, TEMPLE.safeDmg * dt, null, 'enemy camp');
+        // Poison and burning: a little at a time
+        let dps = 0, by = null, why = '';
+        if (now < (f.poisonUntil || 0)) { dps += 4; by = f.poisonBy; why = 'Poison'; }
+        if (now < (f.burnUntil || 0)) { dps += 7; by = f.burnBy; why = 'Fire'; if (Math.random() < dt * 8 && inView(f.x, f.y, 60)) G.particles.push({ type: 'glow', x: f.x + rand(-10, 10), y: f.y + rand(-10, 10), vx: 0, vy: -60, life: 0.4, max: 0.4, size: rand(4, 7), color: '#ff8a3d' }); }
+        if (dps) { f.dotAcc = (f.dotAcc || 0) + dps * dt; if (f.dotAcc >= 5) { f.dotAcc -= 5; damage(f, 5, by && !by.dead ? by : null, why); if (f.dead) continue; } }
+        for (const t of Wt.traps) {
+            const dx = f.x - t.x, dy = f.y - t.y;
+            if (Math.abs(dx) > 160 || Math.abs(dy) > 160) continue;
+            switch (t.kind) {
+                case 'spikes': {
+                    const up = now < t.forced || ((now + t.ph) % 3200) > 2000;
+                    if (up && Math.abs(dx) < t.s && Math.abs(dy) < t.s && now - (f.spikeAt || 0) > 900) { f.spikeAt = now; damage(f, 25, null, 'Spikes'); if (inView(f.x, f.y, 60)) burst(f.x, f.y, 8, '#a3121e', 160, 'blood'); }
+                    break;
+                }
+                case 'pit':
+                    if (Math.abs(dx) < t.s && Math.abs(dy) < t.s) {
+                        if (t.state === 'solid') { t.state = 'cracking'; t.t = now; if (inView(t.x, t.y, 80)) Sound.tone(220, 0.3, 'sawtooth', 0.05, 120); }
+                        else if (t.state === 'open') templeFall(f, t.x, t.y, t.s * 1.5 + f.r);
+                    }
+                    break;
+                case 'axe': {
+                    const sw = Math.sin(now / 420 + t.ph), hx = t.x + t.ax * sw * t.len, hy = t.y + t.ay * sw * t.len;
+                    if (Math.hypot(f.x - hx, f.y - hy) < f.r + 24 && now - (f.axeAt || 0) > 800) { f.axeAt = now; damage(f, 35, null, 'Swinging axe'); f.kx += t.ax * Math.sign(Math.cos(now / 420 + t.ph)) * 500; f.ky += t.ay * Math.sign(Math.cos(now / 420 + t.ph)) * 500; if (inView(f.x, f.y, 60)) burst(f.x, f.y, 10, '#a3121e', 200, 'blood'); }
+                    break;
+                }
+                case 'boulder': if (Math.hypot(dx, dy) < 40) fireBoulder(t, null); break;
+                case 'darts': if (Math.hypot(dx, dy) < 40) fireDarts(t, null); break;
+                case 'web':
+                    if (!t.burnt && Math.hypot(dx, dy) < t.r) {
+                        // a torch burns straight through
+                        if (held(f) === 'Torch') { t.burnt = now + 40000; if (inView(t.x, t.y, 120)) burst(t.x, t.y, 24, '#ff8a3d', 200, 'glow'); }
+                        else slow = Math.min(slow, 0.4);
+                    }
+                    break;
+                case 'sand': { const d = Math.hypot(dx, dy); if (d < t.r) { slow = Math.min(slow, 0.35); if (d < t.r * 0.5 && now - (f.sandAt || 0) > 1000) { f.sandAt = now; damage(f, 6, null, 'Quicksand'); } } break; }
+                case 'leafpit': if (!t.open && Math.hypot(dx, dy) < t.r) { t.open = now + 20000; templeFall(f, t.x, t.y, t.r + f.r + 8); } break;
+                case 'snake':
+                    if (Math.hypot(dx, dy) < 80 && now - t.bite > 1100) { t.bite = now; damage(f, 10, null, 'Snake'); f.poisonUntil = now + 3000; f.poisonBy = null; Sound.tone(1800, 0.15, 'sawtooth', 0.04 * Sound.volAt(t.x, t.y), 2400); }
+                    break;
+            }
+        }
+        if (I.carrier === f) slow *= TEMPLE.carrySlow;
+        f.slowK = slow;
+    }
+    // Rolling boulders
+    for (const b of T2.boulders) {
+        const step = 430 * dt;
+        b.x += b.ux * step; b.y += b.uy * step; b.left -= step; b.spin += step / b.r;
+        G.fgrid.query(b.x, b.y, b.r + 30, f => {
+            if (f.dead || b.hit.has(f) || Math.hypot(f.x - b.x, f.y - b.y) > b.r + f.r) return;
+            b.hit.add(f); damage(f, 70, b.by && b.by !== f ? b.by : null, 'Boulder');
+            if (!f.dead) { f.kx += -b.uy * 700 * (Math.random() < 0.5 ? 1 : -1); f.ky += b.ux * 700 * (Math.random() < 0.5 ? 1 : -1); }
+        });
+        if (b.left <= 0 && inView(b.x, b.y, 100)) { burst(b.x, b.y, 24, '#8f8678', 240); G.shake = Math.max(G.shake, 4); }
+    }
+    T2.boulders = T2.boulders.filter(b => b.left > 0);
+    // The idol: picked up by walking over it, back on the altar if nobody touches it for a while
+    if (I.carrier) { if (I.carrier.dead) I.carrier = null; else { I.x = I.carrier.x; I.y = I.carrier.y; } }
+    if (!I.carrier) {
+        if (!I.home && now - I.dropAt > TEMPLE.idolHome) { I.x = Wt.altar.x; I.y = Wt.altar.y; I.home = true; if (G.mode === 'playing') showBanner('THE IDOL IS BACK ON THE ALTAR', false); }
+        let who = null;
+        G.fgrid.query(I.x, I.y, 50, f => { if (!who && !f.dead && Math.hypot(f.x - I.x, f.y - I.y) < f.r + 22 && G.time > (f.protectUntil || 0) - 1500) who = f; });
+        if (who) {
+            I.carrier = who; I.home = false;
+            if (G.mode === 'playing') { showBanner(who.team === p.team ? 'YOUR TEAM HAS THE IDOL!' : 'THEY HAVE THE IDOL!', who.team !== p.team, who === p ? 'Get it back to your camp!' : who.team === p.team ? `${who.name} has it. Cover them!` : `Stop ${who.name} before they get home!`); Sound.tone(880, 0.3, 'triangle', 0.08, 1320); }
+        }
+    }
+    if (I.carrier && inCamp(I.carrier, I.carrier.team)) {
+        const t = I.carrier.team;
+        T2.score[t]++; I.carrier = null; I.x = Wt.altar.x; I.y = Wt.altar.y; I.home = true;
+        if (G.mode === 'playing') { showBanner(t === p.team ? 'TREASURE SECURED!' : 'THEY GOT THE IDOL HOME', t !== p.team, `${T2.score[0]} – ${T2.score[1]}. The idol is back on the altar.`); Sound.tone(t === p.team ? 990 : 200, 0.6, 'square', 0.1, t === p.team ? 1480 : 120); }
+    }
+    if (G.mode === 'demo') { if (T2.score[0] + T2.score[1] >= 3) T2.score = [0, 0]; return; }
+    if (G.mode !== 'playing' || G.result || !p) return;
+    let won = null, title, sub;
+    const winner = T2.score[0] >= TEMPLE.wins ? 0 : T2.score[1] >= TEMPLE.wins ? 1 : null;
+    if (winner !== null) { won = p.team === winner; title = won ? 'THE TREASURE IS YOURS!' : 'THEY TOOK THE TREASURE'; sub = `${T2.score[0]} – ${T2.score[1]}`; }
+    else if (now >= T2.endAt) {
+        if (I.carrier && !T2.overtime) { T2.overtime = true; showBanner('OVERTIME!', true, 'The idol is being carried: the game goes on until it gets home or is dropped'); }
+        else if (!I.carrier) { const d = T2.score[0] - T2.score[1]; won = d === 0 ? null : (d > 0) === (p.team === 0); title = d === 0 ? 'DRAW' : won ? 'TIME! YOU WIN' : 'TIME! THEY WIN'; sub = `${T2.score[0]} – ${T2.score[1]}`; if (d === 0) { G.result = { won: false, place: 2, title, sub }; G.overAt = now + 2600; return; } }
+    }
+    if (won === null) return;
+    G.result = { won, place: won ? 1 : 2, title, sub };
+    G.overAt = now + 2600;
+    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
+}
+// Falling into a pit: it hurts, and you climb out at the edge
+function templeFall(f, x, y, R) {
+    if (G.time - (f.fallAt || 0) < 1200) return;
+    f.fallAt = G.time;
+    const a = Math.atan2(f.y - y, f.x - x) || rand(0, TAU);
+    f.x = x + Math.cos(a) * R; f.y = y + Math.sin(a) * R; f.vx = f.vy = 0;
+    f.stunUntil = G.time + 700;
+    damage(f, 40, null, 'Pit');
+    if (f.isPlayer) { G.shake = Math.max(G.shake, 6); G.flash = 0.25; G.flashColor = '20,14,8'; }
+    if (inView(x, y, 100)) burst(x, y, 14, '#5a4a32', 180, 'smoke');
+}
+// Bots: grab the idol, bring it home, chase whoever has it, cover a teammate who has it
+function templeBotPlan(b) {
+    const T2 = G.temple, I = T2.idol;
+    // (sometimes a bot spots a cracked wall it's next to and opens it, or takes a tunnel that helps)
+    if (Math.random() < 0.04) { const s = nearSecret(b, 40); if (s) openSecret(s); }
+    if (I.carrier === b) { const c = templeCamp(b.team); b.mode = 'zone'; b.goal = { x: c.x, y: c.y }; templeBotTunnel(b, c); return true; }
+    if (b.inv.filter(Boolean).length < 3) {
+        const l = nearestLoot(b.x, b.y, 350, q => WEAPONS[q.key] && !b.inv.includes(q.key) && !claimedByOther(q, b));
+        if (l) { b.mode = 'loot'; b.goal = l; l.claim = b; return true; }
+    }
+    if (I.carrier && I.carrier.team !== b.team) { b.mode = 'zone'; b.goal = { x: I.carrier.x, y: I.carrier.y }; return true; }
+    if (I.carrier && I.carrier.team === b.team) {
+        if (b.escortOff === undefined) b.escortOff = { a: rand(0, TAU), r: rand(60, 140) };
+        b.mode = 'zone'; b.goal = { x: I.carrier.x + Math.cos(b.escortOff.a) * b.escortOff.r, y: I.carrier.y + Math.sin(b.escortOff.a) * b.escortOff.r };
+        return true;
+    }
+    b.mode = 'zone'; b.goal = { x: I.x, y: I.y }; templeBotTunnel(b, I);
+    return true;
+}
+function templeBotTunnel(b, goal) {
+    const ps = nearPassage(b);
+    if (ps && Math.hypot(ps.to.x - goal.x, ps.to.y - goal.y) < Math.hypot(b.x - goal.x, b.y - goal.y) - 700 && G.time - (b.tunnelAt || 0) > 8000) { b.tunnelAt = G.time; templeUse(b); }
+}
+// Finding the way through the maze: by its cells, through whatever secret walls are open right now
+function templeRoute(b, gx, gy) {
+    const Wt = G.world.temple, { ox, oy, cs, n } = Wt;
+    const inT = (x, y) => x > ox && x < ox + n * cs && y > oy && y < oy + n * cs;
+    const meIn = inT(b.x, b.y), goalIn = inT(gx, gy);
+    if (!meIn && !goalIn) return null;
+    // Outside, heading in: to the best entrance first
+    if (!meIn) {
+        let best = null, bd = Infinity;
+        for (const e of Wt.ents) { const d = Math.hypot(e.x - b.x, e.y - b.y) + Math.hypot(e.ix - gx, e.iy - gy) * 0.8; if (d < bd) { bd = d; best = e; } }
+        // (once at the doorway, or already closer to the inside than the doorway is, step on in)
+        const toIn = Math.hypot(best.ix - b.x, best.iy - b.y), span = Math.hypot(best.ix - best.x, best.iy - best.y);
+        return Math.hypot(best.x - b.x, best.y - b.y) < 70 || toIn < span ? { x: best.ix, y: best.iy } : { x: best.x, y: best.y };
+    }
+    // Inside, heading out: to the best entrance from in here
+    let tx = gx, ty = gy, exit = null;
+    if (!goalIn) {
+        let bd = Infinity;
+        for (const e of Wt.ents) { const d = Math.hypot(e.x - gx, e.y - gy); if (d < bd) { bd = d; exit = e; } }
+        tx = exit.ix; ty = exit.iy;
+    }
+    const ci = clamp(Math.floor((b.x - ox) / cs), 0, n - 1), cj = clamp(Math.floor((b.y - oy) / cs), 0, n - 1);
+    const ti = clamp(Math.floor((tx - ox) / cs), 0, n - 1), tj = clamp(Math.floor((ty - oy) / cs), 0, n - 1);
+    if (ci === ti && cj === tj) return exit ? { x: exit.x, y: exit.y } : { x: gx, y: gy };
+    const keyv = ci + cj * n + (ti + tj * n) * 1000;
+    if (b.mzKey !== keyv) {
+        b.mzKey = keyv;
+        const prev = new Int16Array(n * n).fill(-1), q = [ti + tj * n];
+        prev[ti + tj * n] = ti + tj * n;
+        while (q.length) {
+            const c = q.shift(), i = c % n, j = (c - i) / n;
+            if (c === ci + cj * n) break;
+            const nb = [];
+            if (i < n - 1 && !Wt.east[i][j]) nb.push(c + 1);
+            if (i > 0 && !Wt.east[i - 1][j]) nb.push(c - 1);
+            if (j < n - 1 && !Wt.south[i][j]) nb.push(c + n);
+            if (j > 0 && !Wt.south[i][j - 1]) nb.push(c - n);
+            for (const d of nb) if (prev[d] < 0) { prev[d] = c; q.push(d); }
+        }
+        const nx = prev[ci + cj * n];
+        b.mzNext = nx < 0 ? null : { x: ox + ((nx % n) + 0.5) * cs, y: oy + (Math.floor(nx / n) + 0.5) * cs };
+        b.mzHere = { x: ox + (ci + 0.5) * cs, y: oy + (cj + 0.5) * cs };
+    }
+    const nx2 = b.mzNext, here = b.mzHere;
+    if (!nx2) return { x: gx, y: gy };
+    // (line up with the doorway first, so nobody snags on the end of a wall cutting the corner)
+    const ax = nx2.x - here.x, ay = nx2.y - here.y, al = Math.hypot(ax, ay) || 1;
+    const off = Math.abs((b.x - here.x) * ay - (b.y - here.y) * ax) / al;
+    return off > cs * 0.2 ? here : nx2;
+}
+// Drawing: the jungle floor, the temple's stone floor, and every trap and secret
+function drawTempleGround(L, T, R, B) {
+    const Wt = G.world.temple, W = TEMPLE.W, now = performance.now() / 1000;
+    ctx.fillStyle = SPR.grass; ctx.fillRect(0, 0, W, W);
+    G.world.decorGrid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2, d => { const s = 128 * d.s; ctx.drawImage(SPR.patches[d.spr], d.x - s, d.y - s, s * 2, s * 2); });
+    ctx.fillStyle = 'rgba(10,40,10,0.28)'; ctx.fillRect(L, T, R - L, B - T);
+    // dirt paths
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const [wd, col] of [[110, '#6e5536'], [90, '#86683f']]) { ctx.strokeStyle = col; ctx.lineWidth = wd; for (const pts of Wt.paths) { ctx.beginPath(); for (const p of pts) ctx.lineTo(p.x, p.y); ctx.stroke(); } }
+    // the temple floor: big sandstone slabs, gold in the altar chamber
+    const { ox, oy, size, cs } = Wt;
+    ctx.fillStyle = '#8f7b57'; ctx.fillRect(ox - 20, oy - 20, size + 40, size + 40);
+    ctx.fillStyle = '#9d8862'; ctx.fillRect(ox, oy, size, size);
+    ctx.strokeStyle = 'rgba(60,48,30,0.35)'; ctx.lineWidth = 2;
+    const x0 = Math.max(ox, Math.floor((L - ox) / 115) * 115 + ox), y0 = Math.max(oy, Math.floor((T - oy) / 115) * 115 + oy);
+    ctx.beginPath();
+    for (let x = x0; x < Math.min(R, ox + size); x += 115) { ctx.moveTo(x, Math.max(T, oy)); ctx.lineTo(x, Math.min(B, oy + size)); }
+    for (let y = y0; y < Math.min(B, oy + size); y += 115) { ctx.moveTo(Math.max(L, ox), y); ctx.lineTo(Math.min(R, ox + size), y); }
+    ctx.stroke();
+    const m = (Wt.n - 1) / 2, cx0 = ox + (m - 1) * cs, cy0 = oy + (m - 1) * cs;
+    ctx.fillStyle = 'rgba(220,180,80,0.25)'; ctx.fillRect(cx0, cy0, cs * 3, cs * 3);
+    ctx.strokeStyle = 'rgba(255,209,102,0.35)'; ctx.lineWidth = 6; ctx.strokeRect(cx0 + 30, cy0 + 30, cs * 3 - 60, cs * 3 - 60);
+    // camps
+    for (const t of [0, 1]) {
+        const c = Wt.camps[t], col = t ? '255,75,75' : '61,139,255';
+        if (!inView(c.x, c.y, TEMPLE.safeR + 40)) continue;
+        ctx.fillStyle = `rgba(${col},0.14)`; ctx.beginPath(); ctx.arc(c.x, c.y, TEMPLE.safeR, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(${col},${0.55 + Math.sin(now * 3) * 0.2})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(c.x, c.y, TEMPLE.safeR, 0, TAU); ctx.stroke();
+        ctx.fillStyle = '#5a3a1e'; ctx.fillRect(c.x - 3, c.y - 60, 6, 60);
+        ctx.fillStyle = t ? TEMPLE.red : TEMPLE.blue; ctx.beginPath(); ctx.moveTo(c.x + 3, c.y - 60); ctx.lineTo(c.x + 40, c.y - 48); ctx.lineTo(c.x + 3, c.y - 36); ctx.closePath(); ctx.fill();
+        ctx.font = '800 22px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = `rgba(${col},0.8)`; ctx.fillText(t ? 'RED CAMP' : 'BLUE CAMP', c.x, c.y + 40);
+    }
+    const nowMs = G.time;
+    for (const t of Wt.traps) {
+        if (!inView(t.x, t.y, 200)) continue;
+        switch (t.kind) {
+            case 'spikes': {
+                const cyc = (nowMs + t.ph) % 3200, up = nowMs < t.forced || cyc > 2000, soon = cyc > 1600 && !up;
+                ctx.fillStyle = '#5a5248'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2);
+                ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 3; ctx.strokeRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2);
+                for (let a = -t.s + 14; a < t.s; a += 28) for (let b2 = -t.s + 14; b2 < t.s; b2 += 28) {
+                    if (up) { ctx.fillStyle = '#d8dde4'; ctx.beginPath(); ctx.moveTo(t.x + a, t.y + b2 - 9); ctx.lineTo(t.x + a + 6, t.y + b2 + 5); ctx.lineTo(t.x + a - 6, t.y + b2 + 5); ctx.closePath(); ctx.fill(); }
+                    else { ctx.fillStyle = soon && Math.sin(nowMs / 60) > 0 ? '#8a7a6a' : '#2a2520'; ctx.beginPath(); ctx.arc(t.x + a, t.y + b2, 3.5, 0, TAU); ctx.fill(); }
+                }
+                break;
+            }
+            case 'pit':
+                if (t.state === 'open') { ctx.fillStyle = '#0d0a07'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2); ctx.fillStyle = 'rgba(60,45,25,0.8)'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, 8); }
+                else {
+                    ctx.strokeStyle = t.state === 'cracking' ? 'rgba(30,20,10,0.9)' : 'rgba(60,48,30,0.35)'; ctx.lineWidth = t.state === 'cracking' ? 3 : 1.5;
+                    ctx.beginPath(); ctx.moveTo(t.x - t.s * 0.7, t.y - t.s * 0.2); ctx.lineTo(t.x - 6, t.y + 4); ctx.lineTo(t.x + t.s * 0.6, t.y - t.s * 0.5); ctx.moveTo(t.x - 6, t.y + 4); ctx.lineTo(t.x + 10, t.y + t.s * 0.6); ctx.moveTo(t.x - 6, t.y + 4); ctx.lineTo(t.x - t.s * 0.4, t.y + t.s * 0.7); ctx.stroke();
+                }
+                break;
+            case 'darts':
+                ctx.fillStyle = 'rgba(70,58,40,0.45)'; ctx.fillRect(t.x - 30, t.y - 30, 60, 60);
+                ctx.fillStyle = '#2a2520'; for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.arc(t.ex + -t.dy * k * 26, t.ey + t.dx * k * 26, 4, 0, TAU); ctx.fill(); }
+                break;
+            case 'boulder':
+                ctx.fillStyle = 'rgba(70,58,40,0.45)'; ctx.fillRect(t.x - 28, t.y - 28, 56, 56);
+                ctx.strokeStyle = 'rgba(40,30,20,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(t.x - 22, t.y - 22, 44, 44);
+                break;
+            case 'web': {
+                if (t.burnt) { ctx.fillStyle = 'rgba(30,20,10,0.35)'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r * 0.8, 0, TAU); ctx.fill(); break; }
+                ctx.strokeStyle = 'rgba(240,240,235,0.55)'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.moveTo(t.x, t.y); ctx.lineTo(t.x + Math.cos(a) * t.r, t.y + Math.sin(a) * t.r); } ctx.stroke();
+                for (let rr = t.r * 0.25; rr < t.r; rr += t.r * 0.22) { ctx.beginPath(); for (let k = 0; k <= 8; k++) { const a = k / 8 * TAU; ctx.lineTo(t.x + Math.cos(a) * rr, t.y + Math.sin(a) * rr); } ctx.stroke(); }
+                ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(t.x + t.r * 0.3, t.y - t.r * 0.2, 7, 0, TAU); ctx.fill();
+                break;
+            }
+            case 'sand': {
+                const gr = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, t.r);
+                gr.addColorStop(0, '#9a7a4a'); gr.addColorStop(0.7, '#b8955c'); gr.addColorStop(1, 'rgba(184,149,92,0)');
+                ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU); ctx.fill();
+                ctx.strokeStyle = 'rgba(110,85,50,0.5)'; ctx.lineWidth = 2;
+                for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.arc(t.x, t.y, t.r * k / 4, now * k * 0.6, now * k * 0.6 + 4); ctx.stroke(); }
+                break;
+            }
+            case 'leafpit':
+                if (t.open) { ctx.fillStyle = '#0d0a07'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU); ctx.fill(); }
+                else { for (let k = 0; k < 9; k++) { const a = k * 2.4, d = (k % 3) * 12; ctx.fillStyle = k % 2 ? '#4f7a32' : '#6a8a3a'; ctx.beginPath(); ctx.ellipse(t.x + Math.cos(a) * d, t.y + Math.sin(a) * d, 16, 8, a, 0, TAU); ctx.fill(); } }
+                break;
+            case 'snake': {
+                ctx.strokeStyle = '#3f6a2a'; ctx.lineWidth = 7;
+                ctx.beginPath(); for (let k = 0; k < 14; k++) { const a = k * 0.55, r = 4 + k * 1.6; ctx.lineTo(t.x + Math.cos(a) * r, t.y + Math.sin(a) * r); } ctx.stroke();
+                ctx.fillStyle = '#2f5a1f'; ctx.beginPath(); ctx.arc(t.x + Math.cos(now * 2) * 4, t.y + Math.sin(now * 2) * 4, 6, 0, TAU); ctx.fill();
+                break;
+            }
+        }
+    }
+    // Hidden tunnels: a carved stone hatch
+    for (const ps of Wt.passages) for (const h of [ps.a, ps.b]) {
+        if (!inView(h.x, h.y, 60)) continue;
+        ctx.fillStyle = '#6a5a40'; ctx.beginPath(); ctx.arc(h.x, h.y, 30, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#4a3c28'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(h.x, h.y, 22, 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(h.x - 10, h.y - 10); ctx.lineTo(h.x + 10, h.y + 10); ctx.moveTo(h.x + 10, h.y - 10); ctx.lineTo(h.x - 10, h.y + 10); ctx.stroke();
+    }
+    // Buried chests: a faint X in the dirt
+    for (const c of Wt.chests) {
+        if (!c.full || !inView(c.x, c.y, 60)) continue;
+        ctx.strokeStyle = 'rgba(120,70,30,0.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(c.x - 16, c.y - 16); ctx.lineTo(c.x + 16, c.y + 16); ctx.moveTo(c.x + 16, c.y - 16); ctx.lineTo(c.x - 16, c.y + 16); ctx.stroke();
+    }
+    // The altar
+    const a = Wt.altar;
+    if (inView(a.x, a.y, 120)) { ctx.fillStyle = '#6e5a3a'; ctx.fillRect(a.x - 56, a.y - 56, 112, 112); ctx.fillStyle = '#8a7450'; ctx.fillRect(a.x - 44, a.y - 44, 88, 88); }
+}
+// Over the walls: cracks on the secret ones (easier to see close up), the swinging axes, boulders and the idol
+function drawTempleProps(now) {
+    const Wt = G.world.temple, T2 = G.temple, p = G.player;
+    for (const o of Wt.secrets) {
+        if (o.open || !inView(o.x, o.y, 160)) continue;
+        const near = p && Math.hypot(p.x - o.x, p.y - o.y) < 200;
+        ctx.strokeStyle = near ? 'rgba(40,28,14,0.85)' : 'rgba(60,45,25,0.35)'; ctx.lineWidth = near ? 2.5 : 1.5;
+        const long = o.hw > o.hh, L2 = long ? o.hw : o.hh;
+        ctx.beginPath();
+        for (let k = -1; k <= 1; k++) {
+            const c = k * L2 * 0.5;
+            const x = long ? o.x + c : o.x, y = long ? o.y : o.y + c;
+            ctx.moveTo(x - 6, y - 10); ctx.lineTo(x + 3, y - 2); ctx.lineTo(x - 2, y + 4); ctx.lineTo(x + 6, y + 11);
+        }
+        ctx.stroke();
+        if (near) { ctx.fillStyle = `rgba(255,209,102,${0.25 + Math.sin(now * 4) * 0.15})`; ctx.fillRect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2); }
+    }
+    for (const t of Wt.traps) {
+        if (t.kind !== 'axe' || !inView(t.x, t.y, 200)) continue;
+        const sw = Math.sin(G.time / 420 + t.ph), hx = t.x + t.ax * sw * t.len, hy = t.y + t.ay * sw * t.len;
+        // the chain from the ceiling beam, and the blade
+        const px = t.x, py = t.y;
+        ctx.strokeStyle = 'rgba(40,36,30,0.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(t.x - t.ay * t.len * 1.1, t.y - t.ax * t.len * 1.1); ctx.lineTo(t.x + t.ay * t.len * 1.1, t.y + t.ax * t.len * 1.1); ctx.stroke();
+        ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(hx, hy); ctx.stroke();
+        ctx.save(); ctx.translate(hx, hy); ctx.rotate(Math.atan2(t.ay, t.ax) + Math.PI / 2);
+        ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.moveTo(-26, -6); ctx.quadraticCurveTo(0, -30, 26, -6); ctx.lineTo(20, 8); ctx.lineTo(-20, 8); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#7a808a'; ctx.fillRect(-20, 4, 40, 6);
+        ctx.restore();
+    }
+    for (const b of T2 ? T2.boulders : []) {
+        if (!inView(b.x, b.y, 80)) continue;
+        ctx.save(); ctx.translate(b.x, b.y);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(8, 12, b.r, b.r * 0.85, 0, 0, TAU); ctx.fill();
+        ctx.rotate(b.spin);
+        ctx.fillStyle = '#7d7468'; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#958b7d'; ctx.beginPath(); ctx.arc(-10, -10, b.r * 0.5, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#5a5248'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-b.r * 0.6, 0); ctx.lineTo(b.r * 0.5, b.r * 0.3); ctx.stroke();
+        ctx.restore();
+    }
+    if (!T2) return;
+    const I = T2.idol;
+    if (!I.carrier || inView(I.x, I.y, 80)) {
+        const x = I.x, y = I.y - (I.carrier ? 30 : 0), bob = Math.sin(now * 3) * 3;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `rgba(255,200,80,${0.25 + Math.sin(now * 4) * 0.1})`; ctx.beginPath(); ctx.arc(x, y + bob, 46, 0, TAU); ctx.fill();
+        ctx.restore();
+        ctx.save(); ctx.translate(x, y + bob);
+        ctx.fillStyle = '#b8860b'; ctx.beginPath(); ctx.moveTo(-14, 16); ctx.lineTo(14, 16); ctx.lineTo(10, -4); ctx.lineTo(-10, -4); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0, -10, 12, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#e0a82e'; ctx.fillRect(-12, -2, 24, 6);
+        ctx.fillStyle = '#3ecf6e'; ctx.beginPath(); ctx.arc(-4, -11, 2.5, 0, TAU); ctx.arc(4, -11, 2.5, 0, TAU); ctx.fill();
+        ctx.restore();
+    }
+}
+function drawTempleOverlay() {
+    const T2 = G.temple, p = G.player;
+    if (!T2 || G.mode !== 'playing' || !p) return;
+    const I = T2.idol;
+    // An arrow to the idol (or home, when you've got it)
+    const tgt = I.carrier === p ? templeCamp(p.team) : I, col = I.carrier === p ? (p.team ? TEMPLE.red : TEMPLE.blue) : '#ffd166';
+    const sx = (tgt.x - G.cam.x) * G.zoom + viewW / 2, sy = (tgt.y - G.cam.y) * G.zoom + viewH / 2;
+    if (!p.dead && (sx < 0 || sy < 0 || sx > viewW || sy > viewH)) {
+        const a = Math.atan2(sy - viewH / 2, sx - viewW / 2), R = Math.min(viewW, viewH) / 2 - 50, ax = viewW / 2 + Math.cos(a) * R, ay = viewH / 2 + Math.sin(a) * R;
+        ctx.save(); ctx.translate(ax, ay); ctx.rotate(a); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-10, -13); ctx.lineTo(-4, 0); ctx.lineTo(-10, 13); ctx.closePath(); ctx.fill(); ctx.restore();
+        ctx.font = '700 13px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff7ec';
+        ctx.fillText(`${I.carrier === p ? 'CAMP' : 'IDOL'} ${Math.round(Math.hypot(tgt.x - p.x, tgt.y - p.y) / 10)}m`, ax - Math.cos(a) * 30, ay - Math.sin(a) * 30);
+    }
+    if (p.dead) {
+        const q = T2.queue.find(q => q.f === p);
+        ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(10,6,20,0.45)'; ctx.fillRect(0, viewH * 0.36, viewW, viewH * 0.18);
+        ctx.font = '900 46px "Black Ops One", sans-serif'; ctx.fillStyle = '#ffd166';
+        ctx.fillText(`RESPAWNING IN ${q ? Math.max(1, Math.ceil((q.at - G.time) / 1000)) : ''}`, viewW / 2, viewH * 0.43);
+        ctx.font = '600 19px Rajdhani, sans-serif'; ctx.fillStyle = '#fff7ec';
+        ctx.fillText('You come back at your camp', viewW / 2, viewH * 0.5);
+        ctx.restore();
+    }
+}
+function templeStatus(p) {
+    const T2 = G.temple, I = T2.idol, left = fmtTime(Math.max(0, (T2.endAt - G.time) / 1000));
+    const where = I.carrier ? (I.carrier === p ? 'You have the idol! Get home' : I.carrier.team === p.team ? `${I.carrier.name} has the idol` : `${I.carrier.name} stole the idol`) : I.home ? 'The idol is on the altar' : 'The idol was dropped';
+    return `${where} · ${T2.overtime ? 'OVERTIME' : left}`;
 }
 
 // ---------- Sniper Duel ----------
@@ -9681,6 +10367,12 @@ function newDemo() {
         G.cam.x = G.bossF.x; G.cam.y = G.bossF.y;
         return;
     }
+    if (id === 'temple') {
+        newState('demo', { type: 'temple', count: TEMPLE.players, map: 'temple' });
+        G.alive = G.fighters.length;
+        G.cam.x = TEMPLE.W / 2; G.cam.y = TEMPLE.W / 2;
+        return;
+    }
     if (id === 'payload') {
         newState('demo', { type: 'payload', count: PAYLOAD.players, map: pick(PAYLOAD_MAPS) });
         G.alive = G.fighters.length;
@@ -10047,7 +10739,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.ghostMode || G.prop || G.payload || G.duel || G.navy) return;
+    if (G.ghostMode || G.prop || G.payload || G.temple || G.duel || G.navy) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -10303,6 +10995,7 @@ function tryAttack(f) {
             if (Math.abs(angleDiff(f.angle, Math.atan2(t.y - f.y, t.x - f.x))) > 0.9) return;
             if (w.crush && t.armor > 0) t.armor = Math.max(0, t.armor - w.crush);  // mace: dents the armor right off
             damage(t, w.damage, f, name);
+            if (w.burn) { t.burnUntil = G.time + w.burn; t.burnBy = f; }
             if (w.knock && !t.car) { const ka = Math.atan2(t.y - f.y, t.x - f.x); t.kx += Math.cos(ka) * w.knock; t.ky += Math.sin(ka) * w.knock; }
             burst(t.x, t.y, 6, '#a3121e', 120, 'blood');
             if (!(t.armor > 0)) bloodSplat(t.x, t.y, f.angle, 0.8);
@@ -10331,6 +11024,16 @@ function tryAttack(f) {
 
     if (!(f.ammo[name] > 0)) {
         if (isHuman(f)) { Sound.empty(); f.lastShot = G.time; }
+        return;
+    }
+    // Trap Trigger: sets off every trap round where you're aiming
+    if (w.trigger) {
+        if (!G.temple) return;
+        f.lastShot = G.time;
+        const I = inputOf(f), tx = isHuman(f) && I ? I.world().x : f.x + Math.cos(f.angle) * 350, ty = isHuman(f) && I ? I.world().y : f.y + Math.sin(f.angle) * 350;
+        const d = Math.min(w.range, Math.hypot(tx - f.x, ty - f.y)), a = Math.atan2(ty - f.y, tx - f.x);
+        triggerTraps(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, 420, f);
+        Sound.tone(500, 0.15, 'square', 0.08 * Sound.volAt(f.x, f.y), 250);
         return;
     }
     // (a bot with the Energy Gun charges it up for a moment, then lets go)
@@ -10371,7 +11074,7 @@ function tryAttack(f) {
         let bx = w.rocket ? mx : f.x + ca * f.r, by = w.rocket ? my : f.y + sa * f.r;
         // (two pistols: the shots come from each hand in turn)
         if (w.dual) { f.dualSide = -(f.dualSide || 1); bx += -sa * 10 * f.dualSide; by += ca * 10 * f.dualSide; }
-        G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive, spark: !!w.spark, guided: !!w.guided, ball: w.ball ? { r: w.ball, glow: '30,70,255', core: '#8fb0ff' } : null, bolt: !!w.bolt });
+        G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive, spark: !!w.spark, guided: !!w.guided, dart: !!w.dart, poison: w.poison || 0, ball: w.ball ? { r: w.ball, glow: '30,70,255', core: '#8fb0ff' } : null, bolt: !!w.bolt });
     }
     if (inView(mx, my, 100) && w.bolt) { for (let k = 0; k < 2; k++) { const a2 = f.angle + rand(-0.9, 0.9); G.particles.push({ type: 'bolt', x: mx, y: my, x2: mx + Math.cos(a2) * rand(12, 24), y2: my + Math.sin(a2) * rand(12, 24), vx: 0, vy: 0, life: 0.08, max: 0.08, size: 1.5, seed: Math.random() }); } }
     else if (inView(mx, my, 100) && !w.string) {
@@ -10807,7 +11510,8 @@ function damage(t, amount, attacker, weapon) {
     if (G.duel && t.duel) { duelHit(t, attacker, weapon); return; }
     if (t.car && !t.car.dead) return;
     if (G.time < (t.protectUntil || 0)) return;  // just respawned
-    if (G.payload && inSafe(t, t.team)) return;  // (nobody can hurt you in your own safe zone)
+    if (G.payload && inSafe(t, t.team)) return;
+    if (G.temple && inCamp(t, t.team)) return;  // (nobody can hurt you at your own camp)  // (nobody can hurt you in your own safe zone)
     if (t.downed) { t.downHp -= amount * (G.war && attacker && attacker !== t ? closeGameMul(attacker.team, t.team) : 1); t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
     let dmg = amount;
     if (G.war && attacker && attacker !== t) dmg *= closeGameMul(attacker.team, t.team);
@@ -10894,7 +11598,7 @@ function killFighter(t, killer, weapon) {
 
     // (in the menu's background battle people fall as bodies; in a real game they're just gone, no effect)
     if (!t.escaped && !t.vaporized && G.mode === 'demo') addCorpse(t);
-    if (!G.payload) dropDeathWeapons(t);  // (Payload: guns come from the racks)
+    if (!G.payload && !G.temple) dropDeathWeapons(t);  // (Payload: guns come from the racks)
     if (G.mode === 'demo' && inView(t.x, t.y, 100)) {
         burst(t.x, t.y, 22, t.color, 260, 'blood');
         burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
@@ -10905,6 +11609,7 @@ function killFighter(t, killer, weapon) {
 
     if (G.war) { warDeath(t, killer, weapon); return; }
     if (G.payload) { payloadDeath(t, killer); return; }
+    if (G.temple) { templeDeath(t, killer); return; }
     if (t.isPlayer && G.result) return;
     if (t.isPlayer) {
         G.result = { won: false, place: G.escape ? G.sides.a + G.escaped : G.alive + 1, sub: G.escape ? `The army got you. ${G.escaped} of ${ESCAPE.people} people escaped.` : G.bossFight && G.bossF && !G.bossF.dead ? `The boss still has ${Math.ceil(G.bossF.hp / G.bossF.maxHp * 100)}% of his health left.` : null, killer: killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null) };
@@ -11252,7 +11957,7 @@ function updatePlayer(p, dt) {
     }
     // (the jet pack makes you faster)
     if (G.duel) p.duelSneak = !!p.scoped || I.keys.has('ShiftLeft') || I.keys.has('ShiftRight');
-    const sp = CONFIG.PLAYER_SPEED * (p.zombie ? 1.08 : 1) * (p.perk === 'jet' ? 1.35 : 1) * (p.ghost ? GHOST.speed : 1) * (G.duel && p.duelSneak ? DUEL.sneak : 1);
+    const sp = CONFIG.PLAYER_SPEED * (p.slowK || 1) * (p.zombie ? 1.08 : 1) * (p.perk === 'jet' ? 1.35 : 1) * (p.ghost ? GHOST.speed : 1) * (G.duel && p.duelSneak ? DUEL.sneak : 1);
     if (mx || my) p.moveHeading = Math.atan2(my, mx);
     p.vx = (mx / len) * sp;
     p.vy = (my / len) * sp;
@@ -11477,6 +12182,7 @@ function botThink(b) {
         return;
     }
     if (G.payload && payloadBotPlan(b)) return;
+    if (G.temple && templeBotPlan(b)) return;
     if (outside) {
         b.mode = 'zone';
         b.goal = goal;
@@ -11609,6 +12315,7 @@ function chooseBotWeapon(b, d) {
 // Next waypoint toward (gx, gy): bots use doorways to get into and out of buildings
 function routeTo(b, gx, gy) {
     if (G.world.maze) return mazeRoute(b, gx, gy);
+    if (G.world.temple) { const r = templeRoute(b, gx, gy); if (r) return r; }
     // Up on a deck: straight there if it's up here too, otherwise to the nearest stairs down
     if (b.up) return onDeck(b.up, { x: gx, y: gy }) ? deckWaypoint(b.up, b, { x: gx, y: gy }) : deckWaypoint(b.up, b, b.up.stairs.reduce((p, s) => (dist(b, s.t) < dist(b, p) ? s.t : p), b.up.stairs[0].t));
     // Following a planned route round the walls
@@ -11775,7 +12482,7 @@ function updateBot(b, dt) {
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
     if (G.duel && b.duel && duelBotMove(b, dt)) return;
-    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.duelSneak ? 0.6 : 1) * (b.zombie ? ZOMBIE.speed : 1) * (b.ghost ? GHOST.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1), faceMove = true;
+    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.slowK || 1) * (b.duelSneak ? 0.6 : 1) * (b.zombie ? ZOMBIE.speed : 1) * (b.ghost ? GHOST.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1), faceMove = true;
 
     switch (b.mode) {
         case 'fight': {
@@ -11785,7 +12492,10 @@ function updateBot(b, dt) {
             const ax = (t.x - b.x) / d, ay = (t.y - b.y) / d;
             const w = WEAPONS[held(b)];
             const pref = w.melee ? 0 : Math.min(w.range * 0.55, 380);
-            if (G.payload && b.team === 0 && !isHuman(b)) {
+            if (G.temple && G.temple.idol.carrier === b) {
+                // (carrying the idol: keep running for home, shooting on the way)
+                const c = templeCamp(b.team), wp = routeTo(b, c.x, c.y); dx = wp.x - b.x; dy = wp.y - b.y;
+            } else if (G.payload && b.team === 0 && !isHuman(b)) {
                 // (Payload: Blue keeps to the platform and shoots from it; chasing Red down is Red's job, not theirs)
                 const q = payloadSpotFor(b), dq = Math.hypot(q.x - b.x, q.y - b.y);
                 if (dq > 30) { const wp = dq > 160 ? routeTo(b, q.x, q.y) : q; dx = wp.x - b.x; dy = wp.y - b.y; }
@@ -16834,6 +17544,7 @@ function updateBullets(dt) {
                 const mul = !head ? 1 : hit.zombie ? REALISM.zombieHeadMul : hit.soldier && !hit.boss ? REALISM.helmetMul : REALISM.headMul;
                 const armored = hit.armor > 0;
                 damage(hit, b.dmg * mul, b.owner, b.weapon);
+                if (b.poison) { hit.poisonUntil = G.time + (b.poison > 100 ? b.poison : 3000); hit.poisonBy = b.owner; }
                 if (!b.bolt) burst(b.x, b.y, b.heavy ? 14 : 6, armored ? '#8fd8ff' : '#a3121e', 200, 'blood');
                 if (!armored) bloodSplat(hit.x + b.vx / speed * hit.r * 0.6, hit.y + b.vy / speed * hit.r * 0.6, Math.atan2(b.vy, b.vx), b.heavy ? 1.5 : 1);
                 if (head && b.owner && b.owner.isPlayer && !hit.dead && G.time - (hit.headAt || -1e9) > 700) { hit.headAt = G.time; addFloat(hit.x, hit.y - 46, 'HEADSHOT', '#ffd166', true); Sound.tone(1500, 0.05, 'square', 0.08); }
@@ -16885,6 +17596,7 @@ function update(dt) {
     if (G.ghostMode) updateGhost(dt);
     if (G.prop) updateProp(dt);
     if (G.payload) updatePayload(dt);
+    if (G.temple) updateTemple(dt);
     if (G.duel) updateDuel(dt);
     if (G.world.maze && G.escape && G.mode === 'playing') updateMazeFog();
     if (G.survival) { if (!G.frozen && !G.world.floor) updateAnimals(dt); updateCountdown(); }
@@ -17045,6 +17757,7 @@ function render() {
     if (G.chase) drawChaseGround(L, T, R, B, now);
     else if (G.navy) drawSea(L, T, R, B, now);
     else if (G.payload) drawPayloadGround(L, T, R, B);
+    else if (G.world.temple) drawTempleGround(L, T, R, B);
     else if (G.world.floor) drawFloorBase(L, T, R, B);
     else if (G.world.city) drawCity(L, T, R, B);
     else {
@@ -17159,6 +17872,7 @@ function render() {
     if (G.chase) { drawChaseLights(); drawChaseScans(now); }
     if (G.prop) drawPropDecoys(L, T, R, B);
     if (G.world.payload) drawPayloadProps(now);
+    if (G.world.temple) drawTempleProps(now);
     // Fighters
     const visible = [];
     const deckOf = f => (f && f.room && f.ship ? f.ship : null), myDeck = G.player ? G.player.room || null : null, myShip = deckOf(G.player);
@@ -17265,6 +17979,7 @@ function render() {
     }
     if (G.prop) drawPropBlindfold();
     if (G.payload) drawPayloadOverlay();
+    if (G.temple) drawTempleOverlay();
     if (G.whiteout > 0.01) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, G.whiteout * 1.6)})`; ctx.fillRect(0, 0, viewW, viewH); }
     if (G.flash > 0.01) {
         ctx.fillStyle = `rgba(${G.flashColor},${G.flash * 0.6})`;
@@ -18369,6 +19084,23 @@ function drawFighter(f) {
         ctx.fillStyle = '#c9a24a'; ctx.fillRect(tip - 3, y - 3, 3, 6);
         ctx.fillStyle = '#dfe4ec'; ctx.beginPath(); ctx.moveTo(tip, y - 5.5); ctx.lineTo(tip + 16, y); ctx.lineTo(tip, y + 5.5); ctx.closePath(); ctx.fill();
         hands = [[r * 0.25 + ext, y], [r * 0.95 + ext, y]];
+    } else if (w.whip) {
+        // A coiled whip that cracks out on a swing
+        const ext = Math.sin(f.punch * Math.PI), L2 = 18 + ext * (w.range - 10);
+        ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(r * 0.8, 6);
+        if (ext > 0.05) ctx.quadraticCurveTo(r + L2 * 0.5, 6 + Math.sin(G.time / 40) * 14 * (1 - ext), r + L2, 0); else { ctx.arc(r * 0.9, 12, 8, 0, TAU); }
+        ctx.stroke();
+        ctx.fillStyle = '#3a2614'; ctx.fillRect(r * 0.5, 3, 12, 6);
+        hands = [[r * 0.75, 6], [r * 0.45, -r * 0.7]];
+    } else if (w.torch) {
+        // A wooden torch with a flickering flame on the end
+        const ext = Math.sin(f.punch * Math.PI) * 14, tx2 = r * 0.6 + w.len + ext;
+        ctx.fillStyle = '#6a4424'; ctx.fillRect(r * 0.6 + ext, 2, w.len, 6);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = `rgba(255,140,40,${0.55 + Math.random() * 0.25})`; ctx.beginPath(); ctx.arc(tx2 + 4, 5, 11 + Math.random() * 3, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,230,120,0.9)'; ctx.beginPath(); ctx.arc(tx2 + 4, 5, 5, 0, TAU); ctx.fill();
+        ctx.restore();
+        hands = [[r * 0.7 + ext, 5], [r * 0.45, -r * 0.7]];
     } else if (w.melee) {
         const ext = Math.sin(f.punch * Math.PI) * 18;
         hands = [[r * 0.72 + (f.punchHand === 0 ? ext : 0), -r * 0.68], [r * 0.72 + (f.punchHand === 1 ? ext : 0), r * 0.68]];
@@ -18560,6 +19292,16 @@ function drawBullets(L, T, R, B) {
             ctx.fillStyle = `rgba(${gl},0.4)`; ctx.beginPath(); ctx.arc(b.x, b.y, r * 1.9, 0, TAU); ctx.fill();
             ctx.fillStyle = b.ball.core || '#8fb0ff'; ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, TAU); ctx.fill();
             ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(b.x - r * 0.3, b.y - r * 0.3, r * 0.35, 0, TAU); ctx.fill();
+            continue;
+        }
+        if (b.dart) {
+            // A little dart with a tuft on the end
+            const a = Math.atan2(b.vy, b.vx);
+            ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
+            ctx.strokeStyle = '#3a2a18'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(0, 0); ctx.stroke();
+            ctx.fillStyle = '#6fbf4a'; ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(-3, -2.5); ctx.lineTo(-3, 2.5); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#e8d8b0'; ctx.beginPath(); ctx.arc(-17, 0, 3, 0, TAU); ctx.fill();
+            ctx.restore();
             continue;
         }
         if (b.bolt) {
@@ -18924,6 +19666,9 @@ function updateHUD() {
     } else if (G.war) {
         setHTML(hud.teamScore, 'teams', G.teamAlive.map((n, t) =>
             `<div class="ts${t === p.team ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${n}</b><span>${t === p.team ? 'Your team' : TEAMS[t].name}</span></div>`).join('<em>vs</em>'));
+    } else if (G.temple) {
+        const sc = G.temple.score, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
+        setHTML(hud.teamScore, 'teams', chip(sc[0], TEMPLE.blue, `Blue (first to ${TEMPLE.wins})`, p.team === 0) + '<em>vs</em>' + chip(sc[1], TEMPLE.red, 'Red', p.team === 1));
     } else if (G.payload) {
         const P = G.payload, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
         setHTML(hud.teamScore, 'teams', chip(P.pushers, PAYLOAD.blue, 'Blue on the platform', p.team === 0) + '<em>vs</em>' + chip(P.red || 0, PAYLOAD.red, 'Red blocking', p.team === 1));
@@ -18947,6 +19692,7 @@ function updateHUD() {
     else if (G.navy) zt = navyStatus(p);
     else if (G.prop) zt = propStatus(p);
     else if (G.payload) zt = payloadStatus(p);
+    else if (G.temple) zt = templeStatus(p);
     else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
@@ -19288,6 +20034,7 @@ const MODES = [
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'escape', name: 'ESCAPE', desc: 'Lead your group past the soldiers through the city, a deadly maze or over the mountains, and get everyone to the helicopter.' },
+    { id: 'temple', name: 'TREASURE TEMPLE', desc: 'Two teams race through a jungle and into a giant temple maze full of traps and secret passages, to grab the golden idol and carry it home.' },
     { id: 'payload', name: 'PAYLOAD', desc: 'Blue rides a shielded platform along a winding track, up and down hills, from their base to the middle of Red\'s. It only moves with Blue on it. Red tries to stop it. Launch site, canyon or forest.' },
     { id: 'prop', name: 'PROP HUNT', desc: 'The hiders turn into barrels, crates, bushes and more, hidden among hundreds of real ones. The seekers have three minutes to find them. Anyone found joins the seekers.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
@@ -19314,11 +20061,12 @@ function setMenuMode(i, dir) {
     $('mode-desc').textContent = m.desc;
     $('settings-navy').classList.toggle('hidden', m.id !== 'navy');
     $('solo-friends').classList.toggle('hidden', !soloMap(m.id));
-    $('settings-ffa').classList.toggle('hidden', m.id === 'payload' || m.id === 'navy' || m.id === 'chase' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-ffa').classList.toggle('hidden', m.id === 'temple' || m.id === 'payload' || m.id === 'navy' || m.id === 'chase' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
     $('settings-prop').classList.toggle('hidden', m.id !== 'prop');
     $('settings-payload').classList.toggle('hidden', m.id !== 'payload');
+    $('settings-temple').classList.toggle('hidden', m.id !== 'temple');
     document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'escape' ? 'Soldiers' : m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : m.id === 'prop' ? `Other players (up to ${PROP.maxPlayers - 1})` : m.id === 'payload' ? `Other players (up to ${PAYLOAD.maxPlayers - 1})` : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
     // Revolution is always two sides
@@ -19683,7 +20431,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'prop' || id === 'payload' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'prop' || id === 'payload' || id === 'temple' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -19699,6 +20447,7 @@ const BRIEF = {
     boss: [['🎯', '<b>Goal:</b> your whole team against one giant boss. Bring him down.'], ['🔫', 'He sprays a minigun, then fires rockets, and never runs out of ammo.'], ['💥', 'Get too close and he stomps: it hurts and throws you back.'], ['🪖', 'At half health he calls in soldiers and gets angry and faster. At a quarter, more come.'], ['📦', 'Everyone starts armed. Ammo and medkits are lying around the arena.']],
     escape: [['🎯', '<b>Goal:</b> get your group to the helicopter.'], ['🪖', 'Soldiers guard the way. Fight through them or sneak past.'], ['👥', 'Your group follows you. The more of them make it, the better.'], ['🗺️', 'City: climb the HQ tower. Maze: your map only shows where you\'ve been. Mountains: climb to the summit.']]
 };
+BRIEF.temple = [['🗿', '<b>5 against 5.</b> Grab the golden idol from the altar in the middle of the temple maze and carry it back to your camp. First team to bring it home 3 times wins. Whoever carries it is slower.'], ['⚠️', 'Watch out for spikes, rolling boulders, collapsing floors, swinging axes, dart walls, spider webs, quicksand and snakes. Press <b>F</b> at a cracked wall to open a secret shortcut, at a stone hatch to use a hidden tunnel, or at an X to dig up a chest.']];
 BRIEF.payload = [['🛤️', '<b>5 against 5.</b> Blue pushes the platform along the track from their base to the target in the middle of Red\'s base. Red stops them before the time runs out.'], ['🧍', 'The platform only moves with Blue standing on it, faster with more of them. It stops while Red is next to it, and rolls back if Blue leaves it alone too long.'], ['🛡️', 'A shield across its front stops shots coming at it from ahead.'], ['⛰️', 'The track winds and goes up and down hills: slower uphill, faster downhill. Two checkpoints each add a minute.'], ['🔫', 'Everyone starts with <b>dual shock pistols</b>. Grab a machine gun, energy gun, guided rocket, sniper, shotgun, burst minigun or rifle from the racks in your base and along the track.'], ['⚡', '<b>Energy Gun:</b> hold to charge (on a phone or iPad, hold the aim stick in the middle), let go to fire. <b>Guided Rocket:</b> keep aiming after you fire to steer it.'], ['♻️', 'When you die you come back in your safe zone after 5 seconds. Nobody can hurt you in your own safe zone.']];
 BRIEF.prop = [['📦', '<b>Props:</b> you look like a barrel, crate, bush, rock, cone or the like, with hundreds of real ones all round. Stand beside ones that look like you, and keep still: a prop that moves is no prop.'], ['🔄', '<b>F</b> (or the button) turns you into the closest prop you\'re next to.'], ['🙈', 'The seekers wait blindfolded for 30 seconds while you hide, then have 3 minutes to find everyone.'], ['🔫', '<b>Seekers:</b> shoot anything that looks wrong. Watch for props that move, or that don\'t match the ones round them.'], ['🎵', 'Every so often each prop whistles: listen for it.'], ['🎯', 'A prop who\'s found joins the seekers. Props win if anyone is still hidden when the time runs out.']];
 BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun that never runs out. It only shows for a moment when it shoots or gets hit.'], ['👣', 'It leaves glowing footprints wherever it walks. Follow them.'], ['🔦', 'Pitch dark. Every hunter has a flashlight and a gun.'], ['🎯', 'Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
@@ -19712,7 +20461,7 @@ BRIEF.chase = [['🏃', '<b>Goal:</b> get your squad of 20 all the way to the gi
     ['🤝', 'Your squad follows you. The mountains are a wall: only the river valley gets through them. In the water you slowly drown.']];
 BRIEF.duel = [['🎯', '<b>Goal:</b> first to win 3 rounds. One hit kills, for both of you.'], ['🔭', 'Use the scope to see far. It\'s the only way to spot someone a long way off.'], ['👣', 'Footsteps carry. Walking while scoped (or holding Shift) is much quieter; standing still is silent.'], ['✨', 'If the enemy lines up a shot at you, their scope glints: move! A shot also gives away where it came from, so change position after firing.'], ['🌳', 'Trees and bushes hide you. After 1:30 the circle starts closing, so nobody can hide forever.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { launchpad: 'Launch Site', canyon: 'Canyon', forest: 'Forest', chase: 'Desert, mountains and ocean', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
+const BRIEF_MAP = { temple: 'Jungle Temple', launchpad: 'Launch Site', canyon: 'Canyon', forest: 'Forest', chase: 'Desert, mountains and ocean', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot'], ['🎒', 'Walk over items to pick them up · <b>F</b> swap a gun, get in or out of a vehicle'], ['🔢', '<b>1–5</b> or <b>scroll</b> switch guns'], ['🩹', '<b>Q</b> bandage · <b>E</b> medkit'], ['💣', 'Click a grenade (or <b>T</b>) to hold it, hold the mouse to pull the pin, let go to throw'], ['⏸️', '<b>Esc</b> pause · <b>M</b> mute']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot'], ['🎒', 'Walk over items to pick them up · the <b>button at the bottom</b> swaps a gun or gets in a vehicle'], ['🔢', 'Tap a slot at the top to switch guns'], ['🩹', 'Tap the bandage or medkit on the left to heal'], ['💣', 'Tap a grenade on the right to hold it, pull the right stick back to pull the pin, let go to throw'], ['⏸️', '<b>II</b> pause · <b>⛶</b> full screen']];
@@ -19740,17 +20489,17 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'prop' ? `You: ${propRolePick === 'seeker' ? 'Seeker' : 'Prop'}` : m.id === 'payload' ? `You: ${payloadSidePick === 'red' ? 'Red' : 'Blue'}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'prop' ? `You: ${propRolePick === 'seeker' ? 'Seeker' : 'Prop'}` : m.id === 'payload' ? `You: ${payloadSidePick === 'red' ? 'Red' : 'Blue'}` : m.id === 'temple' ? `You: ${templeSidePick === 'red' ? 'Red' : 'Blue'} team` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'prop' || m.id === 'payload' || m.id === 'chase' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'prop' || m.id === 'payload' || m.id === 'temple' || m.id === 'chase' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'prop' || id === 'payload' || id === 'duel' || id === 'navy' || id === 'chase') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'prop' || id === 'payload' || id === 'temple' || id === 'duel' || id === 'navy' || id === 'chase') openMapSelect(); else openTypeSelect(); }
     else { const map = BRIEF_STAGE.map; quickMatch(() => startGame(map)); }
 });
 $('brief-back').addEventListener('click', () => {
@@ -19758,7 +20507,7 @@ $('brief-back').addEventListener('click', () => {
     // (a mode with only one map never showed the map screen: back to whatever came before it)
     if (BRIEF_STAGE.stage === 'desc') screens.menu.classList.remove('hidden');
     else if (!soloMap(MODES[menuMode].id)) screens.mapsel.classList.remove('hidden');
-    else if (['ghost', 'prop', 'payload', 'navy', 'chase'].includes(MODES[menuMode].id)) openDescription();
+    else if (['ghost', 'prop', 'payload', 'temple', 'navy', 'chase'].includes(MODES[menuMode].id)) openDescription();
     else openTypeSelect();
 });
 
@@ -19769,12 +20518,14 @@ function mapAllowed(id, m) {
     if (id === 'chase') return m === 'chase';
     if (id === 'prop') return m === 'ordinary' || m === 'city' || m === 'rusty';
     if (id === 'payload') return PAYLOAD_MAPS.includes(m);
+    if (id === 'temple') return m === 'temple';
+    if (m === 'temple') return false;
     if (PAYLOAD_MAPS.includes(m)) return false;
     return !(m === 'sea' || m === 'chase' || (id === 'escape' && m === 'ordinary') || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
 // The one map a mode can be played on, if there's only one: then there's nothing to choose
 function soloMap(id) {
-    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'chase', ...PAYLOAD_MAPS].filter(m => mapAllowed(id, m));
+    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'chase', 'temple', ...PAYLOAD_MAPS].filter(m => mapAllowed(id, m));
     return all.length === 1 ? all[0] : null;
 }
 function openMapSelect() {
@@ -19919,7 +20670,7 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
-for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#prop-role', v => { propRolePick = v; }], ['#payload-side', v => { payloadSidePick = v; }]])
+for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#prop-role', v => { propRolePick = v; }], ['#payload-side', v => { payloadSidePick = v; }], ['#temple-side', v => { templeSidePick = v; }]])
     for (const b of document.querySelectorAll(sel + ' button')) b.addEventListener('click', () => {
         set(b.dataset.r);
         for (const o of document.querySelectorAll(sel + ' button')) o.classList.toggle('on', o === b);
@@ -19950,6 +20701,7 @@ function startGame(map = lastMap) {
     if (id === 'chase') map = 'chase'; else if (map === 'chase') map = 'ordinary';
     if (id === 'prop' && !mapAllowed('prop', map)) map = 'ordinary';
     if (id === 'payload' && !PAYLOAD_MAPS.includes(map)) map = 'forest';
+    if (id === 'temple') map = 'temple'; else if (map === 'temple') map = 'ordinary';
     if (id !== 'payload' && PAYLOAD_MAPS.includes(map)) map = 'ordinary';
     lastMap = map;
     const setup = id === 'navy' ? (navyFleet === 'ffa' ? { type: id, teams: navyFfaCount(), size: NAVY_FFA.crew, ships: 1, crew: NAVY_FFA.crew, role: navyRolePick, fleet: 'ffa' } : navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
@@ -19958,11 +20710,12 @@ function startGame(map = lastMap) {
         : id === 'chase' ? { type: id, count: 0 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
         : id === 'payload' ? { type: id, count: PAYLOAD.players - 1, side: payloadSidePick }
+        : id === 'temple' ? { type: id, count: TEMPLE.players - 1, side: templeSidePick }
         : id === 'prop' ? { type: id, count: Math.max(1, Math.min(PROP.maxPlayers - 1, sliderToCount(+slider.value))), role: propRolePick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : { type: id, count: id === 'escape' ? Math.min(sliderToCount(+slider.value), MAX_PLAYERS - ESCAPE.people) : sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'ghost' || id === 'prop' || id === 'payload' || id === 'duel' || id === 'navy' || id === 'chase' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'ghost' || id === 'prop' || id === 'payload' || id === 'temple' || id === 'duel' || id === 'navy' || id === 'chase' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     screens.mapsel.classList.add('hidden');
@@ -19975,11 +20728,11 @@ function startGame(map = lastMap) {
     document.body.classList.add('playing');
     canvas.classList.remove('dead');
     mouse.down = false;
-    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.prop && !G.payload);
+    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.prop && !G.payload && !G.temple);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.prop || !!G.payload);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.prop || !!G.payload || !!G.temple);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
@@ -19989,6 +20742,7 @@ function startGame(map = lastMap) {
     else if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
     else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
+    else if (G.temple) showBanner('TREASURE TEMPLE', true, 'Grab the golden idol from the middle of the temple and carry it back to your camp!');
     else if (G.payload) showBanner('PAYLOAD', true, G.player.team === 0 ? 'You\'re Blue: stand on the platform to push it to the middle of Red\'s base!' : 'You\'re Red: stop Blue getting the platform into your base!');
     else if (G.prop) showBanner('PROP HUNT', true, G.player.prop ? 'You\'re a prop! Hide next to props that look like you (F or the button changes you), then keep still.' : `You're a seeker. Wait while the props hide, then find them. Watch for anything that moves!`);
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
@@ -20821,6 +21575,7 @@ function touchFrame() {
         if (NET.viewing) return 'USE';
         const p = G && G.player;
         if (!p || G.mode !== 'playing' || p.dead || p.zombie) return '';
+        if (G.temple) { const t = templeUseLabel(p); if (t) return t; }
         if (G.prop && p.prop) { const d = propNear(p); return d ? `BECOME ${PROP_KINDS[d.kind].name.toUpperCase()}` : 'CHANGE PROP'; }
         if (p.car) return `GET OUT`;
         if (G.navy && navyLabel(p)) return navyLabel(p).toUpperCase();
