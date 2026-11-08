@@ -7123,7 +7123,7 @@ const CHASE = {
     seaPts: [[1550, 2800], [2600, 2300], [4500, 2000], [6500, 1800], [8650, 1600]],
     guns: ['Assault Rifle', 'Assault Rifle', 'Mac10', 'Shotgun', 'Machine Gun', 'Sniper', 'Vector'],
     desertSquads: 16, bankSquads: 10, helis: 3, riverShips: 5, seaShips: 2, shipCrew: 8,
-    reinforce: [70000, 100000], heliSight: 520, desert: { dmg: 1.7, reinforce: [25000, 40000], waves: 2, sight: 720, helis: 10 }, shipHull: 36000, art: 12, soldierDmg: 0.45, alertR: 2600
+    reinforce: [70000, 100000], heliSight: 520, blimp: { count: 7, max: 9, speed: 75, scan: 760, hp: 2600, drop: 22000, len: 640, wid: 210 }, desert: { dmg: 1.7, reinforce: [25000, 40000], waves: 2, sight: 720, helis: 10 }, shipHull: 36000, art: 12, soldierDmg: 0.45, alertR: 2600
 };
 // Everything is laid out on the normal map's 12000 and then stretched 3 times over (the river and the banks stay
 // the same width; there's just three times as far to go)
@@ -7263,6 +7263,14 @@ function generateChase() {
         if (C.ruins.some(r => Math.abs(r.x - x) < (r.w + w) / 2 + 160 && Math.abs(r.y - y) < (r.h + h) / 2 + 160)) return false;
         const col = pick(['#9b8f7e', '#8a7f70', '#a39580', '#857868', '#9a8a72']), t = big ? 24 : 18, x0 = x - w / 2, y0 = y - h / 2;
         C.ruins.push({ x, y, w, h, col });
+        // what's left of the roof: slabs over most of it, with holes where it's fallen in
+        const roofCol = pick(['#5b4c3e', '#6a5a48', '#4e4a46', '#5e5650', '#6b5040']), tiles = [], ts = big ? 110 : 80, roofKeep = rand(0.55, 0.85);
+        for (let ty = -h / 2; ty < h / 2 - 10; ty += ts) for (let tx = -w / 2; tx < w / 2 - 10; tx += ts) {
+            if (Math.random() > roofKeep) continue;
+            const tw = Math.min(ts, w / 2 - tx), th = Math.min(ts, h / 2 - ty);
+            tiles.push({ x: tx, y: ty, w: tw, h: th, c: shade(roofCol, rand(-0.12, 0.1)), crack: Math.random() < 0.3 });
+        }
+        C.roofs.push({ x, y, w, h, tiles, a: 1 });
         const side = (ax, ay, bx, by, keep) => {
             const len = Math.hypot(bx - ax, by - ay), n = Math.max(2, Math.round(len / 90));
             for (let k = 0; k < n; k++) {
@@ -7294,8 +7302,40 @@ function generateChase() {
         }
         C.rockFields.push({ x: cx, y: cy, r: R });
     };
-    C.rockFields = [];
+    C.rockFields = []; C.roofs = []; C.caves = [];
+    // A cave: a ring of huge boulders with a way in, and a rock roof over the hollow inside. Nobody sees you in there.
+    const cave = (cx, cy, R) => {
+        const gap = rand(0, TAU), n = Math.round(R / 30);
+        for (let k = 0; k < n; k++) {
+            const a = (k / n) * TAU;
+            if (Math.abs(angleDiff(a, gap)) < 0.45) continue;  // (the entrance)
+            const r = rand(70, 110), x = cx + Math.cos(a) * (R + r * 0.55), y = cy + Math.sin(a) * (R + r * 0.55);
+            addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU) });
+        }
+        C.caves.push({ x: cx, y: cy, r: R, gap });
+        C.roofs.push({ x: cx, y: cy, r: R + 60, cave: true, gap, a: 1, seed: randInt(1, 1e9) });
+        lootSpots.push({ x: cx + rand(-R / 3, R / 3), y: cy + rand(-R / 3, R / 3), box: true });
+    };
     const spot = () => ({ x: rand(800, W - 800), y: rand(chaseMount(0) + 800, W - 800) });
+    // giant boulder areas: a maze of huge rocks with caves to hide in
+    C.bigRocks = [];
+    for (let i = 0, tries = 0; i < 8 && tries < 300; tries++) {
+        const c = spot(), R = rand(1700, 2500);
+        if (!desertOk(c.x, c.y, R * 0.6) || C.ruins.some(r => Math.hypot(r.x - c.x, r.y - c.y) < R + 300) || C.rockFields.some(q => Math.hypot(q.x - c.x, q.y - c.y) < q.r + R + 600)) continue;
+        const caves = [];
+        for (let k = 0, t2 = 0; k < randInt(3, 5) && t2 < 40; t2++) {
+            const a = rand(0, TAU), d = rand(0, R * 0.7), x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d, cr = rand(200, 300);
+            if (!desertOk(x, y, cr + 150) || caves.some(q => Math.hypot(q.x - x, q.y - y) < q.r + cr + 450)) continue;
+            cave(x, y, cr); caves.push({ x, y, r: cr }); k++;
+        }
+        for (let k = Math.round(R / 7); k > 0; k--) {
+            const a = rand(0, TAU), d = Math.sqrt(Math.random()) * R, x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d, r = Math.random() < 0.35 ? rand(110, 210) : rand(40, 100);
+            if (!desertOk(x, y, r) || caves.some(q => Math.hypot(q.x - x, q.y - y) < q.r + r + 160) || !clearAt(x, y, r + 30)) continue;
+            addCircle({ type: 'rock', x, y, r, spr: randInt(0, 5), rot: rand(0, TAU) });
+        }
+        C.rockFields.push({ x: c.x, y: c.y, r: R }); C.bigRocks.push({ x: c.x, y: c.y, r: R });
+        i++;
+    }
     // ruined towns: a cluster of buildings, big and small, round what was once a crossroads
     for (let i = 0, tries = 0; i < 16 && tries < 400; tries++) {
         const c = spot();
@@ -7397,6 +7437,7 @@ function generateChase() {
     for (let i = 0; i < 1500; i++) { const x = rnd() * W, y = CHASE.mountY + rnd() * (W - CHASE.mountY), w = 150 + rnd() * 300; g.beginPath(); g.moveTo(x - w, y); g.quadraticCurveTo(x, y - 50, x + w, y); g.stroke(); }
     for (const r of C.ruins) { g.fillStyle = shade(r.col, 0.28); g.fillRect(r.x - r.w / 2, r.y - r.h / 2, r.w, r.h); g.fillStyle = 'rgba(40,30,20,0.18)'; for (let k = 0; k < 6; k++) { g.beginPath(); g.arc(r.x + (rnd() - 0.5) * r.w, r.y + (rnd() - 0.5) * r.h, 20 + rnd() * 50, 0, TAU); g.fill(); } }
     for (const q of C.oases) { g.fillStyle = '#9aa35a'; g.beginPath(); g.arc(q.x, q.y, q.r * 1.1, 0, TAU); g.fill(); g.fillStyle = '#6f9a46'; g.beginPath(); g.arc(q.x, q.y, q.r * 0.85, 0, TAU); g.fill(); for (let k = 0; k < 8; k++) { g.fillStyle = 'rgba(80,130,50,0.6)'; g.beginPath(); g.arc(q.x + (rnd() - 0.5) * q.r * 1.4, q.y + (rnd() - 0.5) * q.r * 1.4, q.r * (0.2 + rnd() * 0.3), 0, TAU); g.fill(); } }
+    for (const q of C.caves) { g.fillStyle = '#3a332c'; g.beginPath(); g.arc(q.x, q.y, q.r + 40, 0, TAU); g.fill(); g.fillStyle = '#4a4238'; g.beginPath(); g.arc(q.x, q.y, q.r, 0, TAU); g.fill(); }
     for (const q of C.rockFields) { g.fillStyle = 'rgba(120,96,66,0.22)'; g.beginPath(); g.arc(q.x, q.y, q.r * 1.15, 0, TAU); g.fill(); }
     g.fillStyle = '#8f8d87'; g.fillRect(F.x0, F.y0, F.x1 - F.x0, F.y1 - F.y0);
     g.strokeStyle = 'rgba(255,214,90,0.5)'; g.lineWidth = 12; g.setLineDash([60, 50]);
@@ -7504,7 +7545,7 @@ function chaseSoldierShip(x, y, a, home) {
 function setupChase() {
     const Cw = G.world.chase, F = CHASE.fac;
     G.navy = { ships: [], wrecks: [], islands: G.world.islands, nameAt: randInt(0, NAVY.names.length - 1), nextCheck: 3000, over: false, n: 1, crew: 0, wake: 0, mini: true, chase: true, out: [] };
-    G.chase = { stage: 0, seen: null, alertAt: -1e9, nextReinf: 80000, helis: [], ship: null, boardedAt: 0, arrived: false };
+    G.chase = { stage: 0, seen: null, alertAt: -1e9, nextReinf: 80000, helis: [], blimps: [], ship: null, boardedAt: 0, arrived: false };
     G.extract = { x: CHASE.airship.x, y: CHASE.airship.y + 270 };
     G.world.cars = [];
     // The squad: you and 19 others, tough (450 health each) and armed
@@ -7563,7 +7604,8 @@ function setupChase() {
         spawnSquad(c, size, n, false); n += size;
     }
     // Helicopters searching the desert
-    for (let k = 0; k < CHASE.helis; k++) chaseAddHeli(rand(CONFIG.WORLD_SIZE * 0.2, CONFIG.WORLD_SIZE * 0.9), rand(chaseMount(0) + 800, CONFIG.WORLD_SIZE - 1000));
+    // Giant airships drift slowly over the desert, sweeping the ground with their scanners
+    for (let k = 0; k < CHASE.blimp.count; k++) chaseAddBlimp(rand(CONFIG.WORLD_SIZE * 0.2, CONFIG.WORLD_SIZE * 0.92), rand(chaseMount(0) + 1500, CONFIG.WORLD_SIZE - 1500));
     // The boat, waiting at the pier, and the soldier boats on the river and out at sea
     const d = Cw.dock, ss = addShip('mini', 0, d.x, d.y, d.a);
     ss.hp = ss.maxHp = CHASE.shipHull; ss.name = 'Runaway'; ss.chase = 'squad'; ss.speed = 0; ss.throttle = 0;
@@ -7701,7 +7743,147 @@ function chaseDisembark(b) {
 }
 
 // --- The helicopters: sweep the ground near where you were last seen, light you up, and open fire ---
-const chaseCovered = f => G.world.chase.ruins.some(r => Math.abs(f.x - r.x) < r.w / 2 && Math.abs(f.y - r.y) < r.h / 2);
+// --- The airships: giant, slow, and hard to miss. Their scanners sweep the ground below; walk into one in the open
+// and it locks on, follows you, sounds the alarm and drops soldiers on you. Hide in a building or a cave. You can
+// shoot one down, but it takes a lot.
+function chaseAddBlimp(x, y) {
+    const B = CHASE.blimp;
+    G.chase.blimps.push({ x, y, a: rand(0, TAU), goal: null, goalAt: 0, hp: B.hp, maxHp: B.hp, sweep: rand(0, TAU), lock: null, lockAt: 0, dropAt: 0, hitAt: -1e9, prop: 0 });
+}
+function chaseBlimpTick(dt) {
+    const Ch = G.chase, B = CHASE.blimp, W = CONFIG.WORLD_SIZE, L = chaseLeader();
+    for (const z of Ch.blimps) {
+        z.sweep += dt * 1.4; z.prop += dt * 20;
+        if (G.time >= (z.thinkAt || 0)) {
+            z.thinkAt = G.time + 400;
+            // anyone of the squad out in the open under the scanner?
+            let prey = null, bd = B.scan;
+            for (const f of G.fighters) {
+                if (f.dead || f.soldier || f.team !== 0 || f.car || f.ship) continue;
+                const d = Math.hypot(f.x - z.x, f.y - z.y);
+                if (d < bd && !chaseCovered(f)) { bd = d; prey = f; }
+            }
+            if (prey && !z.lock) { chaseAlert(true); z.dropAt = Math.max(z.dropAt, G.time + 4000); }
+            z.lock = prey;
+            if (prey) { Ch.seen = { x: prey.x, y: prey.y, t: G.time }; z.lockAt = G.time; }
+            if (!prey && (!z.goal || Math.hypot(z.goal.x - z.x, z.goal.y - z.y) < 300 || G.time > z.goalAt)) {
+                const seen = Ch.seen && G.time - Ch.seen.t < 30000 ? Ch.seen : null;
+                const base = seen || (L && Ch.stage > 0 ? { x: L.x + rand(-3500, 3500), y: L.y + rand(-3500, 3500) } : { x: rand(W * 0.3, W * 0.9), y: rand(chaseMount(0) + 1200, W - 1200) });
+                z.goal = { x: clamp(base.x + rand(-900, 900), 600, W - 600), y: clamp(base.y + rand(-900, 900), chaseMount(0) + 600, W - 600) };
+                z.goalAt = G.time + rand(15000, 25000);
+            }
+            // while it has you, soldiers come down on ropes nearby
+            if (z.lock && G.time >= z.dropAt && G.mode === 'playing') {
+                z.dropAt = G.time + B.drop;
+                const a = rand(0, TAU), c = spawnNear({ x: z.lock.x + Math.cos(a) * 700, y: z.lock.y + Math.sin(a) * 700 }, 250, 30, true);
+                if (!chaseBad(c.x, c.y)) { spawnSquad(c, randInt(4, 6), 0, true); burst(c.x, c.y, 20, '#d8cfc0', 200); }
+            }
+        }
+        const g = z.lock && !z.lock.dead ? z.lock : z.goal;
+        if (g) {
+            const want = Math.atan2(g.y - z.y, g.x - z.x), d = Math.hypot(g.x - z.x, g.y - z.y);
+            z.a += clamp(angleDiff(z.a, want), -0.35 * dt, 0.35 * dt);
+            const sp = B.speed * (d < 200 ? d / 200 : 1) * (z.lock ? 1.3 : 1);
+            z.x += Math.cos(z.a) * sp * dt; z.y += Math.sin(z.a) * sp * dt;
+        }
+    }
+}
+// Shots that hit an airship (it's big, and low enough to hit from the ground)
+function chaseBlimpHit(b) {
+    if (!b.owner || b.owner.team !== 0) return false;
+    const B = CHASE.blimp;
+    for (const z of G.chase.blimps) {
+        const dx = b.x - z.x, dy = b.y - (z.y - 60), lx = dx * Math.cos(z.a) + dy * Math.sin(z.a), ly = -dx * Math.sin(z.a) + dy * Math.cos(z.a);
+        if ((lx / (B.len / 2)) ** 2 + (ly / (B.wid / 2)) ** 2 > 1) continue;
+        z.hp -= b.dmg * (b.rocket ? 3 : 1); z.hitAt = G.time;
+        if (b.owner.isPlayer) G.hitMarker = 1;
+        burst(b.x, b.y, 4, '#ffe08a', 200, 'glow');
+        if (z.hp <= 0 && !z.down) chaseBlimpDown(z, b.owner);
+        return true;
+    }
+    return false;
+}
+function chaseBlimpDown(z, by) {
+    z.down = true;
+    G.chase.blimps = G.chase.blimps.filter(q => q !== z);
+    for (let k = 0; k < 6; k++) { const a = rand(0, TAU), d = rand(0, 250); G.particles.push({ type: 'boom', x: z.x + Math.cos(a) * d, y: z.y + Math.sin(a) * d * 0.5, vx: 0, vy: 0, life: 0.7, max: 0.7, size: rand(110, 200) }); }
+    for (let k = 0; k < 4; k++) addFire(z.x + rand(-250, 250), z.y + rand(-90, 90), 70, 40000);
+    G.shake = Math.max(G.shake, 14); Sound.thud(Sound.volAt(z.x, z.y)); Sound.tone(60, 1.6, 'sawtooth', 0.12 * Sound.volAt(z.x, z.y) + 0.03, 30);
+    if (G.mode === 'playing') showBanner('AIRSHIP DOWN!', false, by && by.isPlayer ? 'You shot it out of the sky!' : 'One less pair of eyes in the sky.');
+}
+// The scanner on the ground: a wide pale circle with a bright beam sweeping round it (red once it has you)
+function drawChaseScans(now) {
+    const B = CHASE.blimp;
+    for (const z of G.chase.blimps) {
+        if (!inView(z.x, z.y, B.scan + 200)) continue;
+        const lit = !!z.lock, R = B.scan;
+        ctx.fillStyle = lit ? 'rgba(255,70,60,0.10)' : 'rgba(150,230,255,0.08)';
+        ctx.beginPath(); ctx.arc(z.x, z.y, R, 0, TAU); ctx.fill();
+        ctx.strokeStyle = lit ? 'rgba(255,90,70,0.55)' : 'rgba(150,230,255,0.4)'; ctx.lineWidth = 6; ctx.setLineDash([40, 30]);
+        ctx.beginPath(); ctx.arc(z.x, z.y, R, z.sweep * 0.3, z.sweep * 0.3 + TAU); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = lit ? 'rgba(255,80,60,0.25)' : 'rgba(170,240,255,0.22)';
+        ctx.beginPath(); ctx.moveTo(z.x, z.y); ctx.arc(z.x, z.y, R, z.sweep, z.sweep + 0.5); ctx.closePath(); ctx.fill();
+        if (lit && z.lock && !z.lock.dead) { ctx.strokeStyle = 'rgba(255,60,50,0.8)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(z.lock.x, z.lock.y, 46 + Math.sin(now * 10) * 6, 0, TAU); ctx.stroke(); }
+    }
+}
+// The airship itself, high above: a huge grey envelope with fins, a gondola, spinning propellers and blinking lights
+function drawChaseBlimps(now) {
+    const B = CHASE.blimp;
+    for (const z of G.chase.blimps) {
+        if (!inView(z.x, z.y, B.len)) continue;
+        ctx.save(); ctx.translate(z.x + 120, z.y + 140); ctx.rotate(z.a);
+        ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.ellipse(0, 0, B.len / 2, B.wid / 2, 0, 0, TAU); ctx.fill(); ctx.restore();
+        ctx.save(); ctx.translate(z.x, z.y - 60); ctx.rotate(z.a);
+        const L2 = B.len / 2, W2 = B.wid / 2;
+        ctx.fillStyle = '#3e4650';
+        for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(-L2 * 0.72, sd * W2 * 0.3); ctx.lineTo(-L2 * 1.06, sd * W2 * 1.15); ctx.lineTo(-L2 * 0.95, sd * W2 * 0.2); ctx.closePath(); ctx.fill(); }
+        const hurt = G.time - z.hitAt < 120;
+        const gr = ctx.createLinearGradient(0, -W2, 0, W2);
+        gr.addColorStop(0, hurt ? '#ffffff' : '#c3cad2'); gr.addColorStop(0.5, '#8e98a3'); gr.addColorStop(1, '#5a636d');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(0, 0, L2, W2, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(40,46,54,0.35)'; ctx.lineWidth = 4;
+        for (let k = -4; k <= 4; k++) { const xx = k * L2 / 5, hh = W2 * Math.sqrt(Math.max(0, 1 - (xx / L2) ** 2)); ctx.beginPath(); ctx.moveTo(xx, -hh); ctx.lineTo(xx, hh); ctx.stroke(); }
+        ctx.fillStyle = '#7a1f22'; ctx.fillRect(-L2 * 0.55, -W2 * 0.12, L2 * 1.1, W2 * 0.24);
+        ctx.fillStyle = '#2e333a'; roundRect(ctx, -70, -30, 170, 60, 14); ctx.fill();
+        ctx.fillStyle = z.lock ? '#ff5a4a' : '#9fe8ff'; for (let k = 0; k < 4; k++) ctx.fillRect(-55 + k * 38, -10, 22, 20);
+        for (const sd of [-1, 1]) { ctx.save(); ctx.translate(-L2 * 0.2, sd * (W2 + 18)); ctx.rotate(z.prop * sd); ctx.fillStyle = 'rgba(40,44,50,0.65)'; ctx.fillRect(-5, -34, 10, 68); ctx.restore(); }
+        const blink = Math.floor(now * 2) % 2 === 0;
+        ctx.fillStyle = blink ? '#ff3b30' : '#5a1a18'; ctx.beginPath(); ctx.arc(L2 * 0.92, 0, 9, 0, TAU); ctx.fill();
+        ctx.fillStyle = blink ? '#5aff7a' : '#1a4a24'; ctx.beginPath(); ctx.arc(-L2 * 0.92, 0, 9, 0, TAU); ctx.fill();
+        ctx.restore();
+        if (z.hp < z.maxHp) { const k = 1 / G.zoom, w = 180 * k, x = z.x - w / 2, y = z.y - 60 - W2 - 30 * k; ctx.fillStyle = 'rgba(8,12,18,0.7)'; ctx.fillRect(x - 2 * k, y - 2 * k, w + 4 * k, 10 * k); ctx.fillStyle = '#ff6a5a'; ctx.fillRect(x, y, w * z.hp / z.maxHp, 6 * k); }
+    }
+}
+// Roofs over the ruins (fallen in, here and there) and the rock over the caves: they fade while you're under them
+function drawChaseRoofs(p) {
+    for (const r of G.world.chase.roofs) {
+        const ext = r.cave ? r.r : Math.max(r.w, r.h) / 2;
+        if (!inView(r.x, r.y, ext + 40)) continue;
+        const inside = p && (r.cave ? (p.x - r.x) ** 2 + (p.y - r.y) ** 2 < (r.r - 30) ** 2 : Math.abs(p.x - r.x) < r.w / 2 + 6 && Math.abs(p.y - r.y) < r.h / 2 + 6);
+        r.a += ((inside ? 0.16 : 1) - r.a) * 0.15;
+        ctx.globalAlpha = r.a;
+        if (r.cave) {
+            const rnd = seededRand(r.seed), n = 26;
+            ctx.fillStyle = '#5d554b';
+            ctx.beginPath();
+            for (let k = 0; k <= n; k++) { const a = (k / n) * TAU, rr = r.r * (0.9 + rnd() * 0.16) * (Math.abs(angleDiff(a, r.gap)) < 0.35 ? 0.82 : 1); const x = r.x + Math.cos(a) * rr, y = r.y + Math.sin(a) * rr; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+            ctx.closePath(); ctx.fill();
+            const gr = ctx.createRadialGradient(r.x - r.r * 0.3, r.y - r.r * 0.3, 10, r.x, r.y, r.r);
+            gr.addColorStop(0, 'rgba(150,140,125,0.55)'); gr.addColorStop(1, 'rgba(30,26,22,0.45)');
+            ctx.fillStyle = gr; ctx.fill();
+            ctx.strokeStyle = 'rgba(30,26,22,0.5)'; ctx.lineWidth = 5;
+            for (let k = 0; k < 7; k++) { const a = rnd() * TAU, d = rnd() * r.r * 0.6; ctx.beginPath(); ctx.moveTo(r.x + Math.cos(a) * d, r.y + Math.sin(a) * d); ctx.lineTo(r.x + Math.cos(a + 0.4) * (d + 60), r.y + Math.sin(a + 0.4) * (d + 60)); ctx.stroke(); }
+        } else {
+            for (const t of r.tiles) {
+                ctx.fillStyle = t.c; ctx.fillRect(r.x + t.x, r.y + t.y, t.w - 2, t.h - 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(r.x + t.x, r.y + t.y + t.h - 8, t.w - 2, 6);
+                if (t.crack) { ctx.strokeStyle = 'rgba(20,16,12,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r.x + t.x + 8, r.y + t.y + 10); ctx.lineTo(r.x + t.x + t.w * 0.6, r.y + t.y + t.h * 0.7); ctx.stroke(); }
+            }
+        }
+        ctx.globalAlpha = 1;
+    }
+}
+const chaseCovered = f => G.world.chase.ruins.some(r => Math.abs(f.x - r.x) < r.w / 2 && Math.abs(f.y - r.y) < r.h / 2) || G.world.chase.caves.some(q => (f.x - q.x) ** 2 + (f.y - q.y) ** 2 < q.r * q.r);
 function chaseHeliBot(c, b, dt) {
     const ctl = { up: false, down: false, left: false, right: false }, Ch = G.chase;
     if (G.time >= (b.driveThink || 0)) {
@@ -7734,11 +7916,11 @@ function chaseHeliBot(c, b, dt) {
     if (t && G.time >= c.fireAt && dist(c, t) < 900) { c.rocketAt = G.time + 1e9; c.turret = Math.atan2(t.y - c.y, t.x - c.x) + rand(-0.12, 0.12) * AIK().aim; vehicleFire(c, b); c.fireAt = G.time + (Math.random() < 0.15 ? 1400 : 230); }
     return ctl;
 }
-function chaseAlert() {
+function chaseAlert(airship) {
     const Ch = G.chase;
     if (G.time - Ch.alertAt < 25000) return;
     Ch.alertAt = G.time;
-    if (G.mode === 'playing') { showBanner('SPOTTED!', true, 'A helicopter has found you. Soldiers are on their way. Hide in the ruins!'); Sound.tone(880, 0.25, 'square', 0.07, 660); }
+    if (G.mode === 'playing') { showBanner('SPOTTED!', true, airship ? 'An airship\'s scanner has found you. Soldiers are coming down! Get under a roof or into a cave!' : 'A helicopter has found you. Soldiers are on their way. Hide in the ruins!'); Sound.tone(880, 0.25, 'square', 0.07, 660); }
 }
 function drawChaseLights() {
     for (const c of G.chase.helis) {
@@ -7794,7 +7976,7 @@ function chaseStageOf(f) {
 }
 const CHASE_STAGES = [
     null,
-    ['YOU\'RE OUT!', 'Cross the desert to the boat on the river, far to the north-east. Helicopters are searching: hide in the ruins.'],
+    ['YOU\'RE OUT!', 'Cross the desert to the boat on the river, far to the north-east. Airships are scanning the ground: stay under roofs and in caves.'],
     ['THE MOUNTAINS', 'Sail the boat down the river, or walk the banks to dodge the soldier boats. Ambushes wait along the way.'],
     ['THE OCEAN', 'Head for the land in the north-east. Enemy ships are out here.'],
     ['LAND!', 'The airship is waiting. Get everyone aboard!']
@@ -7820,6 +8002,7 @@ function chaseTick(dt) {
     }
     if (p && !p.dead && dist(p, G.extract) < CHASE.airship.board) { chaseWin(); return; }
     if (L && G.time >= (Ch.nextCatch || 0)) { Ch.nextCatch = G.time + 2000; chaseCatchUp(L); }
+    chaseBlimpTick(dt);
     if (G.time >= Ch.nextReinf) { chaseReinforce(); Ch.nextReinf = G.time + rand(...(Ch.stage <= 1 ? CHASE.desert.reinforce : CHASE.reinforce)); }
 }
 // Nobody gets hopelessly left behind: anyone of the squad who's fallen far back (and out of sight) catches up,
@@ -7856,11 +8039,10 @@ function chaseReinforce() {
     if (!L) return;
     const st = G.chase.stage, Cw = G.world.chase, W = CONFIG.WORLD_SIZE;
     if (st <= 1) {
-        if (G.chase.helis.filter(c => !c.dead).length < CHASE.helis) {
+        if (G.chase.blimps.length < CHASE.blimp.max && Math.random() < 0.5) {
             const a = rand(0, TAU);
-            chaseAddHeli(clamp(L.x + Math.cos(a) * 2600, 400, W - 400), clamp(L.y + Math.sin(a) * 2600, 400, W - 400));
-            showBanner('ANOTHER HELICOPTER', true, 'More of them have joined the search.');
-            return;
+            chaseAddBlimp(clamp(L.x + Math.cos(a) * 4000, 800, W - 800), clamp(L.y + Math.sin(a) * 4000, chaseMount(0) + 800, W - 800));
+            showBanner('ANOTHER AIRSHIP', true, 'Another one is joining the search.');
         }
         let sent = 0;
         for (let k = 0; k < CHASE.desert.waves; k++) {
@@ -11501,7 +11683,8 @@ function drawLighting(camX, camY, zoom) {
         g.fillStyle = grad; g.beginPath(); g.moveTo(sx, sy); g.arc(sx, sy, L, f.angle - 0.33, f.angle + 0.33); g.closePath(); g.fill();
         light(f.x, f.y, 150, 0.6);
     }
-    // Chase: the helicopters' searchlights light up the ground
+    // Chase: the airships' scanners light up the ground
+    if (G.chase) for (const z of G.chase.blimps) { light(z.x, z.y, CHASE.blimp.scan * 1.1, 0.7); light(z.x + Math.cos(z.sweep + 0.25) * CHASE.blimp.scan * 0.55, z.y + Math.sin(z.sweep + 0.25) * CHASE.blimp.scan * 0.55, 260, 0.9); }
     if (G.chase) for (const c of G.chase.helis) {
         if (c.dead || !c.driver) continue;
         const b = c.driver, lit = b.heliPrey && !b.heliPrey.dead;
@@ -15230,6 +15413,7 @@ function updateBullets(dt) {
                 G.particles.push({ type: 'glow', x: b.x, y: b.y, vx: -b.vx * 0.1, vy: -b.vy * 0.1, life: 0.2, max: 0.2, size: rand(4, 7), color: '#ffb347' });
             }
 
+            if (G.chase && G.chase.blimps.length && chaseBlimpHit(b)) { b.dead = true; break; }
             // (a Shock Pistol bolt crackles and throws off sparks as it flies)
             if (s === 0 && b.spark && inView(b.x, b.y, 60)) shockSparks(b.x, b.y, 2, 0.35, -b.vx * 0.05, -b.vy * 0.05);
             if (G.navy && navyBullet(b)) { b.dead = true; break; }
@@ -15625,7 +15809,7 @@ function render() {
 
     if (G.navy) drawNavy(L, T, R, B, now);
     if (G.navy) drawNavyInterior(L, T, R, B, now);
-    if (G.chase) drawChaseLights();
+    if (G.chase) { drawChaseLights(); drawChaseScans(now); }
     // Fighters
     const visible = [];
     const deckOf = f => (f && f.room && f.ship ? f.ship : null), myDeck = G.player ? G.player.room || null : null, myShip = deckOf(G.player);
@@ -15684,6 +15868,7 @@ function render() {
         drawRoof(b);
     }
     drawFallingRoofs();
+    if (G.chase) { drawChaseRoofs(p); drawChaseBlimps(now); }
     if (G.revolution) drawDecks(L, T, R, B);
 
     if (G.navy) drawNavyLabels();
@@ -18107,7 +18292,7 @@ BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun
 BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.chase = [['🏃', '<b>Goal:</b> get your squad of 20 all the way to the giant airship at the far end of the world. It\'s a long journey across a huge world, through day and night: you each have <b>500 health</b>, and every soldier has 45. You never run out of ammo, and everyone carries an electric <b>Shock Pistol</b> whose bolts jump to nearby enemies.'],
     ['🏭', '<b>1. The facility.</b> You start in the cell block. The soldiers want you gone: fight your way out through the east or north gate.'],
-    ['🏜️', '<b>2. The desert, the hardest part.</b> Broken, abandoned buildings everywhere, ten helicopters, waves of soldiers who hit hard, and more lying in ambush in the towns, big ruins and boulder fields. Helicopters sweep the sand with searchlights: out in the open they spot you and call in soldiers, so move from ruin to ruin. The boat waits at a pier where the river starts, far to the north-east.'],
+    ['🏜️', '<b>2. The desert, the hardest part.</b> Broken, abandoned buildings everywhere, giant slow airships sweeping the ground with scanners (get under a roof or into a cave to hide), waves of soldiers who hit hard, and more lying in ambush in the towns, big ruins and boulder fields. If an airship\'s scanner catches you out in the open it locks on and drops soldiers on you, so move from roof to roof, or hide in the caves in the giant boulder areas. You can shoot an airship down, but it takes a lot. The boat waits at a pier where the river starts, far to the north-east.'],
     ['⛰️', '<b>3. The mountains.</b> Walk onto the boat and it sails down the long river winding through the mountain range (take the wheel yourself if you like). Soldier boats patrol the river: you can also walk the banks beside it, and the boat keeps pace with you. Ambushes wait on the banks.'],
     ['🌊', '<b>4. The ocean.</b> The river runs out to sea. Cross it to the land in the north-east, past the enemy ships.'],
     ['🎈', '<b>5. The airship.</b> Walk up the ramp under the airship and everyone near you flies away with you.'],
