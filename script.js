@@ -9440,6 +9440,7 @@ function killFighter(t, killer, weapon) {
     }
 
     if (G.mode !== 'demo') addKillfeed(t, killer, weapon);
+    if (G.mode !== 'demo' && !t.vaporized && inView(t.x, t.y, 300)) goldSkull(t);
 
     if (G.war) { warDeath(t, killer, weapon); return; }
     if (G.temple) { templeDeath(t, killer); return; }
@@ -9605,6 +9606,49 @@ function updateVictory(realDt) {
 }
 
 // ---------- Effects ----------
+// ---------- The golden skull: everyone who dies bursts into gold cubes that fly up into a skull face, glare, then blow apart ----------
+const GSKULL = { size: 6, fly: 0.5, hold: 1.3, blow: 0.8, max: 6,
+    mask: ['....XXXXX....', '..XXXXXXXXX..', '.XXXXXXXXXXX.', 'XXXXXXXXXXXXX', 'XXXXXXXXXXXXX', 'XX...XXX...XX', 'XX...XXX...XX', 'XXX.XXXXX.XXX', '.XXXXX.XXXXX.', '..XXX...XXX..', '..XXXXXXXXX..', '..X.X.X.X.X..', '..XXXXXXXXX..'] };
+function goldSkull(t) {
+    if (!G.skulls) G.skulls = [];
+    if (G.skulls.length >= GSKULL.max) G.skulls.shift();
+    const cubes = [], S = GSKULL.size, M = GSKULL.mask, h = M.length, w = M[0].length;
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) if (M[r][c] === 'X')
+        cubes.push({ sx: rand(-14, 14), sy: rand(-14, 14), tx: (c - (w - 1) / 2) * S, ty: (r - (h - 1) / 2) * S, delay: rand(0, 0.18), bx: rand(-1, 1), by: rand(-1, 1), shade: r / h });
+    G.skulls.push({ x: t.x, y: t.y, born: G.time, cubes });
+    Sound.tone(220, 0.25, 'triangle', 0.06 * Sound.volAt(t.x, t.y), 440);
+}
+function drawGoldSkulls() {
+    if (!G.skulls || !G.skulls.length) return;
+    const S = GSKULL.size, F = GSKULL.fly, Hd = GSKULL.hold, Bl = GSKULL.blow;
+    G.skulls = G.skulls.filter(k => (G.time - k.born) / 1000 < F + Hd + Bl);
+    for (const k of G.skulls) {
+        if (!inView(k.x, k.y, 160)) continue;
+        const age = (G.time - k.born) / 1000, hx = k.x, hy = k.y - 56 + Math.sin(age * 4) * 3;
+        const blowT = Math.max(0, age - F - Hd) / Bl, alpha = 1 - blowT;
+        ctx.save();
+        // a warm glow behind it while it hangs there
+        if (age > F * 0.6 && blowT < 1) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,190,60,${0.22 * alpha})`; ctx.beginPath(); ctx.arc(hx, hy, 58, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; }
+        for (const c of k.cubes) {
+            const f = clamp((age - c.delay) / F, 0, 1), e = 1 - (1 - f) * (1 - f);
+            let x = lerp(k.x + c.sx, hx + c.tx, e), y = lerp(k.y + c.sy, hy + c.ty, e) - Math.sin(f * Math.PI) * 24;
+            if (blowT > 0) { const d = blowT * 140; x += (c.tx / 40 + c.bx) * d; y += (c.ty / 40 + c.by) * d + blowT * blowT * 120; }
+            const top = Math.round(255 - c.shade * 40);
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#8a5f10'; ctx.fillRect(x - S / 2 + 1, y - S / 2 + 1, S, S);
+            ctx.fillStyle = `rgb(${top},${Math.round(200 - c.shade * 50)},${Math.round(70 - c.shade * 30)})`; ctx.fillRect(x - S / 2, y - S / 2, S - 1, S - 1);
+            ctx.fillStyle = 'rgba(255,250,210,0.7)'; ctx.fillRect(x - S / 2, y - S / 2, S - 3, 1.5);
+        }
+        // glowing eyes
+        if (age > F && blowT < 1) {
+            const pulse = 0.6 + Math.sin(age * 10) * 0.3;
+            ctx.globalAlpha = alpha; ctx.globalCompositeOperation = 'lighter';
+            for (const ex of [-3, 3]) { ctx.fillStyle = `rgba(255,80,40,${0.75 * pulse})`; ctx.beginPath(); ctx.arc(hx + ex * S, hy - 0.5 * S, S * 1.3, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(255,230,160,0.9)'; ctx.beginPath(); ctx.arc(hx + ex * S, hy - 0.5 * S, S * 0.45, 0, TAU); ctx.fill(); }
+        }
+        ctx.restore();
+    }
+}
+
 // ---------- Death cubes ----------
 // Someone killed breaks into 50 neon blue and yellow cubes that fall naturally, bounce once and come to a stop,
 // sparkle for 3 seconds, then crackle, shrinking smaller and smaller until they're gone
@@ -15638,6 +15682,7 @@ function render() {
     if (!G.duel || (!G.duel.nextRoundAt && !G.duel.over)) drawCountdown();
     if (G.world.terrain === 'mountain') drawSnowfall(now);
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, Math.round(-camX * dpr * zoom), Math.round(-camY * dpr * zoom));
+    drawGoldSkulls();  // (over the trees and the dark)
     drawFloats();
 
     // Screen-space overlays
