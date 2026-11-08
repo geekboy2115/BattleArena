@@ -58,7 +58,7 @@ const WEAPONS = {
     // Hyper drop weapons
     'Plasma Rifle': { damage: 24, range: 1500, rate: 105, speed: 1800, spread: 0.03, mag: 45, rarity: 'hyper', len: 38, w: 9, sound: 'mid', shake: 1.5, hyper: true },
     'Railgun': { damage: 220, range: Infinity, rate: 1800, speed: 4200, spread: 0, mag: 4, rarity: 'hyper', len: 64, w: 9, sound: 'sniper', shake: 10, hyper: true, pierce: true },  // goes through everyone in a line
-    'Shock Pistol': { damage: 24, range: 1050, rate: 260, speed: 1500, spread: 0.02, mag: 15, rarity: 'hyper', len: 18, w: 8, sound: 'light', shake: 1.6, hyper: true, chain: 2 },  // Chase: everyone's sidearm, its bolts arc on to 2 more enemies
+    'Shock Pistol': { damage: 24, range: 1050, rate: 260, speed: 1500, spread: 0.02, mag: 15, rarity: 'hyper', len: 18, w: 8, sound: 'light', shake: 1.6, hyper: true, chain: 2, spark: true },  // Chase: everyone's sidearm, its bolts arc on to 2 more enemies
     'Tesla Cannon': { damage: 32, range: 900, rate: 420, speed: 1300, spread: 0.02, mag: 12, rarity: 'hyper', len: 34, w: 13, sound: 'heavy', shake: 4, hyper: true, chain: 3 },  // arcs to 3 more enemies
     'Laser Beam': { damage: 7, range: 950, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 36, w: 9, sound: 'mid', shake: 0.3, hyper: true, beam: true },  // hold it on them
     'Freeze Ray': { damage: 2, range: 800, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 34, w: 10, sound: 'mid', shake: 0.2, hyper: true, beam: true, freeze: 0.09 },  // chills, then freezes solid
@@ -5118,15 +5118,15 @@ function drawDuelOverlay(now) {
 const NAVY = {
     maxPeople: 800, playerHp: 300, hullMul: 0.6, escortCrew: 25, swimPace: 0.5, drown: 1.2, board: 110, heliBack: 60000,
     guns: {
-        main: { name: 'Main Cannon', rate: 750, speed: 1500, range: 4200, dmg: 16, blastR: 125, hull: 100, hp: 2200, r: 78, turn: 0.9, zoom: 0.3 },
-        med: { name: 'Deck Cannon', rate: 400, speed: 1500, range: 3000, dmg: 22, blastR: 85, hull: 45, hp: 800, r: 30, turn: 1.8, zoom: 0.42 },
+        main: { name: 'Main Cannon', rate: 2000, speed: 1500, range: 4200, dmg: 16, blastR: 125, hull: 100, hp: 2200, r: 78, turn: 0.9, zoom: 0.3 },
+        med: { name: 'Deck Cannon', rate: 2000, speed: 1500, range: 3000, dmg: 22, blastR: 85, hull: 45, hp: 800, r: 30, turn: 1.8, zoom: 0.42 },
         mg: { name: 'Deck Gun', rate: 45, speed: 2100, range: 1500, dmg: 20, hp: 400, r: 20, turn: 4, zoom: 0.65 },
         torp: { name: 'Torpedo Tube', rate: 12000, speed: 520, range: 5200, dmg: 70, blastR: 140, hull: 1500, hp: 500, r: 26, turn: 1.2, zoom: 0.3 },
         missile: { name: 'Missile Battery', rate: 9000, speed: 820, range: 6000, dmg: 55, blastR: 170, hull: 260, hp: 700, r: 32, turn: 2.2, zoom: 0.35 }
     },
     ships: {
         battleship: {
-            name: 'Battleship', len: 2000, beam: 440, hp: 42000, speed: 135, accel: 16, turn: 0.11, crew: 100, bow: 400, aft: 600, helm: [120, 0],
+            name: 'Battleship', len: 2000, beam: 440, hp: 1500, speed: 135, accel: 16, turn: 0.11, crew: 100, bow: 400, aft: 600, helm: [120, 0],
             boxes: [{ x: -235, y: 0, hw: 65, hh: 58, k: 'funnel' }],
             // The bridge is open: anyone (bots included) can walk straight in off the deck and take the wheel.
             // The stairs inside it are the only way further down, into the gated, player-only decks below.
@@ -5155,7 +5155,7 @@ const NAVY = {
         },
         // The huge ship: one a side, far bigger than a battleship (about 1.6 times as long and wide), no escorts
         mega: {
-            name: 'Huge Ship', len: 3200, beam: 700, hp: 100000, speed: 115, accel: 12, turn: 0.08, crew: 300, bow: 640, aft: 960, helm: [190, 0],
+            name: 'Huge Ship', len: 3200, beam: 700, hp: 1500, speed: 115, accel: 12, turn: 0.08, crew: 300, bow: 640, aft: 960, helm: [190, 0],
             boxes: [{ x: -380, y: 0, hw: 90, hh: 80, k: 'funnel' }, { x: -640, y: 0, hw: 70, hh: 60, k: 'funnel' }],
             bridge: { lx: 60, ly: 0, hw: 250, hh: 160 },
             rooms: { hall: { hull: true, name: 'GUN DECK', deck: 2, windows: [1200, 940, 680, 420, 160, -100, -360, -620, -880, -1140] }, subdeck: { hull: true, name: 'SUBMARINE DECK', deck: 3, windows: [1100, 800, 500, 200, -100, -400, -700, -1000, -1250] } },
@@ -5177,7 +5177,7 @@ const NAVY = {
         // Mini ships: the small-fleet game (up to 30 a side). Still three decks: the wheel, one cannon and two deck
         // guns up top; four cannons on the gun deck; one big and two small submarines on the bottom deck
         mini: {
-            name: 'Mini Ship', len: 720, beam: 200, hp: 9000, speed: 230, accel: 40, turn: 0.3, crew: 12, bow: 140, aft: 220, helm: [80, 0],
+            name: 'Mini Ship', len: 720, beam: 200, hp: 1500, speed: 230, accel: 40, turn: 0.3, crew: 12, bow: 140, aft: 220, helm: [80, 0],
             boxes: [{ x: -150, y: 0, hw: 30, hh: 26, k: 'funnel' }],
             bridge: { lx: 50, ly: 0, hw: 70, hh: 55 },
             rooms: { hall: { hull: true, name: 'GUN DECK', deck: 2, windows: [250, 90, -70, -210] }, subdeck: { hull: true, name: 'SUBMARINE DECK', deck: 3, windows: [240, 30, -150] } },
@@ -5191,13 +5191,13 @@ const NAVY = {
             subbays: [{ kind: 'sub', lx: 160, ly: 0 }, { kind: 'subsmall', lx: -60, ly: 0 }, { kind: 'subsmall', lx: -185, ly: 0 }], supply: [[-305, 0]]
         },
         destroyer: {
-            name: 'Destroyer', len: 1120, beam: 260, hp: 14000, speed: 205, accel: 30, turn: 0.2, crew: 20, bow: 224, aft: 336, helm: [132, 0],
+            name: 'Destroyer', len: 1120, beam: 260, hp: 1500, speed: 205, accel: 30, turn: 0.2, crew: 20, bow: 224, aft: 336, helm: [132, 0],
             boxes: [{ x: 20, y: 0, hw: 90, hh: 62, k: 'bridge' }, { x: -155, y: 0, hw: 45, hh: 34, k: 'funnel' }],
             guns: [['med', 330, 0, 44], ['med', -340, 0, 44], ['mg', -470, 0]],
             supply: [[450, 0]]
         },
         gunboat: {
-            name: 'Gunboat', len: 460, beam: 140, hp: 4000, speed: 320, accel: 70, turn: 0.5, crew: 5, bow: 92, aft: 138, helm: [40, 0],
+            name: 'Gunboat', len: 460, beam: 140, hp: 1500, speed: 320, accel: 70, turn: 0.5, crew: 5, bow: 92, aft: 138, helm: [40, 0],
             boxes: [{ x: -25, y: 0, hw: 45, hh: 22, k: 'cabin' }],
             guns: [['med', 140, 0, 24], ['mg', -135, 0]],
             supply: []
@@ -6005,17 +6005,25 @@ function navyCheck() {
 // Ship free-for-all: a squad is out when it's all dead, or it's been a minute without a ship of its own.
 // The last squad still in wins.
 // (the mini ships are a lot tougher here: with every ship's subs out at once they'd all be gone in a minute)
-const NAVY_FFA = { min: 2, max: 12, crew: 15, hull: 6 };
+const NAVY_FFA = { min: 2, max: 12, crew: 15, hull: 1 };
 function navyCheckFfa(left) {
     const N = G.navy, p = G.player, k = G.war.teams;
     N.strandedAt = N.strandedAt || new Array(k).fill(0);
+    const going = [];
     for (let t = 0; t < k; t++) {
         if (N.out[t]) continue;
         let gone = G.teamAlive[t] === 0;
         if (left[t] > 0) N.strandedAt[t] = 0;
         else if (!N.strandedAt[t]) { N.strandedAt[t] = G.time; if (p && t === p.team && !gone) showBanner('YOUR SHIP IS SUNK!', true, 'Board and capture another ship within a minute, or your squad is out'); }
         else if (G.time - N.strandedAt[t] > 60000) gone = true;
-        if (!gone) continue;
+        if (gone) going.push(t);
+    }
+    // (if every squad still in would go out at once, the one with the most people left wins instead)
+    if (going.length && going.length === k - N.out.filter(Boolean).length) {
+        const best = going.reduce((a, t) => (G.teamAlive[t] > G.teamAlive[a] ? t : a), going[0]);
+        if (G.teamAlive[best] > 0) going.splice(going.indexOf(best), 1);
+    }
+    for (const t of going) {
         N.out[t] = G.time;
         const still = k - N.out.filter(Boolean).length;
         // (anyone still swimming from a squad that's out is lost at sea)
@@ -7110,11 +7118,12 @@ const CHASE = {
     fac: { x0: 600, y0: 9300, x1: 3300, y1: 11500 },
     island: { x: 10350, y: 1500, r: 1250 },
     airship: { x: 10500, y: 1150, board: 230 },
-    riverPts: [[10900, 8350], [10860, 7300], [10300, 6500], [9100, 6150], [7700, 6600], [6300, 6250], [5000, 5450], [3700, 5750], [2500, 5250], [1700, 4500], [1500, 3500], [1550, 2800]],
+    // (the river winds back and forth across the whole mountain range on its way to the sea)
+    riverPts: [[10900, 8350], [10860, 7350], [10300, 6850], [9300, 6900], [8500, 6450], [8700, 5650], [9500, 5100], [9300, 4350], [8300, 4050], [7300, 4450], [7000, 5300], [7400, 6150], [6900, 6850], [5900, 6850], [5200, 6250], [5500, 5400], [5000, 4550], [4100, 4200], [3200, 4600], [3000, 5500], [3400, 6350], [2700, 6850], [1850, 6600], [1500, 5850], [1900, 5050], [1600, 4300], [1500, 3500], [1550, 2800]],
     seaPts: [[1550, 2800], [2600, 2300], [4500, 2000], [6500, 1800], [8650, 1600]],
     guns: ['Assault Rifle', 'Assault Rifle', 'Mac10', 'Shotgun', 'Machine Gun', 'Sniper', 'Vector'],
-    desertSquads: 12, bankSquads: 6, helis: 3, riverShips: 3, seaShips: 2, shipCrew: 8,
-    reinforce: [70000, 100000], heliSight: 520, shipHull: 4, art: 12, soldierDmg: 0.45, alertR: 2600
+    desertSquads: 16, bankSquads: 10, helis: 3, riverShips: 5, seaShips: 2, shipCrew: 8,
+    reinforce: [70000, 100000], heliSight: 520, desert: { dmg: 1.7, reinforce: [25000, 40000], waves: 2, sight: 720, helis: 10 }, shipHull: 36000, art: 12, soldierDmg: 0.45, alertR: 2600
 };
 // Everything is laid out on the normal map's 12000 and then stretched 3 times over (the river and the banks stay
 // the same width; there's just three times as far to go)
@@ -7128,7 +7137,7 @@ const CHASE = {
     CHASE.seaPts[CHASE.seaPts.length - 1] = [I.x - I.r - 430, I.y + 100];
     CHASE.fac = { x0: 1200, y0: W - 5300, x1: 7200, y1: W - 500 };
     for (const key of ['desertSquads', 'bankSquads', 'riverShips', 'seaShips']) CHASE[key] = Math.round(CHASE[key] * (key === 'seaShips' ? 2 : k * 0.8));
-    CHASE.helis = 5;
+    CHASE.helis = CHASE.desert.helis;
 })();
 const chaseCoast = x => CHASE.oceanY + Math.sin(x / 700) * 110 + Math.sin(x / 260 + 2) * 40;
 const chaseMount = x => CHASE.mountY + Math.sin(x / 900) * 150 + Math.sin(x / 310 + 1) * 70;
@@ -7536,7 +7545,7 @@ function setupChase() {
         spawnSquad(c, size, n, Math.random() < 0.2); n += size; k++;
     }
     // Ambushes: squads lying in wait in the ruined towns, the big ruins and the boulder fields, who jump out at you
-    const lairs = [...Cw.ruins.filter(r => r.w > 550), ...Cw.rockFields, ...Cw.ruins.filter(r => r.w <= 550 && Math.random() < 0.05)];
+    const lairs = [...Cw.ruins.filter(r => r.w > 550), ...Cw.rockFields, ...Cw.rockFields, ...Cw.ruins.filter(r => r.w <= 550 && Math.random() < 0.15)];
     for (const q of lairs) {
         const c = spawnNear({ x: q.x, y: q.y }, 250, 30, true);
         if (chaseBad(c.x, c.y) || dist(c, Cw.start) < 3500 || chaseStageOf(c) === 0) continue;
@@ -7557,9 +7566,9 @@ function setupChase() {
     for (let k = 0; k < CHASE.helis; k++) chaseAddHeli(rand(CONFIG.WORLD_SIZE * 0.2, CONFIG.WORLD_SIZE * 0.9), rand(chaseMount(0) + 800, CONFIG.WORLD_SIZE - 1000));
     // The boat, waiting at the pier, and the soldier boats on the river and out at sea
     const d = Cw.dock, ss = addShip('mini', 0, d.x, d.y, d.a);
-    ss.hp = ss.maxHp = ss.C.hp * CHASE.shipHull; ss.name = 'Runaway'; ss.chase = 'squad'; ss.speed = 0; ss.throttle = 0;
+    ss.hp = ss.maxHp = CHASE.shipHull; ss.name = 'Runaway'; ss.chase = 'squad'; ss.speed = 0; ss.throttle = 0;
     chaseNoSubs(ss);
-    G.chase.ship = ss;
+    G.chase.ship = ss;  // (your boat is the only way across the sea, so she's much tougher than any other ship)
     for (let k = 0; k < CHASE.riverShips; k++) {
         const s0 = Cw.mouthS * (0.4 + 0.5 * k / Math.max(1, CHASE.riverShips - 1)), P = chaseRoutePt(s0), P2 = chaseRoutePt(s0 - 30);
         chaseSoldierShip(P.x, P.y, Math.atan2(P2.y - P.y, P2.x - P.x), s0);
@@ -7704,7 +7713,7 @@ function chaseHeliBot(c, b, dt) {
             const d = Math.hypot(f.x - c.x, f.y - c.y) * (chaseCovered(f) ? 2.6 : 1);
             if (d < bd) { bd = d; prey = f; }
         }
-        b.heliPrey = prey && (bd < CHASE.heliSight || (b.heliPrey === prey && bd < 1000)) ? prey : null;
+        b.heliPrey = prey && (bd < (Ch.stage <= 1 ? CHASE.desert.sight : CHASE.heliSight) || (b.heliPrey === prey && bd < 1000)) ? prey : null;
         if (b.heliPrey) { Ch.seen = { x: b.heliPrey.x, y: b.heliPrey.y, t: G.time }; chaseAlert(); }
         if (!b.heliGoal || Math.hypot(b.heliGoal.x - c.x, b.heliGoal.y - c.y) < 250 || G.time > (b.heliGoalAt || 0)) {
             const seen = Ch.seen && G.time - Ch.seen.t < 25000 ? Ch.seen : null, L = chaseLeader();
@@ -7811,7 +7820,7 @@ function chaseTick(dt) {
     }
     if (p && !p.dead && dist(p, G.extract) < CHASE.airship.board) { chaseWin(); return; }
     if (L && G.time >= (Ch.nextCatch || 0)) { Ch.nextCatch = G.time + 2000; chaseCatchUp(L); }
-    if (G.time >= Ch.nextReinf) { chaseReinforce(); Ch.nextReinf = G.time + rand(...CHASE.reinforce); }
+    if (G.time >= Ch.nextReinf) { chaseReinforce(); Ch.nextReinf = G.time + rand(...(Ch.stage <= 1 ? CHASE.desert.reinforce : CHASE.reinforce)); }
 }
 // Nobody gets hopelessly left behind: anyone of the squad who's fallen far back (and out of sight) catches up,
 // and if you're on the boat, they're aboard
@@ -7853,10 +7862,13 @@ function chaseReinforce() {
             showBanner('ANOTHER HELICOPTER', true, 'More of them have joined the search.');
             return;
         }
-        const a = rand(0, TAU), c = spawnNear({ x: clamp(L.x + Math.cos(a) * 1700, 400, W - 400), y: clamp(L.y + Math.sin(a) * 1700, 400, W - 400) }, 300, 30, true);
-        if (chaseBad(c.x, c.y)) return;
-        spawnSquad(c, randInt(5, 7), 0, true);
-        showBanner('SOLDIERS INBOUND', true, 'A squad is closing in. Keep moving!');
+        let sent = 0;
+        for (let k = 0; k < CHASE.desert.waves; k++) {
+            const a = rand(0, TAU), c = spawnNear({ x: clamp(L.x + Math.cos(a) * 1800, 400, W - 400), y: clamp(L.y + Math.sin(a) * 1800, 400, W - 400) }, 300, 30, true);
+            if (chaseBad(c.x, c.y)) continue;
+            spawnSquad(c, randInt(6, 8), 0, true); sent++;
+        }
+        if (sent) showBanner('SOLDIERS INBOUND', true, `${sent === 1 ? 'A squad is' : `${sent} squads are`} closing in. Keep moving!`);
     } else if (st === 2) {
         const s0 = (L.ship ? L.ship.routeS || 0 : chaseRouteS(L.x, L.y)) + rand(1500, 2300);
         if (s0 > Cw.mouthS - 300) return;
@@ -8868,7 +8880,7 @@ function tryAttack(f) {
         // Rounds leave from the edge of your body, not the end of the barrel: anything right up against you still gets hit
         // (and the barrel can't poke through a wall). Rockets launch from the barrel so they don't go off in your face
         const bx = w.rocket ? mx : f.x + ca * f.r, by = w.rocket ? my : f.y + sa * f.r;
-        G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive });
+        G.bullets.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dmg: w.damage * (f.dmgMul || 1), owner: f, left: w.range, weapon: name, heavy: w.damage >= 80, rocket: !!w.rocket, homing: !!w.homing, explosive: !!w.explosive, spark: !!w.spark });
     }
     if (inView(mx, my, 100) && !w.string) {
         G.particles.push({ type: 'flash', x: mx, y: my, vx: 0, vy: 0, life: 0.06, max: 0.06, size: 10 + w.w * 1.4, angle: f.angle });
@@ -9307,6 +9319,8 @@ function damage(t, amount, attacker, weapon) {
     let dmg = amount;
     if (G.war && attacker && attacker !== t) dmg *= closeGameMul(attacker.team, t.team);
     // Chase: the soldiers' ship guns and helicopter guns are fearsome, but not instant death
+    // (the desert is the hard part: its soldiers hit much harder)
+    if (G.chase && attacker && attacker.soldier && !attacker.station && attacker.y > chaseMount(attacker.x)) dmg *= CHASE.desert.dmg;
     if (G.chase && attacker && attacker.soldier && (attacker.station || attacker.car)) dmg *= attacker.station && attacker.station.kind === 'mg' ? 0.02 : attacker.station ? 0.08 : 0.4;
     if (t.isPlayer && G.strikeCam) G.strikeCam = null;  // (watching a boss strike: getting hurt brings the camera back)
     // Escape: stray airstrikes, bombs and burning cars only half hurt the group
@@ -10254,6 +10268,8 @@ function findPath(b, gx, gy, reach = 50, opt = PATH) {
 function updateBot(b, dt) {
     // Downed: lying there waiting for help
     if (b.downed) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
+    // (Chase: soldiers far away on land wait where they are until you get closer)
+    if (G.chase && b.soldier && !b.ship && !b.swim && G.player && Math.abs(b.x - G.player.x) + Math.abs(b.y - G.player.y) > 9000) { b.vx = b.vy = 0; b._wantSpeed = 0; return; }
     if (G.navy && (!G.chase || b.ship || b.swim)) { navyBot(b, dt); return; }
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
@@ -13336,6 +13352,13 @@ function updatePerks(f, dt) {
 const stunned = f => G.time < (f.stunUntil || 0);
 
 // ----- Weapons -----
+// Electric sparks: bright blue-white specks flying out from a point
+function shockSparks(x, y, n, k = 1, bvx = 0, bvy = 0) {
+    for (let i = 0; i < n; i++) {
+        const a = rand(0, TAU), sp = rand(120, 460) * k;
+        G.particles.push({ type: 'glow', x: x + rand(-4, 4), y: y + rand(-4, 4), vx: Math.cos(a) * sp + bvx, vy: Math.sin(a) * sp + bvy, life: rand(0.15, 0.45), max: 0.45, size: rand(2, 4.5) * (k > 0.5 ? 1 : 0.8), color: pick(['#7ef9ff', '#ffffff', '#5ee8ff', '#b6fbff']) });
+    }
+}
 // Tesla Cannon: the bolt arcs on to the nearest enemies after the first hit
 // hit: who's already been zapped by this blast (each person is only hit once)
 function chainLightning(from, owner, jumps, dmg, name = 'Tesla Cannon', hit = new Set()) {
@@ -15207,6 +15230,8 @@ function updateBullets(dt) {
                 G.particles.push({ type: 'glow', x: b.x, y: b.y, vx: -b.vx * 0.1, vy: -b.vy * 0.1, life: 0.2, max: 0.2, size: rand(4, 7), color: '#ffb347' });
             }
 
+            // (a Shock Pistol bolt crackles and throws off sparks as it flies)
+            if (s === 0 && b.spark && inView(b.x, b.y, 60)) shockSparks(b.x, b.y, 2, 0.35, -b.vx * 0.05, -b.vy * 0.05);
             if (G.navy && navyBullet(b)) { b.dead = true; break; }
             if (G.navy && !b.overShip && navyDeckStep(b)) { b.dead = true; break; }
             let wall = null, bush = null;
@@ -15224,8 +15249,21 @@ function updateBullets(dt) {
                 if (o.type === 'bush' && o !== b.lastBush && (b.x - o.x) ** 2 + (b.y - o.y) ** 2 < (o.r * 0.8) ** 2) bush = o;
             });
             if (bush) { b.lastBush = bush; damagePlant(bush, b.dmg * 0.5, b.owner); }
+            // A Shock Pistol bolt bounces off walls and rocks (twice), in a shower of sparks
+            if (wall && b.spark && (b.bounces || 0) < 2 && wall.type !== 'box' && wall.type !== 'tree') {
+                b.x -= sx; b.y -= sy;
+                let nx, ny;
+                if (isBox(wall)) { const dx = (b.x - wall.x) / (wall.hw || 1), dy = (b.y - wall.y) / (wall.hh || 1); if (Math.abs(dx) > Math.abs(dy)) { nx = Math.sign(dx) || 1; ny = 0; } else { nx = 0; ny = Math.sign(dy) || 1; } }
+                else { const d = Math.hypot(b.x - wall.x, b.y - wall.y) || 1; nx = (b.x - wall.x) / d; ny = (b.y - wall.y) / d; }
+                const dot = b.vx * nx + b.vy * ny;
+                b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny;
+                b.bounces = (b.bounces || 0) + 1; b.dmg *= 0.85;
+                if (inView(b.x, b.y, 80)) { shockSparks(b.x, b.y, 18, 1); Sound.tone(1400, 0.06, 'square', 0.03 * Sound.volAt(b.x, b.y), 2400); }
+                break;
+            }
             if (wall) {
                 b.dead = true;
+                if (b.spark && inView(b.x, b.y, 80)) shockSparks(b.x, b.y, 22, 1.1);
                 if (wall.type === 'box') { damageBox(wall, b.dmg * 0.5, b.owner); break; }
                 if (wall.baseWall) damageBaseWall(wall, b.dmg, b.owner);
                 if (mineable(wall)) mineHit(wall, b.dmg * 0.6, b.owner);
@@ -15264,6 +15302,7 @@ function updateBullets(dt) {
                 const BW = WEAPONS[b.weapon];
                 if (BW && BW.pierce) (b.pierced || (b.pierced = new Set())).add(hit); else b.dead = true;
                 if (BW && BW.chain) chainLightning(hit, b.owner, BW.chain, b.dmg * 0.8);
+                if (BW && BW.spark && inView(hit.x, hit.y, 80)) { shockSparks(hit.x, hit.y, 30, 1.5); G.particles.push({ type: 'ring', x: hit.x, y: hit.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 60, color: '#7ef9ff' }); }
                 // How close the shot's line passes to the middle: dead center is the head
                 const perp = Math.abs((hit.x - b.x) * b.vy - (hit.y - b.y) * b.vx) / speed;
                 const head = perp < hit.r * REALISM.headZone;
@@ -18068,8 +18107,8 @@ BRIEF.ghost = [['👻', '<b>Ghost:</b> invisible, fast and tough, with a shotgun
 BRIEF.navy = [['🚢', '<b>Goal:</b> sink or capture every enemy ship. <b>Normal:</b> battleships holding up to 100 people, each with a destroyer and a gunboat. <b>Huge ship:</b> one giant ship each, far bigger than a battleship. <b>Mini ships:</b> up to 30 small ships a side, each with a cannon and two deck guns up top, four cannons on the gun deck, and one big and two small subs at the bottom. <b>Free for all:</b> squads of 15, each on its own mini ship, every ship against every other. A squad without a ship has a minute to capture one. Last squad afloat wins.'], ['🧭', '<b>Pilot:</b> every battleship\'s wheel is in an open bridge you can walk straight into. Shoot the enemy\'s pilot and that ship drifts. Take the wheel of an enemy ship yourself and it\'s yours.'], ['💥', '<b>Weapons hangar</b> below on the gun deck: walk up to a rack and grab a rocket launcher, minigun, heavy MG or Barrett, then take it up top and fight from the rail. Each battleship also has two big turrets and two deck guns up top.'], ['🚁', '<b>Helicopters</b> sit on the back of every battleship. A new one arrives a minute after yours leaves or is shot down.'], ['🪜', '<b>Three decks</b>, stacked, each the whole length of the ship. <b>Deck 1</b> on top has the bridge and the wheel. Stairs inside the bridge go down to <b>deck 2</b>, the gun deck: cannons down both sides, a missile hangar that locks onto ships and helicopters, and a medical bay that heals fast.'], ['🌊', '<b>Deck 3</b>, the bottom deck, is further down: four torpedo launchers (the only torpedoes a ship has) that can hit ships and submarines, three big subs that fire two torpedoes at a time, and three small ones that fire one. They dive the moment you launch them, slip under ships and are safe from gunfire. Click to fire. Under the water the enemy can\'t see them, except for a moment after they fire. You can only climb out next to a ship or an island.'], ['👁️', 'You only see the people on the deck you\'re on. Below deck the hull is a wall: bullets only get in or out through the windows down each side, for everyone. Stand by a window and you can see and shoot out, and be seen and shot from outside.'], ['🤖', 'The crews man every gun on every deck and take every submarine out. The torpedo launchers\' torpedoes curve toward enemy submarines.'], ['🪵', 'When hulls touch, planks go across: walk over and board. In the water you slowly drown, so swim to any hull (or a nearby island) to climb up.'], ['➕', 'A green cross heals you and refills your ammo — on deck, on an island, or (faster) in the medical bay.']];
 BRIEF.chase = [['🏃', '<b>Goal:</b> get your squad of 20 all the way to the giant airship at the far end of the world. It\'s a long journey across a huge world, through day and night: you each have <b>500 health</b>, and every soldier has 45. You never run out of ammo, and everyone carries an electric <b>Shock Pistol</b> whose bolts jump to nearby enemies.'],
     ['🏭', '<b>1. The facility.</b> You start in the cell block. The soldiers want you gone: fight your way out through the east or north gate.'],
-    ['🏜️', '<b>2. The desert.</b> Broken, abandoned buildings everywhere, and soldiers lying in ambush in the towns, big ruins and boulder fields. Helicopters sweep the sand with searchlights: out in the open they spot you and call in soldiers, so move from ruin to ruin. The boat waits at a pier where the river starts, far to the north-east.'],
-    ['⛰️', '<b>3. The mountains.</b> Walk onto the boat and it sails down the river through the mountain range (take the wheel yourself if you like). Soldier boats patrol the river: you can also walk the banks beside it, and the boat keeps pace with you. Ambushes wait on the banks.'],
+    ['🏜️', '<b>2. The desert, the hardest part.</b> Broken, abandoned buildings everywhere, ten helicopters, waves of soldiers who hit hard, and more lying in ambush in the towns, big ruins and boulder fields. Helicopters sweep the sand with searchlights: out in the open they spot you and call in soldiers, so move from ruin to ruin. The boat waits at a pier where the river starts, far to the north-east.'],
+    ['⛰️', '<b>3. The mountains.</b> Walk onto the boat and it sails down the long river winding through the mountain range (take the wheel yourself if you like). Soldier boats patrol the river: you can also walk the banks beside it, and the boat keeps pace with you. Ambushes wait on the banks.'],
     ['🌊', '<b>4. The ocean.</b> The river runs out to sea. Cross it to the land in the north-east, past the enemy ships.'],
     ['🎈', '<b>5. The airship.</b> Walk up the ramp under the airship and everyone near you flies away with you.'],
     ['🤝', 'Your squad follows you. The mountains are a wall: only the river valley gets through them. In the water you slowly drown.']];
