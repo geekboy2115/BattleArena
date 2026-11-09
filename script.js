@@ -4649,7 +4649,7 @@ function newState(mode, setup) {
     const zombies = setup.type === 'zombies', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', bossFight = setup.type === 'boss';
-    const ghostMode = setup.type === 'ghost', templeMode = setup.type === 'temple', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
+    const ghostMode = setup.type === 'ghost', templeMode = setup.type === 'temple', mechMode = setup.type === 'mech', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution || navy ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4659,7 +4659,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape: false, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || bossFight, bossFight, bossF: null, ghostMode, temple: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape: false, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || bossFight, bossFight, bossF: null, ghostMode, temple: null, mech: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4711,7 +4711,7 @@ function newState(mode, setup) {
     // (no red zone at all in Survival)
     if (G.noZone || revolution || survival || navy || templeMode) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Ghost is played in one fixed circle in the middle of the map
-    const arena = ghostMode ? GHOST.arena : 0;
+    const arena = ghostMode ? GHOST.arena : mechMode ? MECH.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
     // (the haunted house has its iron fence instead)
     if (G.world.terrain === 'haunted') Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
@@ -4719,7 +4719,7 @@ function newState(mode, setup) {
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
-    const noLoot = duel || navy || templeMode;
+    const noLoot = duel || navy || templeMode || mechMode;
     if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
@@ -4745,7 +4745,7 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !templeMode && !duel && !navy) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !templeMode && !mechMode && !duel && !navy) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (navy) setupNavy(setup);
     else if (war) {
@@ -4772,6 +4772,7 @@ function newState(mode, setup) {
     if (duel) setupDuel();
     if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
     if (templeMode) setupTemple(setup);
+    if (mechMode) setupMech(setup);
     G.alive = G.fighters.length;
 }
 
@@ -6019,6 +6020,175 @@ function templeStatus(p) {
     const T2 = G.temple, I = T2.idol, left = fmtTime(Math.max(0, (T2.endAt - G.time) / 1000));
     const where = I.carrier ? (I.carrier === p ? 'You have the idol! Get home' : I.carrier.team === p.team ? `${I.carrier.name} has the idol` : `${I.carrier.name} stole the idol`) : I.home ? 'The idol is on the altar' : 'The idol was dropped';
     return `${where} · ${T2.overtime ? 'OVERTIME' : left}`;
+}
+
+// ---------- Mech Arena ----------
+// Two teams of five, every pilot in a giant walking mech: a fast Striker with jump jets, a Brawler with twin miniguns,
+// or a slow Titan with a heavy gun and rocket pods. When a mech is destroyed its pilot ejects on foot (with a pair of
+// shock pistols). Climb out to repair your mech by standing next to it, steal an empty one, or grab a fresh one from
+// your team's hangar. Pilots who die come back at the hangar. First team to 20 kills wins.
+const MECH = { arena: 3300, players: 10, time: 480000, win: 30, respawn: 5000, protect: 2500, spares: 3, repair: 170, hangarR: 260,
+    classes: { striker: 'mechlight', brawler: 'mech', titan: 'mechheavy' }, blue: '#3d8bff', red: '#ff4b4b' };
+let mechSidePick = 'blue', mechClassPick = 'brawler';
+function mechHangar(t) { const c = CONFIG.WORLD_SIZE / 2; return { x: c + (t ? 1 : -1) * (MECH.arena - 650), y: c }; }
+function makeMech(type, x, y, a, team) {
+    const T = VTYPES[type];
+    const c = { type, x, y, a, speed: 0, hp: T.hp, color: team ? '#8a2a2a' : '#2a4a8a', driver: null, riders: [], dead: false, box: null, braking: false, fireAt: 0, turret: a, team, mechArena: true };
+    parkCar(c);
+    G.world.cars.push(c);
+    return c;
+}
+// A clear spot round the hangar for a mech to stand on
+function hangarSpot(t, pad = 70) {
+    const h = mechHangar(t);
+    for (let i = 0; i < 60; i++) { const a = rand(0, TAU), d = rand(60, MECH.hangarR), x = h.x + Math.cos(a) * d, y = h.y + Math.sin(a) * d; if (!blockedAt(G.world.grid, x, y, pad) && !G.world.cars.some(c => !c.dead && Math.hypot(c.x - x, c.y - y) < 110)) return { x, y }; }
+    return { x: h.x + rand(-100, 100), y: h.y + rand(-100, 100) };
+}
+function setupMech(setup) {
+    G.world.cars = G.world.cars || [];
+    // Clear the ground round each hangar
+    for (const t of [0, 1]) {
+        const h = mechHangar(t), gone = [];
+        G.world.grid.query(h.x, h.y, MECH.hangarR + 120, o => { if (Math.hypot(o.x - h.x, o.y - h.y) < MECH.hangarR + 120 && !o.mazeWall) gone.push(o); });
+        for (const o of gone) { if (o.hw !== undefined) G.world.grid.removeBox(o); else G.world.grid.remove(o); const k = G.world.obstacles.indexOf(o); if (k >= 0) G.world.obstacles.splice(k, 1); }
+    }
+    G.mech = { score: [0, 0], queue: [], endAt: MECH.time, nextSpare: 0 };
+    const all = G.fighters.slice(), p = G.player, others = all.filter(f => f !== p).sort(() => Math.random() - 0.5);
+    const mySide = setup.side === 'red' ? 1 : 0, half = Math.ceil(all.length / 2), blues = new Set();
+    if (p && mySide === 0) blues.add(p);
+    for (const f of others) if (blues.size < (p && mySide === 1 ? Math.floor(all.length / 2) : half)) blues.add(f);
+    for (const f of all) {
+        f.team = blues.has(f) ? 0 : 1;
+        f.color = f.team ? MECH.red : MECH.blue; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
+        f.mechClass = f === p ? MECH.classes[setup.mechClass] || 'mech' : pick(Object.values(MECH.classes));
+        mechSpawn(f, true);
+    }
+    for (const t of [0, 1]) for (let i = 0; i < MECH.spares; i++) { const s = hangarSpot(t); makeMech(pick(Object.values(MECH.classes)), s.x, s.y, t ? Math.PI : 0, t); }
+    if (p) { G.cam.x = p.x; G.cam.y = p.y; }
+}
+// A pilot (back) at the hangar, climbing straight into a fresh mech
+function mechSpawn(f, first) {
+    const s = hangarSpot(f.team);
+    f.x = s.x; f.y = s.y; f.vx = f.vy = 0;
+    f.inv = [null, null]; f.slot = 0; f.ammo = {};
+    applyLoot(f, 'Dual Shock', -1); f.ammo['Dual Shock'] = Infinity;
+    f.hp = f.maxHp = CONFIG.MAX_HEALTH; f.items.bandage = 2;
+    f.protectUntil = G.time + MECH.protect;
+    f.tanker = true;  // (bots stay in their mech until it's badly hurt)
+    const m = makeMech(f.mechClass || 'mech', s.x, s.y, f.team ? Math.PI : 0, f.team);
+    f.myMech = m;
+    enterCar(f, m);
+    if (!isHuman(f)) f.driveUntil = Infinity;
+}
+function mechRespawn(f) {
+    const fresh = createFighter(f.x, f.y, { isPlayer: f.isPlayer, name: f.name, color: f.color, team: f.team });
+    Object.assign(f, fresh, { remote: f.remote, kills: f.kills, nextThink: G.time, cook: null, healing: null, car: null, up: null, mechClass: f.mechClass });
+    G.fighters.push(f);
+    G.alive++;
+    mechSpawn(f);
+    if (f.isPlayer) { canvas.classList.remove('dead'); G.timeScale = 1; G.cam.x = f.x; G.cam.y = f.y; showBanner('BACK IN A MECH', false, 'A fresh one from your hangar'); }
+}
+function mechDeath(t, killer) {
+    const M = G.mech;
+    if (killer && killer !== t && killer.team !== undefined && killer.team !== t.team) M.score[killer.team]++;
+    M.queue.push({ f: t, at: G.time + MECH.respawn });
+    if (t.isPlayer && G.mode === 'playing') { G.flash = 0.4; G.flashColor = '255,40,70'; Sound.death(); }
+}
+function updateMech(dt) {
+    const M = G.mech, p = G.player, now = G.time;
+    if (M.queue.length) { const due = M.queue.filter(q => now >= q.at); M.queue = M.queue.filter(q => now < q.at); for (const q of due) mechRespawn(q.f); }
+    // Keep a few spare mechs waiting at each hangar
+    if (now >= M.nextSpare) {
+        M.nextSpare = now + 8000;
+        for (const t of [0, 1]) {
+            const h = mechHangar(t), spare = G.world.cars.filter(c => !c.dead && !c.driver && c.mechArena && Math.hypot(c.x - h.x, c.y - h.y) < MECH.hangarR + 150).length;
+            if (spare < MECH.spares) { const s = hangarSpot(t); makeMech(pick(Object.values(MECH.classes)), s.x, s.y, t ? Math.PI : 0, t); }
+        }
+        G.world.cars = G.world.cars.filter(c => !c.dead || c.driver);
+    }
+    for (const f of G.fighters) {
+        if (f.dead) continue;
+        for (const k of f.inv) if (k && f.ammo[k] !== Infinity && !WEAPONS[k].melee) f.ammo[k] = Infinity;
+        // On foot beside one of your side's empty mechs: you patch it up
+        if (!f.car) {
+            let m = null, bd = 115;
+            for (const c of G.world.cars) { if (c.dead || c.driver || c.team !== f.team || c.hp >= VTYPES[c.type].hp) continue; const d = Math.hypot(c.x - f.x, c.y - f.y) - VTYPES[c.type].len / 2; if (d < bd) { bd = d; m = c; } }
+            if (m) {
+                m.hp = Math.min(VTYPES[m.type].hp, m.hp + MECH.repair * dt);
+                m.repairAt = now;
+                if (Math.random() < dt * 12 && inView(m.x, m.y, 80)) G.particles.push({ type: 'glow', x: m.x + rand(-25, 25), y: m.y + rand(-25, 25), vx: rand(-80, 80), vy: rand(-80, 80), life: 0.25, max: 0.25, size: rand(3, 5), color: '#ffd166' });
+            }
+        }
+        // Bot pilots in a mech go looking for the nearest enemy
+        if (f.car && !isHuman(f) && now >= (f.huntAt || 0)) {
+            f.huntAt = now + 2000;
+            let best = null, bd = Infinity;
+            for (const e of G.fighters) if (!e.dead && e.team !== f.team) { const d = dist(e, f); if (d < bd) { bd = d; best = e; } }
+            if (best) f.driveGoal = { x: best.x + rand(-200, 200), y: best.y + rand(-200, 200) };
+        }
+    }
+    if (G.mode !== 'playing' || G.result || !p) return;
+    let won = null;
+    const w = M.score[0] >= MECH.win ? 0 : M.score[1] >= MECH.win ? 1 : null;
+    if (w !== null) won = p.team === w;
+    else if (now >= M.endAt) { if (M.score[0] === M.score[1]) { G.result = { won: false, place: 2, title: 'DRAW', sub: `${M.score[0]} – ${M.score[1]}` }; G.overAt = now + 2600; return; } won = (M.score[0] > M.score[1]) === (p.team === 0); }
+    if (won === null) return;
+    G.result = { won, place: won ? 1 : 2, title: won ? 'VICTORY!' : 'DEFEAT', sub: `${M.score[0]} – ${M.score[1]} kills` };
+    G.overAt = now + 2600;
+    if (won) startVictory(G.result.sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
+}
+// A bot on foot: back to its own mech to repair it (and climb in when it's patched up), or into any empty mech
+function mechBotPlan(b) {
+    if (b.car) return false;
+    const m = b.myMech;
+    if (m && !m.dead && !m.driver) {
+        const T = VTYPES[m.type], d = Math.hypot(m.x - b.x, m.y - b.y) - T.len / 2;
+        if (m.hp < T.hp * 0.92) {
+            if (d > 80) { b.mode = 'zone'; b.goal = { x: m.x + Math.cos(m.a + Math.PI / 2) * (T.wid / 2 + 30), y: m.y + Math.sin(m.a + Math.PI / 2) * (T.wid / 2 + 30) }; }
+            else b.mode = 'rest';
+            return true;
+        }
+        b.mode = 'tocar'; b.goal = m;
+        return true;
+    }
+    let best = null, bd = Infinity;
+    for (const c of G.world.cars) { if (c.dead || c.driver || !c.mechArena) continue; const d = Math.hypot(c.x - b.x, c.y - b.y) + (c.team === b.team ? 0 : 400); if (d < bd) { bd = d; best = c; } }
+    if (best) { b.myMech = best; b.mode = 'tocar'; b.goal = best; return true; }
+    return false;
+}
+function drawMechArena(now) {
+    const M = G.mech;
+    if (!M) return;
+    for (const t of [0, 1]) {
+        const h = mechHangar(t), col = t ? '255,75,75' : '61,139,255';
+        if (!inView(h.x, h.y, MECH.hangarR + 60)) continue;
+        ctx.fillStyle = 'rgba(40,44,52,0.55)'; ctx.beginPath(); ctx.arc(h.x, h.y, MECH.hangarR, 0, TAU); ctx.fill();
+        ctx.strokeStyle = `rgba(${col},0.7)`; ctx.lineWidth = 6; ctx.setLineDash([26, 16]); ctx.beginPath(); ctx.arc(h.x, h.y, MECH.hangarR, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+        ctx.font = '800 26px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = `rgba(${col},0.75)`; ctx.fillText(t ? 'RED HANGAR' : 'BLUE HANGAR', h.x, h.y - MECH.hangarR - 22);
+    }
+    // a wrench over mechs being repaired
+    for (const c of G.world.cars) if (c.mechArena && !c.dead && G.time - (c.repairAt || -1e9) < 200 && inView(c.x, c.y, 80)) {
+        const T = VTYPES[c.type], k = c.hp / T.hp;
+        ctx.fillStyle = 'rgba(14,10,28,0.7)'; ctx.fillRect(c.x - 34, c.y - T.len / 2 - 22, 68, 8);
+        ctx.fillStyle = '#ffd166'; ctx.fillRect(c.x - 33, c.y - T.len / 2 - 21, 66 * k, 6);
+        ctx.font = '700 12px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff7ec'; ctx.fillText('REPAIRING', c.x, c.y - T.len / 2 - 30);
+    }
+}
+function drawMechOverlay() {
+    const M = G.mech, p = G.player;
+    if (!M || G.mode !== 'playing' || !p || !p.dead) return;
+    const q = M.queue.find(q => q.f === p);
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(10,6,20,0.45)'; ctx.fillRect(0, viewH * 0.36, viewW, viewH * 0.18);
+    ctx.font = '900 46px "Black Ops One", sans-serif'; ctx.fillStyle = '#ffd166';
+    ctx.fillText(`RESPAWNING IN ${q ? Math.max(1, Math.ceil((q.at - G.time) / 1000)) : ''}`, viewW / 2, viewH * 0.43);
+    ctx.font = '600 19px Rajdhani, sans-serif'; ctx.fillStyle = '#fff7ec'; ctx.fillText('A fresh mech is waiting at your hangar', viewW / 2, viewH * 0.5);
+    ctx.restore();
+}
+function mechStatus(p) {
+    const M = G.mech, left = fmtTime(Math.max(0, (M.endAt - G.time) / 1000));
+    const st = p.car ? `${VTYPES[p.car.type].name} ${Math.ceil(p.car.hp / VTYPES[p.car.type].hp * 100)}%` : p.myMech && !p.myMech.dead ? 'On foot: stand by your mech to repair it, F to climb in' : 'On foot: find an empty mech (F to climb in)';
+    return `${st} · first to ${MECH.win} · ${left}`;
 }
 
 // ---------- Sniper Duel ----------
@@ -8464,6 +8634,12 @@ function newDemo() {
         G.cam.x = G.bossF.x; G.cam.y = G.bossF.y;
         return;
     }
+    if (id === 'mech') {
+        newState('demo', { type: 'mech', count: MECH.players, map: 'city' });
+        G.alive = G.fighters.length;
+        G.cam.x = CONFIG.WORLD_SIZE / 2; G.cam.y = CONFIG.WORLD_SIZE / 2;
+        return;
+    }
     if (id === 'temple') {
         newState('demo', { type: 'temple', count: TEMPLE.players, map: 'temple' });
         G.alive = G.fighters.length;
@@ -8815,7 +8991,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.ghostMode || G.temple || G.duel || G.navy) return;
+    if (G.ghostMode || G.temple || G.mech || G.duel || G.navy) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -9665,7 +9841,7 @@ function killFighter(t, killer, weapon) {
 
     // (in the menu's background battle people fall as bodies; in a real game they're just gone, no effect)
     if (!t.escaped && !t.vaporized && G.mode === 'demo') addCorpse(t);
-    if (!G.temple) dropDeathWeapons(t);  // (Treasure Temple: guns come from the racks and chests)
+    if (!G.temple && !G.mech) dropDeathWeapons(t);  // (Treasure Temple: guns come from the racks and chests)
     if (G.mode === 'demo' && inView(t.x, t.y, 100)) {
         burst(t.x, t.y, 22, t.color, 260, 'blood');
         burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
@@ -9677,6 +9853,7 @@ function killFighter(t, killer, weapon) {
 
     if (G.war) { warDeath(t, killer, weapon); return; }
     if (G.temple) { templeDeath(t, killer); return; }
+    if (G.mech) { mechDeath(t, killer); return; }
     if (t.isPlayer && G.result) return;
     if (t.isPlayer) {
         G.result = { won: false, place: G.escape ? G.sides.a + G.escaped : G.alive + 1, sub: G.escape ? `The army got you. ${G.escaped} of ${ESCAPE.people} people escaped.` : G.bossFight && G.bossF && !G.bossF.dead ? `The boss still has ${Math.ceil(G.bossF.hp / G.bossF.maxHp * 100)}% of his health left.` : null, killer: killer && killer !== t ? killer.name : killer === t ? `your own ${weapon.toLowerCase()}` : (weapon === 'zone' ? 'the zone' : null) };
@@ -10181,6 +10358,7 @@ function botThink(b) {
     if (b.zombie) { zombieThink(b); return; }
     if (G.duel && b.duel) { duelThink(b); return; }
     if (G.ghostMode && b.ghost) { ghostBot(b); return; }
+    if (G.mech && mechBotPlan(b)) { b.nextThink = G.time + 400; return; }
     const K = AIK();
     b.nextThink = G.time + (b.boss ? rand(90, 160) : rand(220, 480) * K.think);
     // Escape: the group follows you (or, on the title screen, whoever's in front)
@@ -13722,6 +13900,9 @@ const VTYPES = {
     hovertank: { name: 'Hover Tank', len: 100, wid: 64, accel: 460, brake: 800, max: 540, reverse: 320, turn: 2.3, hp: 2400, ram: 0.3, share: 0.05, hover: true, cannon: { rate: 550, plasma: true }, tech: true },
     jetbike: { name: 'Jet Bike', len: 60, wid: 24, accel: 1300, brake: 1400, max: 1250, reverse: 300, turn: 3.8, hp: 320, ram: 0.12, share: 0.6, hover: true, boost: true, tech: true },
     mech: { name: 'Battle Mech', len: 70, wid: 70, accel: 320, brake: 700, max: 270, reverse: 220, turn: 2.8, hp: 3200, ram: 0.25, share: 0.05, crush: true, gun: { weapon: 'Minigun', rate: 50, dmg: 15, twin: true }, tech: true },
+    // Mech Arena's other two mechs: a quick light one with jump jets (hold Shift) and a slow heavy one with rocket pods
+    mechlight: { name: 'Striker Mech', len: 60, wid: 60, accel: 520, brake: 900, max: 400, reverse: 300, turn: 3.4, hp: 2000, ram: 0.2, share: 0.05, crush: true, boost: true, gun: { weapon: 'Heavy MG', rate: 75, dmg: 13, twin: true } },
+    mechheavy: { name: 'Titan Mech', len: 88, wid: 88, accel: 220, brake: 600, max: 190, reverse: 150, turn: 2.0, hp: 5200, ram: 0.35, share: 0.03, crush: true, gun: { weapon: 'Heavy MG', rate: 120, dmg: 24 }, rockets: { rate: 1500 } },
     stealth: { name: 'Stealth Buggy', len: 80, wid: 44, accel: 820, brake: 1100, max: 840, reverse: 260, turn: 3.0, hp: 760, ram: 0.15, share: 0.2, stealth: true, rockets: { rate: 650 }, tech: true },
     // Revolution: a heavy gun dug in behind sandbags. It doesn't move; it turns to wherever you aim
     // Revolution: a stone guard tower on the base wall with a cannon on top
@@ -13978,15 +14159,15 @@ function updateCars(dt) {
 
 // Tank and bulldozer: crates, cars, wrecks, rubble, trees and rocks in the way are flattened; the dozer takes walls too
 function crushAhead(c, pts) {
-    const T = vt(c);
+    const T = vt(c), walls = T.walls || c.mechArena;  // (Mech Arena: the mechs smash straight through buildings)
     const gone = new Set();
     for (const q of pts.slice(0, 3)) G.world.grid.query(q.x, q.y, 20, o => {
-        if (gone.has(o) || o.baked || o.mazeWall && !T.walls) return;
+        if (gone.has(o) || o.baked || o.mazeWall && !walls) return;
         const hit = isBox(o) ? Math.abs(q.x - o.x) < o.hw + 6 && Math.abs(q.y - o.y) < o.hh + 6 : Math.hypot(q.x - o.x, q.y - o.y) < (o.r || 0) + 6;
         if (!hit) return;
         if (o.drivecar) { damageCar(o.drivecar, 400, c.driver); return; }
         if (o.type === 'box') { breakBox(o); return; }
-        if (o.type === 'wall' && !T.walls) return;
+        if (o.type === 'wall' && !walls) return;
         if (o.type === 'wall' && o.hw * o.hh > 6000 && !o.sandbags) {
             // A long wall: knock a chunk out of it where we hit instead of deleting the whole thing
             o.hp = (o.hp || 3) - 1;
@@ -14063,6 +14244,7 @@ function vehicleFire(c, p) {
 
 function damageCar(c, dmg, by) {
     if (c.dead) return;
+    if (c.mechArena) dmg *= 0.9;
     c.hp -= dmg;
     c.hitAt = G.time;
     if (c.hp <= 0) explodeCar(c, by);
@@ -14073,6 +14255,8 @@ function explodeCar(c, by) {
     c.dead = true;
     const p = c.driver, T = vt(c);
     if (p) exitCar(p);
+    // (Mech Arena: the pilot ejects as it goes up)
+    if (p && c.mechArena) { p.protectUntil = G.time + 3000; if (p.isPlayer && G.mode === 'playing') showBanner('EJECTED!', true, 'Your mech is gone: steal an empty one, or get a fresh one at your hangar'); }
     unparkCar(c);
     if (T.animal) { animalDown(c); return; }
     // The blast goes off before the burnt shell is there to soak it up (it was shielding everyone from it)
@@ -14354,8 +14538,10 @@ function drawVehicleBody(c) {
             ctx.fillStyle = c.color; ctx.beginPath(); ctx.moveTo(L / 2, 0); ctx.lineTo(L / 6, -Wd / 2); ctx.lineTo(-L / 2, -Wd / 2 + 3); ctx.lineTo(-L / 2, Wd / 2 - 3); ctx.lineTo(L / 6, Wd / 2); ctx.closePath(); ctx.fill();
             techTrim(L, Wd, now);
             break;
-        case 'mech': {
-            // Two stomping feet, a cockpit and gun arms
+        case 'mech': case 'mechlight': case 'mechheavy': {
+            // Two stomping feet, a cockpit and gun arms (the Titan carries rocket pods on its shoulders)
+            if (c.type === 'mechheavy') { ctx.fillStyle = '#2a2e36'; ctx.fillRect(-14, -Wd / 2 - 2, 26, 14); ctx.fillRect(-14, Wd / 2 - 12, 26, 14); ctx.fillStyle = '#ff6b4a'; for (const sy of [-1, 1]) for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(-8 + k * 8, sy * (Wd / 2 - 5), 2.5, 0, TAU); ctx.fill(); } }
+            if (c.type === 'mechlight') { ctx.fillStyle = 'rgba(255,170,70,0.5)'; ctx.beginPath(); ctx.ellipse(-Wd * 0.42, 0, 8, 14, 0, 0, TAU); ctx.fill(); }
             const step = Math.sin((c.walk = (c.walk || 0) + Math.abs(c.speed) * 0.0004)) * 10;
             ctx.fillStyle = '#0d1016'; ctx.fillRect(-12 + step, -Wd / 2, 24, 16); ctx.fillRect(-12 - step, Wd / 2 - 16, 24, 16);
             ctx.fillStyle = c.color; ctx.beginPath(); ctx.arc(0, 0, Wd * 0.36, 0, TAU); ctx.fill();
@@ -14477,7 +14663,7 @@ function drawCars(only) {
         if (T.animal) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(5, 7, L * 0.48, Wd * 0.55, 0, 0, TAU); ctx.fill(); }  // a soft shadow, not a car's box
         else if (!T.round) ctx.fillRect(-L / 2 + 5, -Wd / 2 + 7, L, Wd);
         drawVehicleBody(c);
-        if (!['heli', 'boat', 'sub', 'subsmall', 'tank', 'dozer', 'mech', 'gunship', 'hovertank', 'horse', 'wagon'].includes(c.type)) {
+        if (!['heli', 'boat', 'sub', 'subsmall', 'tank', 'dozer', 'mech', 'mechlight', 'mechheavy', 'gunship', 'hovertank', 'horse', 'wagon'].includes(c.type)) {
             ctx.fillStyle = c.driver ? '#fff6c2' : '#d8d2b0';
             ctx.fillRect(L / 2 - 4, -Wd / 2 + 4, 4, 6); ctx.fillRect(L / 2 - 4, Wd / 2 - 10, 4, 6);
             ctx.fillStyle = c.braking ? '#ff3030' : '#8a1a1a';
@@ -15555,6 +15741,7 @@ function update(dt) {
     if (G.noZone) updateOutbreak(dt);
     if (G.ghostMode) updateGhost(dt);
     if (G.temple) updateTemple(dt);
+    if (G.mech) updateMech(dt);
     if (G.duel) updateDuel(dt);
     if (G.survival && !G.frozen && !G.world.floor) updateAnimals(dt);
     if (!G.duel) updateCountdown();
@@ -15824,6 +16011,7 @@ function render() {
     if (G.navy) drawNavy(L, T, R, B, now);
     if (G.navy) drawNavyInterior(L, T, R, B, now);
     if (G.world.temple) drawTempleProps(now);
+    if (G.mech) drawMechArena(now);
     // Fighters
     const visible = [];
     const deckOf = f => (f && f.room && f.ship ? f.ship : null), myDeck = G.player ? G.player.room || null : null, myShip = deckOf(G.player);
@@ -15929,6 +16117,7 @@ function render() {
         if (a > 0.01) { ctx.globalAlpha = a; ctx.drawImage(hurtVignette, 0, 0, viewW, viewH); ctx.globalAlpha = 1; }
     }
     if (G.temple) drawTempleOverlay();
+    if (G.mech) drawMechOverlay();
     if (G.whiteout > 0.01) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, G.whiteout * 1.6)})`; ctx.fillRect(0, 0, viewW, viewH); }
     if (G.flash > 0.01) {
         ctx.fillStyle = `rgba(${G.flashColor},${G.flash * 0.6})`;
@@ -17613,6 +17802,9 @@ function updateHUD() {
     } else if (G.war) {
         setHTML(hud.teamScore, 'teams', G.teamAlive.map((n, t) =>
             `<div class="ts${t === p.team ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${TEAMS[t].color}"></i><b>${n}</b><span>${t === p.team ? 'Your team' : TEAMS[t].name}</span></div>`).join('<em>vs</em>'));
+    } else if (G.mech) {
+        const sc = G.mech.score, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
+        setHTML(hud.teamScore, 'teams', chip(sc[0], MECH.blue, `Blue kills (first to ${MECH.win})`, p.team === 0) + '<em>vs</em>' + chip(sc[1], MECH.red, 'Red kills', p.team === 1));
     } else if (G.temple) {
         const sc = G.temple.score, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
         setHTML(hud.teamScore, 'teams', chip(sc[0], TEMPLE.blue, `Blue (first to ${TEMPLE.wins})`, p.team === 0) + '<em>vs</em>' + chip(sc[1], TEMPLE.red, 'Red', p.team === 1));
@@ -17630,6 +17822,7 @@ function updateHUD() {
     let zt;
     if (G.navy) zt = navyStatus(p);
     else if (G.temple) zt = templeStatus(p);
+    else if (G.mech) zt = mechStatus(p);
     else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
     else if (G.bossFight) zt = G.bossF && G.bossF.rage ? 'Guards! Take them out or go for the boss' : 'Take down the boss · beware his stomp';
@@ -17936,6 +18129,7 @@ const MODES = [
     { id: 'ffa', name: 'FREE FOR ALL', desc: 'Every player for themselves. Last one standing wins.' },
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
+    { id: 'mech', name: 'MECH ARENA', desc: 'Five against five in giant walking mechs: a fast Striker with jump jets, a Brawler with twin miniguns or a slow Titan with rockets. Lose your mech and you eject: repair it, steal an empty one, or grab one at your hangar.' },
     { id: 'temple', name: 'TREASURE TEMPLE', desc: 'Two teams race through a jungle and into a giant temple maze full of traps and secret passages, to grab the golden idol and carry it home.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
     { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
@@ -17960,10 +18154,11 @@ function setMenuMode(i, dir) {
     $('mode-desc').textContent = m.desc;
     $('settings-navy').classList.toggle('hidden', m.id !== 'navy');
     $('solo-friends').classList.toggle('hidden', !soloMap(m.id));
-    $('settings-ffa').classList.toggle('hidden', m.id === 'temple' || m.id === 'navy' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-ffa').classList.toggle('hidden', m.id === 'mech' || m.id === 'temple' || m.id === 'navy' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
     $('settings-temple').classList.toggle('hidden', m.id !== 'temple');
+    $('settings-mech').classList.toggle('hidden', m.id !== 'mech');
     document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
     // Revolution is always two sides
@@ -18282,7 +18477,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'temple' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'temple' || id === 'mech' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -18297,6 +18492,7 @@ const BRIEF = {
     revolution: [['🎯', '<b>Wipe out the other side or bring down their castle.</b> Each castle has healing rooms, an armory, towers and wall cannons.'], ['💥', 'Load ammo into your boss strike pad and launch it at the enemy castle. No respawns.']],
     boss: [['🎯', '<b>Your whole team against one giant boss.</b> He sprays a minigun and fires rockets, and stomps anyone who gets too close.'], ['🪖', 'At half health he calls in soldiers and gets faster. Everyone starts armed, with ammo and medkits around the arena.']]
 };
+BRIEF.mech = [['🤖', '<b>5 against 5, all in giant mechs.</b> Striker: fast, with jump jets (hold <b>Shift</b>). Brawler: twin miniguns. Titan: slow and tough, with a heavy gun and rockets. First team to 30 kills wins.'], ['🔧', 'When your mech is destroyed you eject on foot. Stand next to a damaged mech of yours to repair it, press <b>F</b> to climb into any empty mech (even the enemy\'s), or get a fresh one at your hangar.']];
 BRIEF.temple = [['🗿', '<b>5 against 5.</b> Grab the golden idol from the middle of the temple maze and carry it back to your camp. First to bring it home 3 times wins.'], ['⚠️', 'The jungle and the maze are full of traps, and the maze walls move. Press <b>F</b> at a cracked wall, a carved hatch or a dug-up X to find secrets and shortcuts.']];
 BRIEF.ghost = [['👻', '<b>One invisible ghost hunts the hunters.</b> It only shows for a moment when it shoots or gets hit, but it leaves glowing footprints.'], ['🔦', 'Pitch dark: every hunter has a flashlight and a gun. Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Sink or capture every enemy ship.</b> Take the wheel, man the cannons and deck guns, fly a helicopter or launch a submarine from the decks below.'], ['🪵', 'When hulls touch, planks go across so you can board: take an enemy\'s wheel and the ship is yours. In the water you slowly drown, so swim to a hull.']];
@@ -18328,17 +18524,17 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'temple' ? `You: ${templeSidePick === 'red' ? 'Red' : 'Blue'} team` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'temple' ? `You: ${templeSidePick === 'red' ? 'Red' : 'Blue'} team` : m.id === 'mech' ? `You: ${mechSidePick === 'red' ? 'Red' : 'Blue'} · ${VTYPES[MECH.classes[mechClassPick]].name}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'temple' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'temple' || m.id === 'mech' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'temple' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'temple' || id === 'mech' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
     else { const map = BRIEF_STAGE.map; quickMatch(() => startGame(map)); }
 });
 $('brief-back').addEventListener('click', () => {
@@ -18346,7 +18542,7 @@ $('brief-back').addEventListener('click', () => {
     // (a mode with only one map never showed the map screen: back to whatever came before it)
     if (BRIEF_STAGE.stage === 'desc') screens.menu.classList.remove('hidden');
     else if (!soloMap(MODES[menuMode].id)) screens.mapsel.classList.remove('hidden');
-    else if (['ghost', 'temple', 'navy'].includes(MODES[menuMode].id)) openDescription();
+    else if (['ghost', 'temple', 'mech', 'navy'].includes(MODES[menuMode].id)) openDescription();
     else openTypeSelect();
 });
 
@@ -18355,6 +18551,7 @@ let lastMap = 'ordinary';
 function mapAllowed(id, m) {
     if (id === 'navy') return m === 'sea';
     if (id === 'temple') return m === 'temple';
+    if (id === 'mech') return m === 'ordinary' || m === 'city' || m === 'rusty';
     if (m === 'temple') return false;
     return !(m === 'sea' || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
@@ -18485,7 +18682,7 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
-for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#temple-side', v => { templeSidePick = v; }]])
+for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#temple-side', v => { templeSidePick = v; }], ['#mech-side', v => { mechSidePick = v; }], ['#mech-class', v => { mechClassPick = v; }]])
     for (const b of document.querySelectorAll(sel + ' button')) b.addEventListener('click', () => {
         set(b.dataset.r);
         for (const o of document.querySelectorAll(sel + ' button')) o.classList.toggle('on', o === b);
@@ -18513,16 +18710,18 @@ function startGame(map = lastMap) {
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
     if (id === 'temple') map = 'temple'; else if (map === 'temple') map = 'ordinary';
+    if (id === 'mech' && !mapAllowed('mech', map)) map = 'city';
     lastMap = map;
     const setup = id === 'navy' ? (navyFleet === 'ffa' ? { type: id, teams: navyFfaCount(), size: NAVY_FFA.crew, ships: 1, crew: NAVY_FFA.crew, role: navyRolePick, fleet: 'ffa' } : navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
         : id === 'temple' ? { type: id, count: TEMPLE.players - 1, side: templeSidePick }
+        : id === 'mech' ? { type: id, count: MECH.players - 1, side: mechSidePick, mechClass: mechClassPick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : { type: id, count: sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'ghost' || id === 'temple' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'ghost' || id === 'temple' || id === 'mech' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     // Every game starts with a countdown while everyone gets ready (Survival and Sniper Duel have their own)
@@ -18537,11 +18736,11 @@ function startGame(map = lastMap) {
     document.body.classList.add('playing');
     canvas.classList.remove('dead');
     mouse.down = false;
-    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.temple);
+    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.temple && !G.mech);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.temple);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.temple || !!G.mech);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
@@ -18550,6 +18749,7 @@ function startGame(map = lastMap) {
     if (G.navy && G.navy.ffa) showBanner('SHIP FREE FOR ALL', true, `${G.war.teams} squads of ${G.war.size}, a mini ship each. Every ship for itself: be the last one afloat!`);
     else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
+    else if (G.mech) showBanner('MECH ARENA', true, `You're in a ${VTYPES[G.player.car ? G.player.car.type : 'mech'].name}. ${MECH.win} kills wins!`);
     else if (G.temple) showBanner('TREASURE TEMPLE', true, 'Grab the golden idol from the middle of the temple and carry it back to your camp!');
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
