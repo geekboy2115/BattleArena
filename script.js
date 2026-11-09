@@ -1233,6 +1233,7 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'haunted') return generateHaunted();
     if (type === 'sea') return generateSea();
     if (type === 'temple') return generateTemple();
+    if (type === 'concrete') return generateConcrete();
     // Wasteland (the sniping map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
     const city = type !== 'ordinary' && !waste, rusty = type === 'rusty';
@@ -6022,6 +6023,85 @@ function templeStatus(p) {
     return `${where} · ${T2.overtime ? 'OVERTIME' : left}`;
 }
 
+// ---------- The Concrete Arena (a map for Mech Arena) ----------
+// A walled concrete stadium: painted lane markings and a big centre circle on the floor, giant pillars nothing can knock
+// down, shipping containers, concrete barriers and bunkers that a mech can smash through, and stands all round
+const CONCRETE = { R: 3550 };
+function generateConcrete() {
+    const W = CONFIG.WORLD_SIZE, c = W / 2, R = CONCRETE.R, grid = new Grid(256, 90), obstacles = [], lootSpots = [];
+    const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
+    const inside = (x, y, m) => Math.hypot(x - c, y - c) < R - m;
+    const clear = (x, y, r) => inside(x, y, 200) && !blockedAt(grid, x, y, r) && Math.abs(Math.abs(x - c) - 2650) + Math.abs(y - c) > 520;
+    // The outer wall: thick concrete blocks all the way round
+    for (let a = 0; a < TAU; a += 0.035) addBox({ type: 'wall', x: c + Math.cos(a) * (R + 30), y: c + Math.sin(a) * (R + 30), hw: 70, hh: 70, color: '#6f737a', baked: true });
+    // Giant pillars in two rings (these never come down)
+    for (const [n, r] of [[6, 1150], [10, 2300]]) for (let k = 0; k < n; k++) { const a = k / n * TAU + (r > 2000 ? 0.3 : 0), x = c + Math.cos(a) * r, y = c + Math.sin(a) * r; if (Math.abs(Math.abs(x - c) - 2650) + Math.abs(y - c) > 500) addBox({ type: 'wall', x, y, hw: 62, hh: 62, color: '#8a8e95', baked: true, pillar: true }); }
+    // Shipping containers, alone and stacked in rows
+    const box = ['#c0583f', '#3f7a9c', '#d9a23a', '#5a7a46', '#8a4a8a'];
+    for (let i = 0, made = 0; i < 400 && made < 34; i++) {
+        const x = rand(c - R, c + R), y = rand(c - R, c + R), horiz = Math.random() < 0.5, n = Math.random() < 0.35 ? 2 : 1;
+        if (!clear(x, y, 150)) continue;
+        for (let k = 0; k < n; k++) addBox({ type: 'wall', x: horiz ? x : x + k * 52, y: horiz ? y + k * 52 : y, hw: horiz ? 120 : 24, hh: horiz ? 24 : 120, color: pick(box), container: true });
+        made++;
+    }
+    // Bunkers: a U of thick concrete facing a random way
+    for (let i = 0, made = 0; i < 200 && made < 8; i++) {
+        const x = rand(c - R, c + R), y = rand(c - R, c + R);
+        if (!clear(x, y, 170)) continue;
+        const d = randInt(0, 3), s2 = 95, t = 18;
+        const parts = [[0, -s2, s2, t], [0, s2, s2, t], [-s2, 0, t, s2], [s2, 0, t, s2]].filter((_, k) => k !== d);
+        for (const [ox, oy, hw, hh] of parts) addBox({ type: 'wall', x: x + ox, y: y + oy, hw, hh, color: '#7d8189' });
+        made++;
+    }
+    // Concrete barriers scattered for cover
+    for (let i = 0, made = 0; i < 900 && made < 110; i++) {
+        const x = rand(c - R, c + R), y = rand(c - R, c + R), horiz = Math.random() < 0.5;
+        if (!clear(x, y, 60)) continue;
+        addBox({ type: 'wall', x, y, hw: horiz ? 46 : 12, hh: horiz ? 12 : 46, color: '#a9adb3', barrier: true });
+        made++;
+    }
+    for (let i = 0; i < 120; i++) { const x = rand(c - R, c + R), y = rand(c - R, c + R); if (clear(x, y, 30)) lootSpots.push({ x, y, box: Math.random() < 0.4 }); }
+    // Oil stains and cracks on the floor
+    const stains = [];
+    for (let i = 0; i < 220; i++) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (R - 100); stains.push({ x: c + Math.cos(a) * d, y: c + Math.sin(a) * d, r: rand(20, 90), crack: Math.random() < 0.4, rot: rand(0, TAU) }); }
+    const [mm, g] = makeCanvas(200, 200), k = 200 / W;
+    g.fillStyle = '#2a2c31'; g.fillRect(0, 0, 200, 200);
+    g.fillStyle = '#8e9299'; g.beginPath(); g.arc(c * k, c * k, R * k, 0, TAU); g.fill();
+    for (const o of obstacles) { g.fillStyle = o.container ? o.color : o.baked ? '#4a4d55' : '#62666e'; g.fillRect((o.x - o.hw) * k, (o.y - o.hh) * k, Math.max(1, o.hw * 2 * k), Math.max(1, o.hh * 2 * k)); }
+    return { obstacles, grid, decorGrid: new Grid(512, 900), buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'concrete', concrete: { c, R, stains } };
+}
+function drawConcreteGround(L, T, Rr, B) {
+    const A = G.world.concrete, { c, R } = A, now = performance.now() / 1000;
+    // the stands outside the wall: rows of seats
+    ctx.fillStyle = '#25272c'; ctx.fillRect(L, T, Rr - L, B - T);
+    ctx.strokeStyle = 'rgba(70,74,82,0.6)'; ctx.lineWidth = 10;
+    for (let r = R + 160; r < R + 1400; r += 70) { ctx.beginPath(); ctx.arc(c, c, r, 0, TAU); ctx.stroke(); }
+    // the floor
+    ctx.save(); ctx.beginPath(); ctx.arc(c, c, R, 0, TAU); ctx.clip();
+    ctx.fillStyle = '#8e9299'; ctx.fillRect(L, T, Rr - L, B - T);
+    ctx.strokeStyle = 'rgba(60,62,68,0.35)'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let x = Math.floor(L / 240) * 240; x < Rr; x += 240) { ctx.moveTo(x, T); ctx.lineTo(x, B); }
+    for (let y = Math.floor(T / 240) * 240; y < B; y += 240) { ctx.moveTo(L, y); ctx.lineTo(Rr, y); }
+    ctx.stroke();
+    for (const st of A.stains) {
+        if (st.x < L - 100 || st.x > Rr + 100 || st.y < T - 100 || st.y > B + 100) continue;
+        if (st.crack) { ctx.strokeStyle = 'rgba(50,50,54,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(st.x, st.y); for (let k = 1; k < 5; k++) ctx.lineTo(st.x + Math.cos(st.rot + k * 0.7) * st.r * k / 4, st.y + Math.sin(st.rot + k * 0.5) * st.r * k / 4); ctx.stroke(); }
+        else { ctx.fillStyle = 'rgba(40,40,46,0.22)'; ctx.beginPath(); ctx.ellipse(st.x, st.y, st.r, st.r * 0.7, st.rot, 0, TAU); ctx.fill(); }
+    }
+    // painted markings: the centre circle, a ring, and the lanes to each hangar
+    ctx.strokeStyle = 'rgba(255,209,102,0.55)'; ctx.lineWidth = 14;
+    ctx.beginPath(); ctx.arc(c, c, 420, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(c, c, 1700, 0, TAU); ctx.stroke();
+    ctx.setLineDash([80, 60]); ctx.beginPath(); ctx.moveTo(c - R, c); ctx.lineTo(c + R, c); ctx.moveTo(c, c - R); ctx.lineTo(c, c + R); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(c, c, R - 60, 0, TAU); ctx.stroke();
+    ctx.restore();
+    // floodlights on the wall
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 8; k++) { const a = k / 8 * TAU + 0.2, x = c + Math.cos(a) * (R + 30), y = c + Math.sin(a) * (R + 30); if (!inView(x, y, 300)) continue; const gr = ctx.createRadialGradient(x, y, 0, x, y, 260); gr.addColorStop(0, `rgba(255,250,220,${0.25 + Math.sin(now * 2 + k) * 0.03})`); gr.addColorStop(1, 'rgba(255,250,220,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, 260, 0, TAU); ctx.fill(); }
+    ctx.restore();
+}
+
 // ---------- Mech Arena ----------
 // Two teams of five, every pilot in a giant walking mech: a fast Striker with jump jets, a Brawler with twin miniguns,
 // or a slow Titan with a heavy gun and rocket pods. When a mech is destroyed its pilot ejects on foot (with a pair of
@@ -8635,7 +8715,7 @@ function newDemo() {
         return;
     }
     if (id === 'mech') {
-        newState('demo', { type: 'mech', count: MECH.players, map: 'city' });
+        newState('demo', { type: 'mech', count: MECH.players, map: 'concrete' });
         G.alive = G.fighters.length;
         G.cam.x = CONFIG.WORLD_SIZE / 2; G.cam.y = CONFIG.WORLD_SIZE / 2;
         return;
@@ -15900,6 +15980,7 @@ function render() {
     const W = CONFIG.WORLD_SIZE;
     if (G.navy) drawSea(L, T, R, B, now);
     else if (G.world.temple) drawTempleGround(L, T, R, B);
+    else if (G.world.concrete) drawConcreteGround(L, T, R, B);
     else if (G.world.floor) drawFloorBase(L, T, R, B);
     else if (G.world.city) drawCity(L, T, R, B);
     else {
@@ -18498,7 +18579,7 @@ BRIEF.ghost = [['👻', '<b>One invisible ghost hunts the hunters.</b> It only s
 BRIEF.navy = [['🚢', '<b>Sink or capture every enemy ship.</b> Take the wheel, man the cannons and deck guns, fly a helicopter or launch a submarine from the decks below.'], ['🪵', 'When hulls touch, planks go across so you can board: take an enemy\'s wheel and the ship is yours. In the water you slowly drown, so swim to a hull.']];
 BRIEF.duel = [['🎯', '<b>You against one sniper: first to win 3 rounds.</b> One hit kills, for both of you. Use the scope to see far.'], ['👣', 'Footsteps carry and a scope glints when it\'s aimed at you. Move after every shot. After 1:30 the circle starts closing.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { temple: 'Jungle Temple', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
+const BRIEF_MAP = { temple: 'Jungle Temple', concrete: 'Concrete Arena', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot · <b>1–5</b> or <b>scroll</b> switch guns · <b>right click</b> scope'], ['🎒', '<b>F</b> pick up, swap a gun, use, or get in a vehicle · <b>Q</b> bandage · <b>E</b> medkit · <b>T</b> grenade · <b>Esc</b> pause']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot · tap a slot to switch guns'], ['🎒', 'The <b>button at the bottom</b> picks up, uses or gets in a vehicle · tap the bandage, medkit or grenade to use them']];
@@ -18551,13 +18632,13 @@ let lastMap = 'ordinary';
 function mapAllowed(id, m) {
     if (id === 'navy') return m === 'sea';
     if (id === 'temple') return m === 'temple';
-    if (id === 'mech') return m === 'ordinary' || m === 'city' || m === 'rusty';
-    if (m === 'temple') return false;
+    if (id === 'mech') return m === 'concrete' || m === 'ordinary' || m === 'city' || m === 'rusty';
+    if (m === 'temple' || m === 'concrete') return false;
     return !(m === 'sea' || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
 // The one map a mode can be played on, if there's only one: then there's nothing to choose
 function soloMap(id) {
-    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'temple'].filter(m => mapAllowed(id, m));
+    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'temple', 'concrete'].filter(m => mapAllowed(id, m));
     return all.length === 1 ? all[0] : null;
 }
 function openMapSelect() {
@@ -18573,6 +18654,7 @@ function openMapSelect() {
     screens.mapsel.classList.remove('hidden');
 }
 const MAP_DESC = {
+    concrete: 'A walled concrete stadium: giant pillars, shipping containers, bunkers and barriers, with the crowd\'s stands all round.',
     ordinary: 'Open fields, forests, rocky hills and little towns.',
     city: 'Streets, parked cars, hotels, hospitals and houses.',
     rusty: 'An abandoned facility in a warzone: rusted sheds, wrecked cars, ruins and smoke.',
@@ -18586,6 +18668,16 @@ const MAP_DESC = {
 // Little painted thumbnails of each battlefield
 function drawMapPreview(cv, map) {
     const g = cv.getContext('2d'), W = cv.width, H = cv.height, rnd = seededRand(map.length * 977);
+    if (map === 'concrete') {
+        g.fillStyle = '#25272c'; g.fillRect(0, 0, W, H);
+        g.fillStyle = '#8e9299'; g.beginPath(); g.arc(W / 2, H / 2, 150, 0, TAU); g.fill();
+        g.strokeStyle = 'rgba(255,209,102,0.7)'; g.lineWidth = 4; g.beginPath(); g.arc(W / 2, H / 2, 26, 0, TAU); g.stroke(); g.beginPath(); g.arc(W / 2, H / 2, 85, 0, TAU); g.stroke();
+        g.setLineDash([12, 9]); g.beginPath(); g.moveTo(W / 2 - 150, H / 2); g.lineTo(W / 2 + 150, H / 2); g.stroke(); g.setLineDash([]);
+        g.strokeStyle = '#6f737a'; g.lineWidth = 10; g.beginPath(); g.arc(W / 2, H / 2, 152, 0, TAU); g.stroke();
+        for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; g.fillStyle = '#5a5e66'; g.fillRect(W / 2 + Math.cos(a) * 55 - 7, H / 2 + Math.sin(a) * 55 - 7, 14, 14); }
+        for (let i = 0; i < 9; i++) { g.fillStyle = pick(['#c0583f', '#3f7a9c', '#d9a23a']); const x = W / 2 + (rnd() - 0.5) * 220, y = H / 2 + (rnd() - 0.5) * 150; if (Math.hypot(x - W / 2, y - H / 2) < 130) g.fillRect(x, y, rnd() < 0.5 ? 26 : 7, rnd() < 0.5 ? 7 : 26); }
+        return;
+    }
     if (map === 'wasteland') {
         g.fillStyle = '#6f8a4a'; g.fillRect(0, 0, W, H);
         for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(120,100,60,${0.15 + rnd() * 0.2})`; g.beginPath(); g.arc(rnd() * W, rnd() * H, 6 + rnd() * 18, 0, TAU); g.fill(); }
@@ -18710,7 +18802,8 @@ function startGame(map = lastMap) {
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
     if (id === 'temple') map = 'temple'; else if (map === 'temple') map = 'ordinary';
-    if (id === 'mech' && !mapAllowed('mech', map)) map = 'city';
+    if (id === 'mech' && !mapAllowed('mech', map)) map = 'concrete';
+    if (id !== 'mech' && map === 'concrete') map = 'ordinary';
     lastMap = map;
     const setup = id === 'navy' ? (navyFleet === 'ffa' ? { type: id, teams: navyFfaCount(), size: NAVY_FFA.crew, ships: 1, crew: NAVY_FFA.crew, role: navyRolePick, fleet: 'ffa' } : navyFleet === 'huge' ? { type: id, teams: 2, size: navyHugeCrew(), ships: 1, crew: navyHugeCrew(), role: navyRolePick, fleet: 'huge' } : navyFleet === 'mini' ? (() => { const n = navyShipCount(), c = Math.min(NAVY_MINI.crew, Math.floor(NAVY.maxPeople / (2 * n))); return { type: id, teams: 2, size: n * c, ships: n, crew: c, role: navyRolePick, fleet: 'mini' }; })() : { type: id, teams: 2, size: navyShipCount() * (navyCrewCount() + NAVY.escortCrew), ships: navyShipCount(), crew: navyCrewCount(), role: navyRolePick })
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
