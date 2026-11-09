@@ -63,13 +63,16 @@ const WEAPONS = {
     'Energy Gun': { damage: 14, range: 650, rate: 260, speed: 1400, spread: 0, mag: 999, rarity: 'legendary', len: 34, w: 11, sound: 'light', shake: 2, charge: 1100 },
     'Guided Rocket': { damage: 40, range: 2600, rate: 1300, speed: 600, spread: 0, mag: 999, rarity: 'mythic', len: 50, w: 12, sound: 'heavy', shake: 8, rocket: true, guided: true },
     'Burst Minigun': { damage: 12, range: 1300, rate: 55, speed: 1600, spread: 0.12, mag: 999, rarity: 'mythic', len: 44, w: 13, sound: 'mid', shake: 1.6, clip: 8, reload: 1300 },
-    // Treasure Temple's weapons
+    // Jungle weapons
     'Machete': { damage: 32, range: 48, rate: 420, speed: 0, spread: 0, mag: 0, rarity: 'uncommon', len: 30, w: 6, sound: 'light', shake: 1, melee: true, blade: 'sword' },
     'Blowgun': { damage: 9, range: 900, rate: 650, speed: 1300, spread: 0.01, mag: 999, rarity: 'uncommon', len: 34, w: 4, sound: 'light', shake: 0.3, silent: true, dart: true, poison: 4000 },
     'Whip': { damage: 18, range: 120, rate: 650, speed: 0, spread: 0, mag: 0, rarity: 'rare', len: 20, w: 5, sound: 'light', shake: 1, melee: true, whip: true, knock: -520 },
     'Torch': { damage: 14, range: 64, rate: 450, speed: 0, spread: 0, mag: 0, rarity: 'rare', len: 26, w: 6, sound: 'light', shake: 0.5, melee: true, torch: true, burn: 3500 },
     'Blunderbuss': { damage: 9, count: 8, range: 520, rate: 1100, speed: 1000, spread: 0.36, mag: 999, rarity: 'epic', len: 32, w: 10, sound: 'heavy', shake: 7 },
-    'Trap Trigger': { damage: 0, range: 700, rate: 4000, speed: 0, spread: 0, mag: 999, rarity: 'legendary', len: 14, w: 9, sound: 'light', shake: 0, trigger: true },
+    // Maze robots' weapons
+    'Robot Claw': { damage: 20, range: 62, rate: 450, melee: true, rarity: 'common' },
+    'Robot Laser': { damage: 12, range: 760, rate: 380, speed: 1100, spread: 0.07, mag: 999, rarity: 'common', len: 20, w: 6, sound: 'light', shake: 0.4 },
+    'Robot Crusher': { damage: 45, range: 92, rate: 1300, melee: true, rarity: 'common', knock: 650 },
     'Shock Pistol': { damage: 24, range: 1050, rate: 260, speed: 1500, spread: 0.02, mag: 15, rarity: 'hyper', len: 18, w: 8, sound: 'light', shake: 1.6, hyper: true, chain: 2, spark: true },  // its bolts arc on to 2 more enemies
     'Tesla Cannon': { damage: 32, range: 900, rate: 420, speed: 1300, spread: 0.02, mag: 12, rarity: 'hyper', len: 34, w: 13, sound: 'heavy', shake: 4, hyper: true, chain: 3 },  // arcs to 3 more enemies
     'Laser Beam': { damage: 7, range: 950, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 36, w: 9, sound: 'mid', shake: 0.3, hyper: true, beam: true },  // hold it on them
@@ -583,7 +586,6 @@ function playerAction(p, code) {
     if (code === 'KeyF') {
         // F: launch the boss strike, get out of the car, pick up what's at your feet, or get into a car nearby
         // (up on the castle walkway, the only thing to get into is a corner gun)
-        if (G.temple && templeUse(p)) return;
         if (G.navy && navyUse(p)) return;
         if (tryLaunchStrike(p)) return;
         if (nearOwnPad(p)) { if (p.remote) loadAllAmmo(p); else openStrikeLoad(p); return; }
@@ -1232,7 +1234,7 @@ function generateWorld(type = 'ordinary', opts = {}) {
     if (type === 'cavern') return generateCavern();
     if (type === 'haunted') return generateHaunted();
     if (type === 'sea') return generateSea();
-    if (type === 'temple') return generateTemple();
+    if (type === 'labyrinth') return generateLabyrinth();
     if (type === 'concrete') return generateConcrete();
     // Wasteland (the sniping map): open ground with long sightlines, a few lone trees and wreckage strewn about
     const waste = type === 'wasteland';
@@ -4645,12 +4647,12 @@ function findSpawn(avoid, minDist) {
 
 // setup: { type: 'ffa' | 'epic', count }, { type: 'zombies', count, zombies } or { type: 'war' | 'hightech', teams, size }
 function newState(mode, setup) {
-    CONFIG.WORLD_SIZE = setup.type === 'temple' ? TEMPLE.W : 12000;
+    CONFIG.WORLD_SIZE = setup.type === 'labyrinth' ? LAB.n * LAB.cs : 12000;
     const W = CONFIG.WORLD_SIZE;
     const zombies = setup.type === 'zombies', survival = setup.type === 'survival';
     const hightech = setup.type === 'hightech' || setup.warfare === 'hightech', heavy = setup.warfare === 'heavy', early = setup.warfare === 'early' && !hightech;
     const revolution = setup.type === 'revolution', bossFight = setup.type === 'boss';
-    const ghostMode = setup.type === 'ghost', templeMode = setup.type === 'temple', mechMode = setup.type === 'mech', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
+    const ghostMode = setup.type === 'ghost', labMode = setup.type === 'labyrinth', mechMode = setup.type === 'mech', duel = setup.type === 'duel' && mode === 'playing', navy = setup.type === 'navy';
     const war = setup.type === 'war' || setup.type === 'hightech' || revolution || navy ? { teams: setup.teams, size: setup.size, out: [], centers: [], nextCenter: 0 } : null;
     const cpuCount = war ? war.teams * war.size - (mode === 'playing' ? 1 : 0) : setup.count;
     G = {
@@ -4660,7 +4662,7 @@ function newState(mode, setup) {
         epic: setup.type === 'epic' || (heavy && !war && !zombies), supplies: !!war || setup.type === 'epic' || heavy, hightech, heavy, early, warfare: setup.warfare || 'normal', ai: aiSkill(setup.ai || 5),
         teamAlive: war ? new Array(war.teams).fill(0) : null,
         // Zombies and Virus have no zone: the game ends when one side is gone
-        zombies, escape: false, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || bossFight, bossFight, bossF: null, ghostMode, temple: null, mech: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
+        zombies, escape: false, survival, animals: [], agrid: new Grid(128, 0), nextAnimal: 0, noZone: zombies || bossFight, bossFight, bossF: null, ghostMode, lab: null, mech: null, duel: null, navy: null, ghostSteps: [], sides: { a: 0, b: 0 }, prey: [], nextPrey: 0, escaped: 0,
         // Survival: day turns to night (and back) while you play
         dayCycle: mode === 'playing' && setup.type === 'survival', dayPhase: rand(0.02, 0.25),
         // Escape: every floor you've visited is kept as its own layer; only the one you're on is simulated
@@ -4710,7 +4712,7 @@ function newState(mode, setup) {
     };
     setNextZoneTarget(G.zone);
     // (no red zone at all in Survival)
-    if (G.noZone || revolution || survival || navy || templeMode) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
+    if (G.noZone || revolution || survival || navy || labMode) Object.assign(G.zone, { r: W, tr: W, state: 'final', dmg: 0 });
     // Ghost is played in one fixed circle in the middle of the map
     const arena = ghostMode ? GHOST.arena : mechMode ? MECH.arena : 0;
     if (arena) Object.assign(G.zone, { cx: W / 2, cy: W / 2, tcx: W / 2, tcy: W / 2, r: arena, tr: arena, state: 'final', dmg: 2 });
@@ -4720,7 +4722,7 @@ function newState(mode, setup) {
     if (early) G.world.obstacles = G.world.obstacles.filter(o => { if (!o.car || o.wreck) return true; G.world.grid.removeBox(o); return false; });
 
     // Cardboard boxes (the only source of guns) in buildings, supply stacks and out in the wild
-    const noLoot = duel || navy || templeMode || mechMode;
+    const noLoot = duel || navy || labMode || mechMode;
     if (!noLoot) for (const s of G.world.lootSpots) {
         if (s.box && !blockedAt(G.world.grid, s.x, s.y, 34)) { addLootBox(s.x, s.y); continue; }
         if (Math.random() > GROUND_LOOT_CHANCE) continue;
@@ -4746,7 +4748,7 @@ function newState(mode, setup) {
     if (G.world.rusty) ruinWorld();
     if (survival) { makePonds(); spawnAnimals(); }
     // (no vehicles at all on the wasteland)
-    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !templeMode && !mechMode && !duel && !navy) spawnCars(); else G.world.cars = [];
+    if (setup.map !== 'wasteland' && setup.map !== 'cavern' && !ghostMode && !labMode && !mechMode && !duel && !navy) spawnCars(); else G.world.cars = [];
     if (revolution) buildRevolution();
     else if (navy) setupNavy(setup);
     else if (war) {
@@ -4772,7 +4774,7 @@ function newState(mode, setup) {
     if (bossFight) setupBossFight();
     if (duel) setupDuel();
     if (ghostMode && mode === 'playing') setupGhost(setup.role === 'ghost' ? G.player : null);
-    if (templeMode) setupTemple(setup);
+    if (labMode) setupLab(setup);
     if (mechMode) setupMech(setup);
     G.alive = G.fighters.length;
 }
@@ -4962,27 +4964,30 @@ function drawCharges() {
     }
 }
 
-// ---------- Treasure Temple ----------
-// Two teams of explorers race from their jungle camps into a giant temple maze to grab the golden idol from the altar
-// in the middle and carry it home. First team to bring it home 3 times wins. The maze is full of traps (spikes, rolling
-// boulders, collapsing floors, swinging axes, dart walls, spider webs) and secrets (cracked walls that open, hidden
-// tunnels). The jungle round it has its own: quicksand, leaf-covered pits, snake nests, buried chests and tunnels in.
-const TEMPLE = {
-    W: 9000, n: 31, cs: 210, T: 32, players: 10, time: 900000, wins: 3, respawn: 5000, protect: 2500, safeR: 230, safeDmg: 30,
-    idolHome: 25000, carrySlow: 0.72, blue: '#3d8bff', red: '#ff4b4b', regenAfter: 5000, regen: 6,
-    guns: ['Whip', 'Torch', 'Crossbow', 'Blunderbuss', 'Trap Trigger'], start: ['Machete', 'Blowgun']
+// ---------- Maze ----------
+// A giant maze of 100-metre iron walls covered in vines. Your team starts in the safe zone in the middle, where the
+// hangar keeps you stocked with rifle rounds and arrows. Out in the corridors, mechanical robots hunt you down: quick
+// little Crawlers, Sentinels that shoot lasers, and huge Brutes. Fight back with rifles, spears, bows and swords, and
+// find the way out of the maze before time runs out. Robots can't get into the safe zone (a force field covers its gates).
+const LAB = {
+    n: 37, cs: 300, T: 80, players: 8, time: 900000, respawn: 8000, protect: 3000, glade: 2,
+    robots: 32, robotsMax: 76, sense: 1300, rifle: 150, arrows: 16, team: '#3dd68c',
+    kinds: {
+        crawler: { name: 'Crawler', hp: 110, r: 18, spd: 1.3, gun: 'Robot Claw', w: 2.5 },
+        sentinel: { name: 'Sentinel', hp: 200, r: 24, spd: 0.85, gun: 'Robot Laser', w: 3 },
+        brute: { name: 'Brute', hp: 600, r: 36, spd: 0.75, gun: 'Robot Crusher', w: 1.2 }
+    },
+    gear: ['Assault Rifle', 'Bow', 'Spear', 'Sword']
 };
-let templeSidePick = 'blue';
-function generateTemple() {
-    const W = TEMPLE.W, n = TEMPLE.n, cs = TEMPLE.cs, T = TEMPLE.T, size = n * cs, ox = (W - size) / 2, oy = (W - size) / 2;
-    const grid = new Grid(256, 90), obstacles = [], lootSpots = [], decor = [];
+function generateLabyrinth() {
+    const { n, cs, T } = LAB, W = n * cs, mid = (n - 1) / 2, gl = LAB.glade;
+    const grid = new Grid(256, 90), obstacles = [], decor = [];
     const addBox = o => { obstacles.push(o); grid.insertBox(o); return o; };
-    const addCircle = o => { obstacles.push(o); grid.insert(o); return o; };
-    const cellC = (i, j) => ({ x: ox + (i + 0.5) * cs, y: oy + (j + 0.5) * cs });
-    const mid = (n - 1) / 2, inCenter = (i, j) => Math.abs(i - mid) <= 1 && Math.abs(j - mid) <= 1;
-    // The maze: a random walk carves it, then extra gaps make loops, and the middle 3x3 is the altar chamber
+    const inGlade = (i, j) => Math.abs(i - mid) <= gl && Math.abs(j - mid) <= gl;
+    // The maze: a random walk carves everything round the glade, then extra gaps make loops so there's more than one way
     const east = [], south = [], seen = [];
     for (let i = 0; i < n; i++) { east.push(new Array(n).fill(true)); south.push(new Array(n).fill(true)); seen.push(new Array(n).fill(false)); }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (inGlade(i, j)) seen[i][j] = true;
     const stack = [[0, 0]]; seen[0][0] = true;
     while (stack.length) {
         const [i, j] = stack[stack.length - 1];
@@ -4993,732 +4998,475 @@ function generateTemple() {
         seen[a][b] = true; stack.push([a, b]);
     }
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-        if (i < n - 1 && east[i][j] && Math.random() < 0.035) east[i][j] = false;
-        if (j < n - 1 && south[i][j] && Math.random() < 0.035) south[i][j] = false;
-        if (inCenter(i, j)) { if (i < n - 1 && inCenter(i + 1, j)) east[i][j] = false; if (j < n - 1 && inCenter(i, j + 1)) south[i][j] = false; }
+        if (i < n - 1 && east[i][j] && !inGlade(i, j) && !inGlade(i + 1, j) && Math.random() < 0.07) east[i][j] = false;
+        if (j < n - 1 && south[i][j] && !inGlade(i, j) && !inGlade(i, j + 1) && Math.random() < 0.07) south[i][j] = false;
+        // (the glade is one big open square)
+        if (i < n - 1 && inGlade(i, j) && inGlade(i + 1, j)) east[i][j] = false;
+        if (j < n - 1 && inGlade(i, j) && inGlade(i, j + 1)) south[i][j] = false;
     }
-    // (the altar chamber has a doorway on each side)
+    // A gate out of the glade on each side
     const m = mid;
-    east[m - 2][m] = false; east[m + 1][m] = false; south[m][m - 2] = false; south[m][m + 1] = false;
-    const stone = () => pick(['#6b5838', '#665334', '#71603e', '#5f4e31']);
-    const walls = { e: {}, s: {} };
-    const seg = (x0, y0, x1, y1, extra) => addBox({ type: 'wall', x: (x0 + x1) / 2, y: (y0 + y1) / 2, hw: Math.max(T / 2, (x1 - x0) / 2), hh: Math.max(T / 2, (y1 - y0) / 2), color: stone(), temple: true, ...extra });
-    // Outer walls, with an entrance in the middle of each side
-    for (let k = 0; k < n; k++) {
-        if (k !== m) {
-            seg(ox + k * cs - T / 2, oy - T / 2, ox + (k + 1) * cs + T / 2, oy + T / 2);
-            seg(ox + k * cs - T / 2, oy + size - T / 2, ox + (k + 1) * cs + T / 2, oy + size + T / 2);
-            seg(ox - T / 2, oy + k * cs - T / 2, ox + T / 2, oy + (k + 1) * cs + T / 2);
-            seg(ox + size - T / 2, oy + k * cs - T / 2, ox + size + T / 2, oy + (k + 1) * cs + T / 2);
+    east[m - gl - 1][m] = false; east[m + gl][m] = false; south[m][m - gl - 1] = false; south[m][m + gl] = false;
+    // The way out: one gap in the outer wall, somewhere round the edge
+    const side = randInt(0, 3), k = randInt(3, n - 4);
+    const ex = side === 0 ? { i: k, j: 0 } : side === 1 ? { i: n - 1, j: k } : side === 2 ? { i: k, j: n - 1 } : { i: 0, j: k };
+    const ec = { x: (ex.i + 0.5) * cs, y: (ex.j + 0.5) * cs };
+    const exit = { ...ex, side, x: ec.x, y: ec.y, gx: side === 1 ? W : side === 3 ? 0 : ec.x, gy: side === 0 ? 0 : side === 2 ? W : ec.y };
+    // Iron walls, joined into long runs (each runs a little long to close the corners)
+    const iron = () => pick(['#4f5459', '#4a4f55', '#555a5e', '#4c5352']);
+    const seg = (x0, y0, x1, y1, outer) => addBox({ type: 'wall', mazeWall: true, lab: true, outer: !!outer, x: (x0 + x1) / 2, y: (y0 + y1) / 2, hw: (x1 - x0) / 2, hh: (y1 - y0) / 2, color: iron(), seed: Math.random() * 1000 });
+    const OT = T * 1.6;  // (the outer wall is even thicker)
+    const run = (len, isWall, put) => { let s0 = -1; for (let t = 0; t <= len; t++) { const w = t < len && isWall(t); if (w && s0 < 0) s0 = t; if (!w && s0 >= 0) { put(s0, t - 1); s0 = -1; } } };
+    run(n, t => !(side === 0 && t === ex.i), (a, b) => seg(a * cs - (a ? T / 2 : 0), 0, (b + 1) * cs + (b < n - 1 ? T / 2 : 0), OT / 2 + T / 2, true));
+    run(n, t => !(side === 2 && t === ex.i), (a, b) => seg(a * cs - (a ? T / 2 : 0), W - OT / 2 - T / 2, (b + 1) * cs + (b < n - 1 ? T / 2 : 0), W, true));
+    run(n, t => !(side === 3 && t === ex.j), (a, b) => seg(0, a * cs - (a ? T / 2 : 0), OT / 2 + T / 2, (b + 1) * cs + (b < n - 1 ? T / 2 : 0), true));
+    run(n, t => !(side === 1 && t === ex.j), (a, b) => seg(W - OT / 2 - T / 2, a * cs - (a ? T / 2 : 0), W, (b + 1) * cs + (b < n - 1 ? T / 2 : 0), true));
+    for (let j = 0; j < n - 1; j++) run(n, i => south[i][j], (a, b) => seg(a * cs - T / 2, (j + 1) * cs - T / 2, (b + 1) * cs + T / 2, (j + 1) * cs + T / 2));
+    for (let i = 0; i < n - 1; i++) run(n, j => east[i][j], (a, b) => seg((i + 1) * cs - T / 2, a * cs - T / 2, (i + 1) * cs + T / 2, (b + 1) * cs + T / 2));
+    // The hangar on the north side of the glade: an open-fronted shed with weapon racks inside
+    const c = W / 2, hangar = { x0: c - 330, x1: c + 330, y0: c - 640, y1: c - 330 };
+    const hcol = '#3b5446';
+    addBox({ type: 'wall', x: c, y: hangar.y0 + 10, hw: 330, hh: 12, color: hcol, hangar: true });
+    addBox({ type: 'wall', x: hangar.x0 + 10, y: (hangar.y0 + hangar.y1) / 2, hw: 12, hh: 155, color: hcol, hangar: true });
+    addBox({ type: 'wall', x: hangar.x1 - 10, y: (hangar.y0 + hangar.y1) / 2, hw: 12, hh: 155, color: hcol, hangar: true });
+    // Vines: hanging over the edges of every wall, creeping along the tops, and spreading over the floor
+    const vineGrid = new Grid(256, 130);
+    for (const o of obstacles) {
+        if (!o.lab) continue;
+        const long = o.hw > o.hh, L2 = (long ? o.hw : o.hh) * 2, step = 46;
+        for (let t = -L2 / 2 + step / 2; t < L2 / 2; t += step * rand(0.6, 1.4)) {
+            const px = long ? o.x + t : o.x, py = long ? o.y : o.y + t;
+            for (const s of [-1, 1]) {
+                if (Math.random() < 0.3) continue;
+                // (from the top of the wall down over its edge onto the floor)
+                const ed = long ? o.hh : o.hw, a = long ? (s > 0 ? Math.PI / 2 : -Math.PI / 2) : (s > 0 ? 0 : Math.PI);
+                const sx = long ? px : px + s * (ed - rand(6, 20)), sy = long ? py + s * (ed - rand(6, 20)) : py;
+                vineGrid.insert({ x: sx, y: sy, a: a + rand(-0.35, 0.35), len: rand(30, 120), seed: Math.random() * 100, thick: rand(0.8, 1.3), top: false });
+            }
+            if (Math.random() < 0.45) vineGrid.insert({ x: px + rand(-8, 8), y: py + rand(-8, 8), a: long ? rand(-0.4, 0.4) + (Math.random() < 0.5 ? 0 : Math.PI) : Math.PI / 2 + rand(-0.4, 0.4) + (Math.random() < 0.5 ? 0 : Math.PI), len: rand(50, 140), seed: Math.random() * 100, thick: rand(0.9, 1.4), top: true });
         }
     }
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-        if (i < n - 1 && east[i][j]) walls.e[i + ',' + j] = seg(ox + (i + 1) * cs - T / 2, oy + j * cs - T / 2, ox + (i + 1) * cs + T / 2, oy + (j + 1) * cs + T / 2, { cell: [i, j, 'e'] });
-        if (j < n - 1 && south[i][j]) walls.s[i + ',' + j] = seg(ox + i * cs - T / 2, oy + (j + 1) * cs - T / 2, ox + (i + 1) * cs + T / 2, oy + (j + 1) * cs + T / 2, { cell: [i, j, 's'] });
-    }
-    // Secret walls: cracked ones that slide open
-    const secrets = [];
-    const inner = [...Object.values(walls.e), ...Object.values(walls.s)].filter(o => { const [i, j] = o.cell; return !inCenter(i, j) && !(o.cell[2] === 'e' ? inCenter(i + 1, j) : inCenter(i, j + 1)); });
-    const pool = shuffle(inner);
-    // Cracked walls (F opens them), some of them hidden behind vines
-    for (const o of pool.splice(0, 110)) { o.secret = true; o.open = false; o.vines = Math.random() < 0.5; secrets.push(o); }
-    // Hidden walls with no crack at all: only a symbol switch somewhere close by opens them
-    const switched = pool.splice(0, 28);
-    for (const o of switched) { o.secret = true; o.hiddenSecret = true; o.open = false; o.vines = Math.random() < 0.4; secrets.push(o); }
-    // Moving walls: some stand now and will slide away, others are gaps now that a wall will slide across
-    const movers = [];
-    for (const o of pool.splice(0, 40)) { o.mover = true; o.up = true; movers.push(o); }
-    const gaps = [];
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-        if (i < n - 1 && !east[i][j] && !inCenter(i, j) && !inCenter(i + 1, j) && j !== m) gaps.push([i, j, 'e']);
-        if (j < n - 1 && !south[i][j] && !inCenter(i, j) && !inCenter(i, j + 1) && i !== m) gaps.push([i, j, 's']);
-    }
-    for (const [i, j, d] of shuffle(gaps).slice(0, 44)) {
-        const o = d === 'e' ? { type: 'wall', x: ox + (i + 1) * cs, y: oy + (j + 0.5) * cs, hw: T / 2, hh: cs / 2 + T / 2 } : { type: 'wall', x: ox + (i + 0.5) * cs, y: oy + (j + 1) * cs, hw: cs / 2 + T / 2, hh: T / 2 };
-        Object.assign(o, { color: stone(), temple: true, cell: [i, j, d], mover: true, up: false });
-        movers.push(o);
-    }
-    // What's in each cell
-    const used = new Set(), key = (i, j) => i + ',' + j;
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (inCenter(i, j) || i === m || j === m && (i === 0 || i === n - 1)) used.add(key(i, j));
-    for (const [i, j] of [[0, m], [n - 1, m], [m, 0], [m, n - 1]]) used.add(key(i, j));
-    const freeCells = () => { const out = []; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (!used.has(key(i, j))) out.push([i, j]); return shuffle(out); };
-    const wallsOf = (i, j) => ({ w: i === 0 || east[i - 1][j], e: i === n - 1 || east[i][j], n: j === 0 || south[i][j - 1], s: j === n - 1 || south[i][j] });
-    const traps = [];
-    // Rolling boulders: down long straight corridors, set off by a plate partway along
-    const runs = [];
-    for (let j = 0; j < n; j++) { let s0 = 0; for (let i = 1; i <= n; i++) { if (i === n || east[i - 1][j]) { if (i - s0 >= 4) runs.push({ h: true, a: s0, b: i - 1, k: j }); s0 = i; } } }
-    for (let i = 0; i < n; i++) { let s0 = 0; for (let j = 1; j <= n; j++) { if (j === n || south[i][j - 1]) { if (j - s0 >= 4) runs.push({ h: false, a: s0, b: j - 1, k: i }); s0 = j; } } }
-    for (const r of shuffle(runs).slice(0, 16)) {
-        const cells = []; for (let t = r.a; t <= r.b; t++) cells.push(r.h ? [t, r.k] : [r.k, t]);
-        if (cells.some(([i, j]) => inCenter(i, j))) continue;
-        const fwd = Math.random() < 0.5, A = cellC(...cells[fwd ? 0 : cells.length - 1]), B = cellC(...cells[fwd ? cells.length - 1 : 0]);
-        const plate = cellC(...cells[Math.floor(cells.length * 0.6)]);
-        traps.push({ kind: 'boulder', x0: A.x, y0: A.y, x1: B.x, y1: B.y, x: plate.x, y: plate.y, ready: 0 });
-        used.add(key(...cells[Math.floor(cells.length * 0.6)]));
-    }
-    const take = (k, fn) => { let c = 0; for (const [i, j] of freeCells()) { if (c >= k) break; if (fn(i, j)) { used.add(key(i, j)); c++; } } };
-    take(60, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'spikes', x: c.x, y: c.y, s: 70, ph: rand(0, 3000), forced: 0 }); return true; });
-    take(34, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'pit', x: c.x, y: c.y, s: 58, state: 'solid', t: 0 }); return true; });
-    take(26, (i, j) => {
-        const w = wallsOf(i, j), c = cellC(i, j);
-        // a corridor running straight through: the axe swings across it
-        if (w.n && w.s && !w.w && !w.e) { traps.push({ kind: 'axe', x: c.x, y: c.y, ax: 0, ay: 1, ph: rand(0, TAU), len: cs * 0.42 }); return true; }
-        if (w.w && w.e && !w.n && !w.s) { traps.push({ kind: 'axe', x: c.x, y: c.y, ax: 1, ay: 0, ph: rand(0, TAU), len: cs * 0.42 }); return true; }
-        return false;
-    });
-    take(16, (i, j) => {
-        const w = wallsOf(i, j), c = cellC(i, j);
-        const side = w.n ? [0, -1] : w.s ? [0, 1] : w.w ? [-1, 0] : w.e ? [1, 0] : null;
-        if (!side) return false;
-        traps.push({ kind: 'darts', x: c.x, y: c.y, ex: c.x + side[0] * (cs / 2 - T / 2 - 4), ey: c.y + side[1] * (cs / 2 - T / 2 - 4), dx: -side[0], dy: -side[1], ready: 0 });
-        return true;
-    });
-    // 1. Sliding blades: a wall-to-wall blade sweeps up and down a corridor
-    // 3. Rolling logs: a spiked log the width of the corridor, set off by a plate (like the boulders)
-    for (const r of shuffle(runs.filter(q => q.b - q.a >= 2)).slice(0, 22)) {
-        const cells = []; for (let t = r.a; t <= r.b; t++) cells.push(r.h ? [t, r.k] : [r.k, t]);
-        if (cells.some(([i, j]) => inCenter(i, j))) continue;
-        const A = cellC(...cells[0]), B = cellC(...cells[cells.length - 1]);
-        if (traps.filter(q => q.kind === 'blade').length < 12) { traps.push({ kind: 'blade', ax: A.x, ay: A.y, bx: B.x, by: B.y, x: A.x, y: A.y, ux: r.h ? 1 : 0, uy: r.h ? 0 : 1, per: 6000 + cells.length * 900, ph: rand(0, 10000) }); for (const c of cells) used.add(key(...c)); }
-        else { const fwd = Math.random() < 0.5, P = cellC(...cells[Math.floor(cells.length / 2)]); traps.push({ kind: 'boulder', log: true, x0: fwd ? A.x : B.x, y0: fwd ? A.y : B.y, x1: fwd ? B.x : A.x, y1: fwd ? B.y : A.y, x: P.x, y: P.y, ready: 0 }); used.add(key(...cells[Math.floor(cells.length / 2)])); }
-    }
-    // 2. Crushing walls: step into the room and its two side walls start closing in
-    take(10, (i, j) => { const w = wallsOf(i, j), c = cellC(i, j); if (w.n && w.s && !w.w && !w.e) { traps.push({ kind: 'crush', x: c.x, y: c.y, vert: true, st: 0, t: 0 }); return true; } if (w.w && w.e && !w.n && !w.s) { traps.push({ kind: 'crush', x: c.x, y: c.y, vert: false, st: 0, t: 0 }); return true; } return false; });
-    // 4. Swinging maces: a spiked ball on a chain whirling round a pillar
-    take(12, (i, j) => { const c = cellC(i, j); addBox({ type: 'wall', x: c.x, y: c.y, hw: 13, hh: 13, color: stone(), temple: true }); traps.push({ kind: 'mace', x: c.x, y: c.y, r: 74, ph: rand(0, TAU), sp: (Math.random() < 0.5 ? 1 : -1) * rand(2.2, 3) }); return true; });
-    // 5. Fire-breathing statues against a wall, and 6. arrow statues in a corner that turn to face you
-    take(10, (i, j) => {
-        const w = wallsOf(i, j), c = cellC(i, j), side = w.n ? [0, -1] : w.s ? [0, 1] : w.w ? [-1, 0] : w.e ? [1, 0] : null;
-        if (!side) return false;
-        const sx = c.x + side[0] * (cs / 2 - T / 2 - 22), sy = c.y + side[1] * (cs / 2 - T / 2 - 22);
-        addBox({ type: 'wall', x: sx, y: sy, hw: 20, hh: 20, color: '#7a6a4c', temple: true, statue: true });
-        traps.push({ kind: 'fire', x: sx, y: sy, a: Math.atan2(-side[1], -side[0]), ready: 0, active: 0 });
-        return true;
-    });
-    take(10, (i, j) => {
-        const c = cellC(i, j), qx = Math.random() < 0.5 ? -1 : 1, qy = Math.random() < 0.5 ? -1 : 1, sx = c.x + qx * (cs / 2 - T / 2 - 22), sy = c.y + qy * (cs / 2 - T / 2 - 22);
-        addBox({ type: 'wall', x: sx, y: sy, hw: 18, hh: 18, color: '#7a6a4c', temple: true, statue: true });
-        traps.push({ kind: 'archer', x: sx, y: sy, a: Math.atan2(-qy, -qx), ready: 0 });
-        return true;
-    });
-    // 7. Snake pits: the whole floor of a room drops away into a pit of snakes
-    take(7, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'snakepit', x: c.x, y: c.y, s: cs / 2 - T / 2 - 14, open: 0 }); return true; });
-    // 8. Scorpion nests: scorpions swarm out at anyone who comes close
-    take(8, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'scorpions', x: c.x, y: c.y, bugs: Array.from({ length: 4 }, () => ({ x: c.x + rand(-20, 20), y: c.y + rand(-20, 20), a: rand(0, TAU), sting: 0, dead: 0 })) }); return true; });
-    // 9. Spinning floors: a round floor that spins and flings you at the spiked rim
-    take(7, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'spin', x: c.x, y: c.y, r: cs / 2 - T / 2 - 6, rot: 0, sp: (Math.random() < 0.5 ? 1 : -1) * 2 }); return true; });
-    // 10. Flooding rooms: water pours in when you step inside; a symbol on the floor opens the drain
-    take(7, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'flood', x: c.x, y: c.y, s: cs / 2 - T / 2, lvl: 0, st: 0, t: 0, drain: { x: c.x + rand(-50, 50), y: c.y + rand(-50, 50), glyph: randInt(0, 6), rot: rand(0, TAU) } }); return true; });
-    take(24, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'web', x: c.x + rand(-30, 30), y: c.y + rand(-30, 30), r: rand(80, 105), burnt: 0 }); return true; });
-    // Hidden tunnels: a carved hatch you can drop into and come out of the other one
-    const passages = [];
-    const far = freeCells().filter(([i, j]) => Math.max(Math.abs(i - m), Math.abs(j - m)) >= 4);
-    for (let k = 0; k + 1 < far.length && passages.length < 11; k += 2) {
-        const a = far[k], b = far.slice(k + 1).find(q => Math.abs(q[0] - a[0]) + Math.abs(q[1] - a[1]) >= 9);
-        if (!b) continue;
-        used.add(key(...a)); used.add(key(...b));
-        const A = cellC(...a), B = cellC(...b);
-        passages.push({ a: { x: A.x + 50, y: A.y + 50 }, b: { x: B.x + 50, y: B.y + 50 } });
-    }
-    // Weapons waiting in dead ends
-    const spots = [];
-    take(22, (i, j) => { const w = wallsOf(i, j); if (w.n + w.s + w.w + w.e < 3) return false; const c = cellC(i, j); spots.push({ x: c.x, y: c.y, key: null, every: 30000 }); return true; });
-    // The jungle: camps on the west and east, dirt paths to the four entrances, and trees everywhere else
-    const camps = [{ x: 480, y: W / 2 }, { x: W - 480, y: W / 2 }];
-    const ents = [{ x: ox - 160, y: oy + size / 2, ix: ox + cs / 2, iy: oy + size / 2 }, { x: ox + size + 160, y: oy + size / 2, ix: ox + size - cs / 2, iy: oy + size / 2 }, { x: ox + size / 2, y: oy - 160, ix: ox + size / 2, iy: oy + cs / 2 }, { x: ox + size / 2, y: oy + size + 160, ix: ox + size / 2, iy: oy + size - cs / 2 }];
-    const paths = [];
-    for (const c of camps) for (const e of ents) {
-        const pts = [{ x: c.x, y: c.y }], k = 6;
-        for (let t = 1; t < k; t++) pts.push({ x: lerp(c.x, e.x, t / k) + rand(-180, 180), y: lerp(c.y, e.y, t / k) + rand(-180, 180) });
-        pts.push({ x: e.x, y: e.y });
-        // (the far entrances go round the temple, not through it)
-        if (Math.abs(e.x - c.x) > size) continue;
-        paths.push(pts);
-    }
-    // Paths round the outside of the temple to the north and south entrances
-    for (const c of camps) for (const e of ents.slice(2)) {
-        const cornerY = e.y < W / 2 ? oy - 300 : oy + size + 300, cornerX = c.x < W / 2 ? ox - 300 : ox + size + 300;
-        paths.push([{ x: c.x, y: c.y }, { x: cornerX, y: lerp(c.y, cornerY, 0.5) + rand(-100, 100) }, { x: cornerX, y: cornerY }, { x: lerp(cornerX, e.x, 0.5), y: cornerY + rand(-80, 80) }, { x: e.x, y: e.y }]);
-    }
-    const nearPath = (x, y, d) => paths.some(pts => pts.some((p, i) => i > 0 && segHitsCircle(pts[i - 1].x, pts[i - 1].y, p.x, p.y, x, y, d)));
-    const inTemple = (x, y, mm = 0) => x > ox - mm && x < ox + size + mm && y > oy - mm && y < oy + size + mm;
-    const nearCamp = (x, y, d) => camps.some(c => Math.hypot(c.x - x, c.y - y) < d);
-    for (const [x, y, hw, hh] of [[W / 2, 20, W / 2, 20], [W / 2, W - 20, W / 2, 20], [20, W / 2, 20, W / 2], [W - 20, W / 2, 20, W / 2]]) addBox({ type: 'wall', x, y, hw, hh, color: '#2d4a22' });
-    const jungleFree = (x, y, r) => x > 120 && y > 120 && x < W - 120 && y < W - 120 && !inTemple(x, y, 120) && !nearCamp(x, y, 330) && !nearPath(x, y, 70 + r * 0.5) && !blockedAt(grid, x, y, r);
-    for (let i = 0; i < 2600; i++) { const x = rand(100, W - 100), y = rand(100, W - 100), canopy = rand(110, 175); if (jungleFree(x, y, 40)) addCircle({ type: 'tree', x, y, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 }); }
-    for (let i = 0; i < 1500; i++) { const x = rand(100, W - 100), y = rand(100, W - 100); if (jungleFree(x, y, 30)) addCircle({ type: 'bush', x, y, r: rand(30, 46), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999 }); }
-    for (let i = 0; i < 140; i++) { const x = rand(100, W - 100), y = rand(100, W - 100); if (jungleFree(x, y, 40)) addCircle({ type: 'rock', x, y, r: rand(24, 60), spr: randInt(0, 5), rot: rand(0, TAU) }); }
-    // Broken statues and pillars round the temple
-    for (let i = 0; i < 40; i++) { const a = rand(0, TAU), d = rand(size * 0.55, size * 0.75), x = W / 2 + Math.cos(a) * d, y = W / 2 + Math.sin(a) * d; if (!inTemple(x, y, 60) && !nearPath(x, y, 80) && !blockedAt(grid, x, y, 40)) addBox({ type: 'wall', x, y, hw: 22, hh: 22, color: '#8a7a5c', pillar: true }); }
-    for (let i = 0; i < 2000; i++) decor.push({ x: rand(0, W), y: rand(0, W), s: rand(0.5, 1.3), spr: randInt(0, Math.max(0, SPR.patches.length - 1)) });
-    // Jungle traps and secrets: some right on the paths
-    const jt = (x, y) => !inTemple(x, y, 160) && !nearCamp(x, y, 420) && !blockedAt(grid, x, y, 50);
-    const onPath = () => { const pts = pick(paths), i = randInt(1, pts.length - 1), t = Math.random(); return { x: lerp(pts[i - 1].x, pts[i].x, t), y: lerp(pts[i - 1].y, pts[i].y, t) }; };
-    for (let i = 0; i < 60 && traps.filter(q => q.kind === 'sand').length < 14; i++) { const q = Math.random() < 0.4 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'sand', x: q.x, y: q.y, r: rand(80, 120) }); }
-    for (let i = 0; i < 80 && traps.filter(q => q.kind === 'leafpit').length < 22; i++) { const q = Math.random() < 0.5 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'leafpit', x: q.x, y: q.y, r: 44, open: 0 }); }
-    for (let i = 0; i < 60 && traps.filter(q => q.kind === 'snake').length < 16; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y)) traps.push({ kind: 'snake', x, y, bite: 0 }); }
-    const chests = [];
-    for (let i = 0; i < 90 && chests.length < 18; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y) && !nearPath(x, y, 60)) chests.push({ x, y, full: true, at: 0 }); }
-    // Tunnels from the jungle straight into the maze, near the altar chamber
-    const ringCells = freeCells().filter(([i, j]) => Math.max(Math.abs(i - m), Math.abs(j - m)) === 2 || Math.max(Math.abs(i - m), Math.abs(j - m)) === 3);
-    for (let k = 0; k < 4 && k < ringCells.length; k++) {
-        for (let t = 0; t < 30; t++) {
-            const a = rand(0, TAU), d = rand(size * 0.62, size * 0.8), x = W / 2 + Math.cos(a) * d, y = W / 2 + Math.sin(a) * d;
-            if (!jt(x, y)) continue;
-            used.add(key(...ringCells[k])); const c = cellC(...ringCells[k]);
-            passages.push({ a: { x, y }, b: { x: c.x - 50, y: c.y + 50 }, jungle: true });
-            break;
-        }
-    }
-    for (let i = 0; i < 8; i++) { const q = onPath(); if (!blockedAt(grid, q.x, q.y, 30) && !nearCamp(q.x, q.y, 400)) spots.push({ x: q.x + rand(-40, 40), y: q.y + rand(-40, 40), key: null, every: 30000 }); }
-    // Symbol switches: a carved symbol on the floor near each hidden wall; press F on it and the wall slides open
-    const switches = switched.map(o => {
-        const [i, j, d] = o.cell, c = d === 'e' ? cellC(Math.random() < 0.5 ? i : i + 1, j) : cellC(i, Math.random() < 0.5 ? j : j + 1);
-        return { x: c.x + rand(-55, 55), y: c.y + rand(-55, 55), wall: o, glyph: randInt(0, 6), rot: rand(0, TAU) };
-    });
-    // Carved symbols all over the temple floor (the tunnels and switches hide among them)
-    const glyphs = [];
-    for (let k = 0; k < 900; k++) glyphs.push({ x: ox + rand(30, size - 30), y: oy + rand(30, size - 30), glyph: randInt(0, 6), rot: rand(0, TAU), s: rand(14, 22) });
-    // Some cracked walls hide a stairway down behind them: open the wall and a tunnel appears beside it
-    for (const o of shuffle(secrets.filter(q => !q.hiddenSecret)).slice(0, 28)) {
-        const [i, j, d] = o.cell, near = d === 'e' ? cellC(Math.random() < 0.5 ? i : i + 1, j) : cellC(i, Math.random() < 0.5 ? j : j + 1);
-        const fc = shuffle(freeCells().filter(([a, b]) => Math.abs(a - i) + Math.abs(b - j) > 7))[0];
-        if (!fc) continue;
-        const far = cellC(...fc);
-        o.tunnel = { a: { x: (near.x + o.x) / 2, y: (near.y + o.y) / 2, glyph: randInt(0, 6), rot: rand(0, TAU) }, b: { x: far.x - 40, y: far.y - 40, glyph: randInt(0, 6), rot: rand(0, TAU) }, behind: true };
-    }
-    for (const ps of passages) for (const h of [ps.a, ps.b]) { h.glyph = randInt(0, 6); h.rot = rand(0, TAU); }
-    // Vines: hanging down the temple walls, creeping across the floor, and all through the jungle
-    const vines = [];
-    for (const o of obstacles) if (o.temple && (o.vines || Math.random() < 0.7)) {
-        const long = o.hw > o.hh, L2 = (long ? o.hw : o.hh) * 2, nV = Math.max(1, Math.round(L2 / 90));
-        for (let k = 0; k < nV; k++) { const t = (k + 0.5) / nV - 0.5; vines.push({ x: long ? o.x + t * L2 : o.x + rand(-6, 6), y: long ? o.y + rand(-6, 6) : o.y + t * L2, a: long ? Math.PI / 2 + rand(-0.4, 0.4) : rand(-0.4, 0.4) + (Math.random() < 0.5 ? 0 : Math.PI), len: rand(40, o.vines ? 110 : 80), seed: Math.random() * 100, thick: o.vines ? 1 : 0.7 }); }
-    }
-    for (const o of secrets) if (o.vines) for (let k = 0; k < 5; k++) vines.push({ x: o.x + rand(-o.hw, o.hw), y: o.y + rand(-o.hh, o.hh), a: rand(0, TAU), len: rand(50, 90), seed: Math.random() * 100, thick: 1.2 });
-    for (let k = 0; k < 1300; k++) vines.push({ x: ox + rand(0, size), y: oy + rand(0, size), a: rand(0, TAU), len: rand(60, 170), seed: Math.random() * 100, thick: 0.8 });
-    // (vines creep over traps and hatches too, so they're even harder to spot)
-    for (const t of traps) if (Math.random() < 0.55) for (let k = 0; k < 2; k++) vines.push({ x: t.x + rand(-50, 50), y: t.y + rand(-50, 50), a: rand(0, TAU), len: rand(60, 120), seed: Math.random() * 100, thick: 0.85 });
-    for (const ps of passages) for (const h of [ps.a, ps.b]) if (Math.random() < 0.6) vines.push({ x: h.x + rand(-30, 30), y: h.y + rand(-30, 30), a: rand(0, TAU), len: rand(50, 90), seed: Math.random() * 100, thick: 0.85 });
-    for (let k = 0; k < 1500; k++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (!inTemple(x, y, 40)) vines.push({ x, y, a: rand(0, TAU), len: rand(80, 200), seed: Math.random() * 100, thick: 1 }); }
-    // The map picture
-    const [mm, g] = makeCanvas(200, 200), k2 = 200 / W;
-    g.fillStyle = '#2f5a28'; g.fillRect(0, 0, 200, 200);
-    g.strokeStyle = '#8a6a44'; g.lineWidth = 2; for (const pts of paths) { g.beginPath(); for (const p of pts) g.lineTo(p.x * k2, p.y * k2); g.stroke(); }
-    for (const o of obstacles) if (o.type === 'tree') { g.fillStyle = '#1f4019'; g.beginPath(); g.arc(o.x * k2, o.y * k2, Math.max(0.8, o.canopy * 0.45 * k2), 0, TAU); g.fill(); }
-    g.fillStyle = '#b8a27a'; g.fillRect(ox * k2, oy * k2, size * k2, size * k2);
-    g.fillStyle = '#5a4a32'; for (const o of obstacles) if (o.temple && !o.secret && !o.mover) g.fillRect((o.x - o.hw) * k2, (o.y - o.hh) * k2, Math.max(1, o.hw * 2 * k2), Math.max(1, o.hh * 2 * k2));
-    g.fillStyle = '#ffd166'; g.beginPath(); g.arc(W / 2 * k2, W / 2 * k2, 3, 0, TAU); g.fill();
-    for (const [c, col] of [[camps[0], TEMPLE.blue], [camps[1], TEMPLE.red]]) { g.fillStyle = col; g.beginPath(); g.arc(c.x * k2, c.y * k2, 5, 0, TAU); g.fill(); }
+    for (let k2 = 0; k2 < 2600; k2++) { const x = rand(120, W - 120), y = rand(120, W - 120); if (Math.abs(x - c) < 700 && Math.abs(y - c) < 700) continue; vineGrid.insert({ x, y, a: rand(0, TAU), len: rand(40, 130), seed: Math.random() * 100, thick: 0.7, top: false, floor: true }); }
+    // Moss and puddles on the floor
     const decorGrid = new Grid(512, 900);
+    for (let k2 = 0; k2 < 900; k2++) decor.push({ x: rand(0, W), y: rand(0, W), s: rand(0.6, 1.6), spr: randInt(0, 2) });
     for (const d of decor) decorGrid.insert(d);
-    return { obstacles, grid, decorGrid, buildings: [], biomes: [], roads: [], lootSpots, minimap: mm, city: null, stairs: [], floor: null, terrain: 'temple',
-        temple: { ox, oy, size, n, cs, east, south, secrets, traps, passages, spots, camps, ents, paths, chests, switches, glyphs, vines, movers, altar: { x: W / 2, y: W / 2 } } };
+    const puddles = [];
+    for (let k2 = 0; k2 < 260; k2++) puddles.push({ x: rand(200, W - 200), y: rand(200, W - 200), rx: rand(30, 90), ry: rand(18, 50), a: rand(0, TAU) });
+    const [mm] = makeCanvas(200, 200);
+    return { obstacles, grid, decorGrid, buildings: [], biomes: [], roads: [], lootSpots: [], minimap: mm, city: null, stairs: [], floor: null, terrain: 'labyrinth',
+        maze: { n, cs, east, south, seen: new Uint8Array(n * n) },
+        lab: { n, cs, W, exit, hangar, vineGrid, puddles, glade: { x0: (m - gl) * cs, x1: (m + gl + 1) * cs, y0: (m - gl) * cs, y1: (m + gl + 1) * cs }, gates: [
+            { x: c, y: (m - gl) * cs, h: true }, { x: c, y: (m + gl + 1) * cs, h: true }, { x: (m - gl) * cs, y: c, h: false }, { x: (m + gl + 1) * cs, y: c, h: false }] } };
 }
-function setupTemple(setup) {
-    const Wt = G.world.temple, T2 = G.temple = {
-        score: [0, 0], endAt: TEMPLE.time, queue: [], idol: { x: Wt.altar.x, y: Wt.altar.y, carrier: null, dropAt: 0, home: true },
-        spots: Wt.spots.map(s => ({ ...s, loot: null, next: 0 })), boulders: [], overtime: false, shiftAt: 40000, next: null
-    };
-    const all = G.fighters.slice(), p = G.player, others = all.filter(f => f !== p).sort(() => Math.random() - 0.5);
-    const mySide = setup.side === 'red' ? 1 : 0, half = Math.ceil(all.length / 2), blues = new Set();
-    if (p && mySide === 0) blues.add(p);
-    for (const f of others) if (blues.size < (p && mySide === 1 ? Math.floor(all.length / 2) : half)) blues.add(f);
-    for (const f of all) {
-        f.team = blues.has(f) ? 0 : 1;
-        f.color = f.team ? TEMPLE.red : TEMPLE.blue; f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
-        templeSpawn(f);
+const labGlade = () => G.world.lab.glade;
+// Inside the glade's walls (the safe zone): robots can't get in, and nobody can be hurt in here
+function labSafe(f) {
+    if (!G.lab || G.mode === 'demo') return false;
+    const g = labGlade();
+    return f.x > g.x0 && f.x < g.x1 && f.y > g.y0 && f.y < g.y1;
+}
+const inHangar = f => { const h = G.world.lab.hangar; return f.x > h.x0 && f.x < h.x1 && f.y > h.y0 && f.y < h.y1 + 60; };
+function setupLab(setup) {
+    const Lw = G.world.lab;
+    G.lab = { queue: [], endAt: LAB.time, nextRobot: 0, out: 0, kills: 0, exitFound: false, mapAt: 0, mapDirty: true, nextSee: 0 };
+    let i = 0;
+    for (const f of G.fighters) {
+        f.team = 0; f.color = f === G.player ? LAB.team : pick(['#3dd68c', '#5ee0b0', '#7be36a', '#46c9a0']); f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
+        f.escort = !isHuman(f) && i++ % 2 === 0;  // (half the team sticks with you, half goes exploring)
+        labSpawn(f);
     }
-    if (p) { G.cam.x = p.x; G.cam.y = p.y; }
+    for (let k = 0; k < LAB.robots; k++) spawnRobot(true);
+    labSee(true);
+    if (G.player) { G.cam.x = G.player.x; G.cam.y = G.player.y; }
 }
-const templeCamp = t => G.world.temple.camps[t];
-const inCamp = (f, t) => G.temple && Math.hypot(f.x - templeCamp(t).x, f.y - templeCamp(t).y) < TEMPLE.safeR;
-function templeSpawn(f) {
-    const c = templeCamp(f.team);
+// Back at the hangar with a full set of gear
+function labSpawn(f) {
+    const c = G.world.lab.W / 2;
     let s = null;
-    for (let i = 0; i < 40 && !s; i++) { const a = rand(0, TAU), d = Math.sqrt(Math.random()) * (TEMPLE.safeR - 40), x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d; if (!blockedAt(G.world.grid, x, y, 24)) s = { x, y }; }
-    s = s || c;
+    for (let t = 0; t < 40 && !s; t++) { const x = c + rand(-420, 420), y = c + rand(-260, 380); if (!blockedAt(G.world.grid, x, y, 26)) s = { x, y }; }
+    s = s || { x: c, y: c };
     f.x = s.x; f.y = s.y; f.vx = f.vy = 0;
-    f.inv = [null, null]; f.maxSlots = 3; f.inv.push(null); f.slot = 0; f.ammo = {};
-    for (const k of TEMPLE.start) applyLoot(f, k, -1);
+    f.inv = [null, null, null, null]; f.maxSlots = 4; f.slot = 0; f.ammo = {};
+    for (const k of LAB.gear) applyLoot(f, k, -1);
+    f.ammo['Assault Rifle'] = LAB.rifle; f.ammo.Bow = LAB.arrows;
     switchSlot(f, 0, true);
-    f.hp = f.maxHp = CONFIG.MAX_HEALTH; f.armor = 0; f.items.bandage = 2;
-    f.protectUntil = G.time + TEMPLE.protect; f.poisonUntil = 0; f.burnUntil = 0; f.dotAcc = 0;
-    f.mode = 'wander'; f.target = null; f.goal = null; f.nextThink = G.time;
+    f.hp = f.maxHp = CONFIG.MAX_HEALTH; f.armor = 0; f.items.bandage = 3;
+    f.protectUntil = G.time + LAB.protect;
+    f.mode = 'wander'; f.target = null; f.goal = null; f.nextThink = G.time; f.explore = null;
 }
-function templeDeath(t, killer) {
-    const I = G.temple.idol;
-    if (I.carrier === t) { I.carrier = null; I.x = t.x; I.y = t.y; I.dropAt = G.time; if (G.mode === 'playing') showBanner('THE IDOL WAS DROPPED', false, `${t.isPlayer ? 'You' : t.name} dropped it. Grab it!`); }
-    G.temple.queue.push({ f: t, at: G.time + TEMPLE.respawn });
+// A robot out in the corridors, well away from the team
+function spawnRobot(first) {
+    const { n, cs, W } = G.world.lab, mid = (n - 1) / 2, demo = G.mode === 'demo';
+    const team = G.fighters.filter(f => !f.dead && f.team === 0);
+    let s = null;
+    for (let t = 0; t < 40 && !s; t++) {
+        const i = randInt(0, n - 1), j = randInt(0, n - 1), r = Math.max(Math.abs(i - mid), Math.abs(j - mid));
+        if (r <= LAB.glade + (demo ? 0 : 2) || (demo && r > 6)) continue;
+        const x = (i + 0.5) * cs + rand(-60, 60), y = (j + 0.5) * cs + rand(-60, 60);
+        if (!demo && team.some(f => Math.hypot(f.x - x, f.y - y) < (first ? 1500 : 1200))) continue;
+        if (Math.hypot(x - G.world.lab.exit.x, y - G.world.lab.exit.y) < 500 && Math.random() < 0.7) continue;
+        if (!blockedAt(G.world.grid, x, y, 40)) s = { x, y };
+    }
+    if (!s) return null;
+    const kind = weightedPick(Object.entries(LAB.kinds).map(([k, v]) => [k, v.w])), K = LAB.kinds[kind];
+    const b = createFighter(s.x, s.y, { name: K.name, color: '#8a9099', team: 1 });
+    Object.assign(b, { robot: true, robotKind: kind, robotSpd: K.spd, r: K.r, hp: K.hp, maxHp: K.hp, inv: [K.gun], maxSlots: 1, slot: 0, nextThink: G.time + rand(0, 600), alert: false });
+    b.ammo[K.gun] = Infinity;
+    G.fighters.push(b);
+    G.alive++;
+    // (Crawlers come in packs)
+    if (kind === 'crawler') for (let q = randInt(1, 2); q > 0; q--) {
+        const x = s.x + rand(-50, 50), y = s.y + rand(-50, 50);
+        if (blockedAt(G.world.grid, x, y, 22)) continue;
+        const c2 = createFighter(x, y, { name: K.name, color: '#8a9099', team: 1 });
+        Object.assign(c2, { robot: true, robotKind: kind, robotSpd: K.spd, r: K.r, hp: K.hp, maxHp: K.hp, inv: [K.gun], maxSlots: 1, slot: 0, nextThink: G.time + rand(0, 600), alert: false });
+        c2.ammo[K.gun] = Infinity;
+        G.fighters.push(c2); G.alive++;
+    }
+    return b;
+}
+function labDeath(t, killer) {
+    const L = G.lab;
+    if (t.robot) {
+        if (killer && killer.team === 0) L.kills++;
+        if (inView(t.x, t.y, 120)) { burst(t.x, t.y, 18, '#ffb347', 260); burst(t.x, t.y, 12, '#8a9099', 200); G.particles.push({ type: 'ring', x: t.x, y: t.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: t.r * 2.2, color: '#ffb347' }); }
+        Sound.tone(140, 0.25, 'square', 0.07 * Sound.volAt(t.x, t.y), 50);
+        if (Math.random() < 0.18) spawnLoot(t.x, t.y, 'bandage');
+        return;
+    }
+    L.queue.push({ f: t, at: G.time + LAB.respawn });
     if (t.isPlayer && G.mode === 'playing') { G.flash = 0.4; G.flashColor = '255,40,70'; Sound.death(); }
 }
-function templeRespawn(f) {
-    const fresh = createFighter(f.x, f.y, { isPlayer: f.isPlayer, name: f.name, color: f.color, team: f.team });
-    Object.assign(f, fresh, { remote: f.remote, kills: f.kills, nextThink: G.time, cook: null, healing: null, car: null, up: null });
-    templeSpawn(f);
+function labRespawn(f) {
+    const fresh = createFighter(f.x, f.y, { isPlayer: f.isPlayer, name: f.name, color: f.color, team: 0 });
+    Object.assign(f, fresh, { remote: f.remote, kills: f.kills, nextThink: G.time, cook: null, healing: null, car: null, up: null, escort: f.escort });
+    labSpawn(f);
     G.fighters.push(f);
     G.alive++;
-    if (f.isPlayer) { canvas.classList.remove('dead'); G.timeScale = 1; G.cam.x = f.x; G.cam.y = f.y; }
+    if (f.isPlayer) { canvas.classList.remove('dead'); G.timeScale = 1; G.cam.x = f.x; G.cam.y = f.y; showBanner('BACK AT THE HANGAR', false, 'Fully stocked up. Get back out there!'); }
 }
-// Secret walls: slide open (and close again a while later, once nobody's standing in the gap)
-function openSecret(o) {
-    if (o.open) return;
-    const Wt = G.world.temple, [i, j, d] = o.cell;
-    o.open = true; o.closeAt = G.time + 40000;
-    G.world.grid.removeBox(o);
-    if (o.tunnel && !o.tunnel.shown) { o.tunnel.shown = true; Wt.passages.push(o.tunnel); if (inView(o.x, o.y, 200) && G.player && dist(G.player, o) < 300) addFloat(o.x, o.y - 30, 'A STAIRWAY DOWN!', '#7ef9ff', true); }
-    if (d === 'e') Wt.east[i][j] = false; else Wt.south[i][j] = false;
-    for (const f of G.fighters) f.mzKey = null;
-    if (inView(o.x, o.y, 120)) { burst(o.x, o.y, 22, '#c9b48a', 200); G.particles.push({ type: 'smoke', x: o.x, y: o.y, vx: 0, vy: 0, life: 1, max: 1, size: 30, color: '190,170,130' }); }
-    Sound.tone(80, 0.6, 'sawtooth', 0.08 * Sound.volAt(o.x, o.y), 50);
-}
-function closeSecret(o) {
-    const Wt = G.world.temple, [i, j, d] = o.cell;
-    if (G.fighters.some(f => !f.dead && Math.abs(f.x - o.x) < o.hw + f.r + 4 && Math.abs(f.y - o.y) < o.hh + f.r + 4)) { o.closeAt = G.time + 3000; return; }
-    o.open = false;
-    G.world.grid.insertBox(o);
-    if (d === 'e') Wt.east[i][j] = true; else Wt.south[i][j] = true;
-    for (const f of G.fighters) f.mzKey = null;
-}
-// The maze moves: every so often some walls slide away and others slide across, with a rumble just before.
-// It can wall you into a dead end; there's always a secret (a cracked wall, a symbol switch or a tunnel) to get out by
-function templeShift(warnOnly) {
-    const Wt = G.world.temple, T2 = G.temple;
-    if (warnOnly) { T2.next = Wt.movers.filter(() => Math.random() < 0.5); return; }
-    for (const o of T2.next || []) setMover(o, !o.up);
-    T2.next = null;
-    templeKeepReachable();
-    for (const f of G.fighters) { f.mzKey = null; f.path = null; }
-    G.shake = Math.max(G.shake, 5);
-    Sound.tone(55, 1.4, 'sawtooth', 0.1, 35);
-}
-function setMover(o, up) {
-    const Wt = G.world.temple, [i, j, d] = o.cell;
-    if (o.up === up) return;
-    o.up = up;
-    if (up) {
-        G.world.grid.insertBox(o);
-        // anyone standing where the wall slides in gets shoved out to one side
-        for (const f of G.fighters) if (!f.dead && Math.abs(f.x - o.x) < o.hw + f.r && Math.abs(f.y - o.y) < o.hh + f.r) {
-            if (o.hw < o.hh) f.x = o.x + Math.sign(f.x - o.x || (Math.random() - 0.5)) * (o.hw + f.r + 2);
-            else f.y = o.y + Math.sign(f.y - o.y || (Math.random() - 0.5)) * (o.hh + f.r + 2);
-        }
-    } else G.world.grid.removeBox(o);
-    if (d === 'e') Wt.east[i][j] = up; else Wt.south[i][j] = up;
-    if (inView(o.x, o.y, 120)) burst(o.x, o.y, 16, '#c9b48a', 180, 'smoke');
-}
-// (no part of the maze is ever cut off for good: counting secrets as ways through, every cell can still be reached)
-function templeKeepReachable() {
-    const Wt = G.world.temple, { n } = Wt, wallAt = new Map();
-    for (const o of Wt.secrets) wallAt.set(o.cell.join(), 'secret');
-    const passable = (i, j, d) => !(d === 'e' ? Wt.east[i][j] : Wt.south[i][j]) || wallAt.get([i, j, d].join()) === 'secret';
-    for (let tries = 0; tries < 30; tries++) {
-        const seen = new Uint8Array(n * n), q = [];
-        const m = (n - 1) / 2;
-        for (const [i, j] of [[0, m], [n - 1, m], [m, 0], [m, n - 1]]) { seen[i + j * n] = 1; q.push(i + j * n); }
-        const tunnels = Wt.passages.filter(p => !p.jungle).map(p => [p.a, p.b].map(h => Math.floor((h.x - Wt.ox) / Wt.cs) + Math.floor((h.y - Wt.oy) / Wt.cs) * n));
-        while (q.length) {
-            const c = q.shift(), i = c % n, j = (c - i) / n;
-            const nb = [];
-            if (i < n - 1 && passable(i, j, 'e')) nb.push(c + 1);
-            if (i > 0 && passable(i - 1, j, 'e')) nb.push(c - 1);
-            if (j < n - 1 && passable(i, j, 's')) nb.push(c + n);
-            if (j > 0 && passable(i, j - 1, 's')) nb.push(c - n);
-            for (const [a, b] of tunnels) { if (a === c) nb.push(b); if (b === c) nb.push(a); }
-            for (const d of nb) if (d >= 0 && d < n * n && !seen[d]) { seen[d] = 1; q.push(d); }
-        }
-        // a moving wall between a reachable cell and a cut-off one slides back open
-        const fix = Wt.movers.filter(o => { if (!o.up) return false; const [i, j, d] = o.cell, a = i + j * n, b = d === 'e' ? a + 1 : a + n; return seen[a] !== seen[b]; });
-        if (!fix.length) return;
-        setMover(fix[0], false);
+const labCell = (x, y) => { const { n, cs } = G.world.lab; return [clamp(Math.floor(x / cs), 0, n - 1), clamp(Math.floor(y / cs), 0, n - 1)]; };
+// Where the team has been shows up on the map (the cells they're in and the ones opening off them)
+function labSee(force) {
+    const M = G.world.maze, { n } = M;
+    let fresh = force;
+    const mark = c => { if (!M.seen[c]) { M.seen[c] = 1; fresh = true; } };
+    for (const f of G.fighters) {
+        if (f.dead || f.team !== 0) continue;
+        const [i, j] = labCell(f.x, f.y), c = i + j * n;
+        mark(c);
+        if (i < n - 1 && !M.east[i][j]) mark(c + 1);
+        if (i > 0 && !M.east[i - 1][j]) mark(c - 1);
+        if (j < n - 1 && !M.south[i][j]) mark(c + n);
+        if (j > 0 && !M.south[i][j - 1]) mark(c - n);
     }
+    if (force) { const g = labGlade(), cs = M.cs; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if ((i + 0.5) * cs > g.x0 - cs && (i + 0.5) * cs < g.x1 + cs && (j + 0.5) * cs > g.y0 - cs && (j + 0.5) * cs < g.y1 + cs) M.seen[i + j * n] = 1; }
+    if (fresh) G.lab.mapDirty = true;
 }
-const nearSecret = (f, r = 44) => G.world.temple.secrets.find(o => !o.open && !o.hiddenSecret && Math.abs(f.x - o.x) < o.hw + r && Math.abs(f.y - o.y) < o.hh + r && Math.hypot(f.x - o.x, f.y - o.y) < Math.max(o.hw, o.hh) + r);
-const nearPassage = f => { for (const p of G.world.temple.passages) { if (Math.hypot(f.x - p.a.x, f.y - p.a.y) < 34) return { p, to: p.b }; if (Math.hypot(f.x - p.b.x, f.y - p.b.y) < 34) return { p, to: p.a }; } return null; };
-const nearSwitch = f => G.world.temple.switches.find(w => Math.hypot(f.x - w.x, f.y - w.y) < 30);
-const nearChest = f => G.world.temple.chests.find(c => c.full && Math.hypot(f.x - c.x, f.y - c.y) < 55);
-// F (or the use button): open a cracked wall, drop through a hidden tunnel, or dig up a chest
-function templeUse(f) {
-    if (!G.temple || f.dead) return false;
-    const s = nearSecret(f);
-    if (s) { openSecret(s); return true; }
-    for (const t of G.world.temple.traps) if (t.kind === 'flood' && t.st && t.st < 3 && Math.hypot(f.x - t.drain.x, f.y - t.drain.y) < 34) { t.st = 3; t.t = G.time; if (f.isPlayer) addFloat(f.x, f.y - 34, 'THE WATER DRAINS AWAY', '#7ec8ff'); Sound.tone(200, 0.8, 'sine', 0.08, 80); return true; }
-    const sw = nearSwitch(f);
-    if (sw && !sw.wall.open) {
-        openSecret(sw.wall);
-        if (inView(sw.x, sw.y, 60)) G.particles.push({ type: 'ring', x: sw.x, y: sw.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 40, color: '#ffd166' });
-        if (f.isPlayer) addFloat(f.x, f.y - 34, 'SOMETHING MOVED...', '#ffd166');
-        return true;
-    }
-    const ps = nearPassage(f);
-    if (ps) {
-        f.x = ps.to.x + rand(-10, 10); f.y = ps.to.y + rand(-10, 10); f.vx = f.vy = 0; f.mzKey = null; f.path = null;
-        if (f.isPlayer) { G.cam.x = f.x; G.cam.y = f.y; G.flash = 0.3; G.flashColor = '20,16,10'; }
-        if (inView(f.x, f.y, 80)) burst(f.x, f.y, 12, '#8a6a44', 160, 'smoke');
-        Sound.tone(160, 0.25, 'triangle', 0.08 * Sound.volAt(f.x, f.y), 90);
-        return true;
-    }
-    const c = nearChest(f);
-    if (!c) {
-        // searched and found nothing
-        if (f.isPlayer && templeUseLabel(f) && G.time - (f.searchAt || 0) > 700) { f.searchAt = G.time; addFloat(f.x, f.y - 34, 'Nothing here...', '#c9c3dd'); }
-        return false;
-    }
-    if (c) {
-        c.full = false; c.at = G.time + 60000;
-        spawnLoot(c.x + 20, c.y, pick(TEMPLE.guns)); spawnLoot(c.x - 20, c.y, pick(['medkit', 'bandage']));
-        if (inView(c.x, c.y, 80)) burst(c.x, c.y, 18, '#ffd166', 220, 'glow');
-        Sound.tone(700, 0.2, 'square', 0.07 * Sound.volAt(c.x, c.y), 1100);
-        return true;
-    }
-    return false;
+function drawLabMap() {
+    drawMazeMap();
+    const Lw = G.world.lab, k = 200 / Lw.W, g = G.world.minimap.getContext('2d'), gd = Lw.glade;
+    g.fillStyle = 'rgba(61,214,140,0.55)'; g.fillRect(gd.x0 * k, gd.y0 * k, (gd.x1 - gd.x0) * k, (gd.y1 - gd.y0) * k);
+    if (G.lab.exitFound) { g.fillStyle = '#ffd166'; g.beginPath(); g.arc(Lw.exit.x * k, Lw.exit.y * k, 4, 0, TAU); g.fill(); g.strokeStyle = '#fff7ec'; g.lineWidth = 1.5; g.stroke(); }
 }
-// (the button never gives a secret away: next to any wall, on any symbol or by any mossy stone it just says SEARCH)
-function templeUseLabel(f) {
-    const Wt = G.world.temple;
-    if (nearSecret(f) || nearPassage(f) || nearChest(f) || nearSwitch(f)) return 'SEARCH';
-    let near = false;
-    G.world.grid.query(f.x, f.y, 60, o => { if (!near && o.temple && Math.abs(f.x - o.x) < o.hw + 40 && Math.abs(f.y - o.y) < o.hh + 40) near = true; });
-    if (!near) for (const g2 of Wt.glyphs) if (Math.abs(g2.x - f.x) < 30 && Math.abs(g2.y - f.y) < 30) { near = true; break; }
-    return near ? 'SEARCH' : '';
-}
-// The Trap Trigger: sets off every trap near where you aim
-function triggerTraps(x, y, R, by) {
-    for (const t of G.world.temple.traps) {
-        if (Math.hypot(t.x - x, t.y - y) > R) continue;
-        if (t.kind === 'boulder') fireBoulder(t, by);
-        else if (t.kind === 'darts') fireDarts(t, by);
-        else if (t.kind === 'spikes') t.forced = G.time + 1400;
-        else if (t.kind === 'pit' && t.state === 'solid') { t.state = 'open'; t.t = G.time; }
-        else if (t.kind === 'crush' && !t.st) { t.st = 1; t.t = G.time; }
-        else if (t.kind === 'fire') { t.active = G.time + 1500; t.ready = G.time + 4000; }
-        else if (t.kind === 'flood' && !t.st) { t.st = 1; t.t = G.time; }
-        else if (t.kind === 'snakepit' && !t.open) t.open = G.time + 12000;
+function updateLab(dt) {
+    const L = G.lab, Lw = G.world.lab, p = G.player, now = G.time, c = Lw.W / 2;
+    if (L.queue.length) { const due = L.queue.filter(q => now >= q.at); L.queue = L.queue.filter(q => now < q.at); for (const q of due) labRespawn(q.f); }
+    // More and more robots come out the longer you're in here
+    if (now >= L.nextRobot) {
+        L.nextRobot = now + 1800;
+        const cap = Math.round(LAB.robots + (LAB.robotsMax - LAB.robots) * Math.min(1, now / (LAB.time * 0.7)));
+        if (G.fighters.filter(f => f.robot && !f.dead).length < (G.mode === 'demo' ? 14 : cap)) spawnRobot(false);
     }
-    if (inView(x, y, R)) G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: R, color: '#ffb347' });
-}
-function fireBoulder(t, by) {
-    if (G.time < t.ready) return;
-    t.ready = G.time + 12000;
-    const d = Math.hypot(t.x1 - t.x0, t.y1 - t.y0) || 1;
-    G.temple.boulders.push({ x: t.x0, y: t.y0, ux: (t.x1 - t.x0) / d, uy: (t.y1 - t.y0) / d, left: d + 60, r: 40, by: by || null, hit: new Set(), spin: 0, log: !!t.log, w: TEMPLE.cs / 2 - TEMPLE.T / 2 - 6 });
-    Sound.tone(60, 1.2, 'sawtooth', 0.12 * Sound.volAt(t.x0, t.y0), 40);
-}
-function fireDarts(t, by) {
-    if (G.time < t.ready) return;
-    t.ready = G.time + 5000;
-    const px = -t.dy, py = t.dx;
-    for (let k = -2; k <= 2; k++) G.bullets.push({ x: t.ex + px * k * 26, y: t.ey + py * k * 26, vx: t.dx * 900, vy: t.dy * 900, dmg: 12, owner: by || null, left: TEMPLE.cs, weapon: 'Dart Trap', dart: true, poison: 12 });
-    Sound.tone(1200, 0.08, 'square', 0.06 * Sound.volAt(t.x, t.y), 700);
-}
-function updateTemple(dt) {
-    const T2 = G.temple, Wt = G.world.temple, I = T2.idol, p = G.player, now = G.time;
-    if (T2.queue.length) { const due = T2.queue.filter(q => now >= q.at); T2.queue = T2.queue.filter(q => now < q.at); for (const q of due) templeRespawn(q.f); }
-    for (const sp of T2.spots) {
-        if (sp.loot && !sp.loot.gone) continue;
-        if (sp.loot) { sp.loot = null; sp.next = now + sp.every; }
-        if (now >= sp.next) sp.loot = spawnLoot(sp.x, sp.y, sp.key || pick(TEMPLE.guns));
-    }
-    for (const c of Wt.chests) if (!c.full && now >= c.at) c.full = true;
-    for (const o of Wt.secrets) if (o.open && now >= o.closeAt) closeSecret(o);
-    if (now >= T2.shiftAt - 3000 && !T2.next && now < T2.shiftAt) { templeShift(true); if (G.mode === 'playing') showBanner('THE TEMPLE RUMBLES...', true, 'The walls are about to move!'); Sound.tone(45, 2.5, 'sawtooth', 0.07, 30); }
-    if (now >= T2.shiftAt) { templeShift(false); T2.shiftAt = now + 40000; }
-    if (T2.next && Math.random() < 0.5) G.shake = Math.max(G.shake, 1.5);
-    // Traps that tick on their own, and the ones that go off when stepped on
-    for (const t of Wt.traps) {
-        if (t.kind === 'pit') {
-            if (t.state === 'cracking' && now - t.t > 700) { t.state = 'open'; t.t = now; }
-            else if (t.state === 'open' && now - t.t > 9000) t.state = 'solid';
-        }
-        if (t.kind === 'web' && t.burnt && now > t.burnt) t.burnt = 0;
-        if (t.kind === 'leafpit' && t.open && now > t.open) t.open = 0;
-    }
-    for (const t of Wt.traps) {
-        switch (t.kind) {
-            // (a blade rests a moment at each end of its corridor)
-            case 'blade': { const k = ((now + t.ph) % t.per) / t.per, tri = clamp((k < 0.5 ? k * 2 : 2 - k * 2) * 1.5 - 0.25, 0, 1), e = tri * tri * (3 - 2 * tri); t.x = lerp(t.ax, t.bx, e); t.y = lerp(t.ay, t.by, e); t.dir = k < 0.5 ? 1 : -1; break; }
-            case 'mace': t.hx = t.x + Math.cos(now / 1000 * t.sp + t.ph) * t.r; t.hy = t.y + Math.sin(now / 1000 * t.sp + t.ph) * t.r; break;
-            case 'crush': {
-                // closing over 3 seconds, a moment shut, then sliding back over 2
-                const el = now - t.t;
-                if (t.st === 1) { t.p = Math.min(1, el / 3000); if (el > 3000) { t.st = 2; t.t = now; G.fgrid.query(t.x, t.y, 140, f => { if (!f.dead && Math.abs(f.x - t.x) < TEMPLE.cs / 2 && Math.abs(f.y - t.y) < TEMPLE.cs / 2) damage(f, 70, null, 'Crushing walls'); }); if (inView(t.x, t.y, 150)) { G.shake = Math.max(G.shake, 6); burst(t.x, t.y, 20, '#8f8678', 220); } Sound.tone(60, 0.5, 'sawtooth', 0.12 * Sound.volAt(t.x, t.y), 40); } }
-                else if (t.st === 2) { t.p = 1; if (el > 600) { t.st = 3; t.t = now; } }
-                else if (t.st === 3) { t.p = Math.max(0, 1 - el / 2000); if (el > 2000) { t.st = 0; t.p = 0; t.ready = now + 4000; } }
-                else t.p = 0;
-                break;
-            }
-            case 'archer': {
-                if (now < t.ready) break;
-                let best = null, bd = 460;
-                G.fgrid.query(t.x, t.y, 460, f => { if (f.dead) return; const d = dist(f, t); if (d < bd && lineOfSight(t, f)) { bd = d; best = f; } });
-                if (!best) break;
-                t.a += angleDiff(t.a, Math.atan2(best.y - t.y, best.x - t.x)) * 0.35;
-                if (Math.abs(angleDiff(t.a, Math.atan2(best.y - t.y, best.x - t.x))) < 0.12) { t.ready = now + 1700; G.bullets.push({ x: t.x + Math.cos(t.a) * 26, y: t.y + Math.sin(t.a) * 26, vx: Math.cos(t.a) * 1000, vy: Math.sin(t.a) * 1000, dmg: 20, owner: null, left: 520, weapon: 'Arrow statue', dart: true }); Sound.tone(900, 0.06, 'square', 0.05 * Sound.volAt(t.x, t.y), 500); }
-                break;
-            }
-            case 'fire':
-                if (now < t.active) {
-                    G.fgrid.query(t.x + Math.cos(t.a) * 110, t.y + Math.sin(t.a) * 110, 140, f => { if (f.dead) return; const d = dist(f, t), da = Math.abs(angleDiff(t.a, Math.atan2(f.y - t.y, f.x - t.x))); if (d < 210 && da < 0.42 && now - (f.fireAt || 0) > 400) { f.fireAt = now; damage(f, 12, null, 'Fire statue'); f.burnUntil = now + 2500; f.burnBy = null; } });
-                    if (inView(t.x, t.y, 260)) for (let k = 0; k < 3; k++) { const a = t.a + rand(-0.35, 0.35), sp = rand(300, 480); G.particles.push({ type: 'glow', x: t.x + Math.cos(t.a) * 24, y: t.y + Math.sin(t.a) * 24, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.42, max: 0.42, size: rand(8, 15), color: k ? '#ff8a3d' : '#ffd166' }); }
-                }
-                break;
-            case 'spin': t.rot += t.sp * dt; break;
-            case 'scorpions':
-                for (const s2 of t.bugs) {
-                    if (s2.dead) { if (now > s2.dead) { s2.dead = 0; s2.x = t.x; s2.y = t.y; } continue; }
-                    let tgt = null, bd = 240;
-                    G.fgrid.query(t.x, t.y, 260, f => { if (f.dead) return; const d = Math.hypot(f.x - s2.x, f.y - s2.y); if (d < bd && Math.hypot(f.x - t.x, f.y - t.y) < 260) { bd = d; tgt = f; } });
-                    const gx = tgt ? tgt.x : t.x + Math.cos(s2.a) * 20, gy = tgt ? tgt.y : t.y + Math.sin(s2.a) * 20;
-                    const a = Math.atan2(gy - s2.y, gx - s2.x), sp = tgt ? 210 : 40;
-                    if (Math.hypot(gx - s2.x, gy - s2.y) > 8) { s2.x += Math.cos(a) * sp * dt; s2.y += Math.sin(a) * sp * dt; s2.a = a; }
-                    if (tgt && bd < tgt.r + 8 && now > s2.sting) { s2.sting = now + 900; damage(tgt, 8, null, 'Scorpion'); tgt.poisonUntil = now + 3000; tgt.poisonBy = null; }
-                }
-                break;
-            case 'flood': {
-                const el = now - t.t;
-                if (t.st === 1) { t.lvl = Math.min(1, el / 3000); if (el > 3000) { t.st = 2; t.t = now; } }
-                else if (t.st === 2) { t.lvl = 1; if (el > 10000) { t.st = 3; t.t = now; } }
-                else if (t.st === 3) { t.lvl = Math.max(0, 1 - el / 2500); if (el > 2500) { t.st = 0; t.lvl = 0; t.ready = now + 5000; } }
-                break;
-            }
-        }
-    }
+    if (now >= L.nextSee) { L.nextSee = now + 250; labSee(false); }
+    if (L.mapDirty && now - L.mapAt > 400) { L.mapDirty = false; L.mapAt = now; drawLabMap(); }
+    const g = Lw.glade, ex = Lw.exit;
     for (const f of G.fighters) {
         if (f.dead) continue;
-        let slow = 1;
-        for (const k of f.inv) if (k && f.ammo[k] !== Infinity && !WEAPONS[k].melee) f.ammo[k] = Infinity;
-        if (now - f.lastHurt > TEMPLE.regenAfter && f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + TEMPLE.regen * dt);
-        if (inCamp(f, f.team)) f.hp = Math.min(f.maxHp, f.hp + 40 * dt);
-        else if (inCamp(f, 1 - f.team) && G.mode === 'playing') damage(f, TEMPLE.safeDmg * dt, null, 'enemy camp');
-        // Poison and burning: a little at a time
-        let dps = 0, by = null, why = '';
-        if (now < (f.poisonUntil || 0)) { dps += 4; by = f.poisonBy; why = 'Poison'; }
-        if (now < (f.burnUntil || 0)) { dps += 7; by = f.burnBy; why = 'Fire'; if (Math.random() < dt * 8 && inView(f.x, f.y, 60)) G.particles.push({ type: 'glow', x: f.x + rand(-10, 10), y: f.y + rand(-10, 10), vx: 0, vy: -60, life: 0.4, max: 0.4, size: rand(4, 7), color: '#ff8a3d' }); }
-        if (dps) { f.dotAcc = (f.dotAcc || 0) + dps * dt; if (f.dotAcc >= 5) { f.dotAcc -= 5; damage(f, 5, by && !by.dead ? by : null, why); if (f.dead) continue; } }
-        for (const t of Wt.traps) {
-            const dx = f.x - t.x, dy = f.y - t.y;
-            if (Math.abs(dx) > 160 || Math.abs(dy) > 160) continue;
-            switch (t.kind) {
-                case 'spikes': {
-                    const up = now < t.forced || ((now + t.ph) % 3200) > 2000;
-                    if (up && Math.abs(dx) < t.s && Math.abs(dy) < t.s && now - (f.spikeAt || 0) > 900) { f.spikeAt = now; damage(f, 25, null, 'Spikes'); if (inView(f.x, f.y, 60)) burst(f.x, f.y, 8, '#a3121e', 160, 'blood'); }
-                    break;
-                }
-                case 'pit':
-                    if (Math.abs(dx) < t.s && Math.abs(dy) < t.s) {
-                        if (t.state === 'solid') { t.state = 'cracking'; t.t = now; if (inView(t.x, t.y, 80)) Sound.tone(220, 0.3, 'sawtooth', 0.05, 120); }
-                        else if (t.state === 'open') templeFall(f, t.x, t.y, t.s * 1.5 + f.r);
-                    }
-                    break;
-                case 'axe': {
-                    const sw = Math.sin(now / 420 + t.ph), hx = t.x + t.ax * sw * t.len, hy = t.y + t.ay * sw * t.len;
-                    if (Math.hypot(f.x - hx, f.y - hy) < f.r + 24 && now - (f.axeAt || 0) > 800) { f.axeAt = now; damage(f, 35, null, 'Swinging axe'); f.kx += t.ax * Math.sign(Math.cos(now / 420 + t.ph)) * 500; f.ky += t.ay * Math.sign(Math.cos(now / 420 + t.ph)) * 500; if (inView(f.x, f.y, 60)) burst(f.x, f.y, 10, '#a3121e', 200, 'blood'); }
-                    break;
-                }
-                case 'boulder': if (Math.hypot(dx, dy) < 40) fireBoulder(t, null); break;
-                case 'darts': if (Math.hypot(dx, dy) < 40) fireDarts(t, null); break;
-                case 'web':
-                    if (!t.burnt && Math.hypot(dx, dy) < t.r) {
-                        // a torch burns straight through
-                        if (held(f) === 'Torch') { t.burnt = now + 40000; if (inView(t.x, t.y, 120)) burst(t.x, t.y, 24, '#ff8a3d', 200, 'glow'); }
-                        else slow = Math.min(slow, 0.4);
-                    }
-                    break;
-                case 'sand': { const d = Math.hypot(dx, dy); if (d < t.r) { slow = Math.min(slow, 0.35); if (d < t.r * 0.5 && now - (f.sandAt || 0) > 1000) { f.sandAt = now; damage(f, 6, null, 'Quicksand'); } } break; }
-                case 'leafpit': if (!t.open && Math.hypot(dx, dy) < t.r) { t.open = now + 20000; templeFall(f, t.x, t.y, t.r + f.r + 8); } break;
-                case 'blade':
-                    if (Math.abs((f.x - t.x) * t.ux + (f.y - t.y) * t.uy) < 10 + f.r && Math.abs((f.x - t.x) * -t.uy + (f.y - t.y) * t.ux) < TEMPLE.cs / 2 && now - (f.bladeAt || 0) > 900) { f.bladeAt = now; damage(f, 24, null, 'Sliding blade'); f.kx += t.ux * t.dir * 600; f.ky += t.uy * t.dir * 600; if (inView(f.x, f.y, 60)) burst(f.x, f.y, 10, '#a3121e', 200, 'blood'); }
-                    break;
-                case 'mace':
-                    if (t.hx !== undefined && Math.hypot(f.x - t.hx, f.y - t.hy) < f.r + 18 && now - (f.maceAt || 0) > 800) { f.maceAt = now; damage(f, 35, null, 'Swinging mace'); const a = Math.atan2(f.y - t.y, f.x - t.x); f.kx += Math.cos(a) * 650; f.ky += Math.sin(a) * 650; }
-                    break;
-                case 'crush': {
-                    const h = TEMPLE.cs / 2 - TEMPLE.T / 2, inside = Math.abs(dx) < h && Math.abs(dy) < h;
-                    if (inside && !t.st && now > (t.ready || 0)) { t.st = 1; t.t = now; Sound.tone(45, 3, 'sawtooth', 0.08 * Sound.volAt(t.x, t.y), 35); }
-                    // (the closing slabs push you toward the middle of the room)
-                    if (inside && t.p > 0) { const gap = h * (1 - t.p); if (t.vert) { if (Math.abs(dy) > gap) f.y = t.y + Math.sign(dy) * Math.max(0, gap); } else if (Math.abs(dx) > gap) f.x = t.x + Math.sign(dx) * Math.max(0, gap); }
-                    break;
-                }
-                case 'fire': { const d = Math.hypot(dx, dy), da = Math.abs(angleDiff(t.a, Math.atan2(dy, dx))); if (d < 200 && da < 0.4 && now > t.ready) { t.ready = now + 4200; t.active = now + 1500; Sound.tone(110, 1, 'sawtooth', 0.1 * Sound.volAt(t.x, t.y), 260); } break; }
-                case 'snakepit':
-                    if (Math.abs(dx) < t.s && Math.abs(dy) < t.s) {
-                        if (!t.open) { t.open = now + 12000; Sound.tone(150, 0.4, 'sawtooth', 0.08 * Sound.volAt(t.x, t.y), 60); }
-                        else if (now < t.open) { slow = Math.min(slow, 0.35); if (now - (f.pitBite || 0) > 700) { f.pitBite = now; damage(f, 6, null, 'Snake pit'); f.poisonUntil = now + 2500; f.poisonBy = null; } }
-                    }
-                    break;
-                case 'spin': {
-                    const d = Math.hypot(dx, dy);
-                    if (d < t.r) {
-                        const a = Math.atan2(dy, dx) + t.sp * dt, nd = Math.min(t.r, d + 70 * dt * (0.3 + d / t.r));
-                        f.x = t.x + Math.cos(a) * nd; f.y = t.y + Math.sin(a) * nd;
-                        if (nd > t.r * 0.82 && now - (f.spinAt || 0) > 600) { f.spinAt = now; damage(f, 10, null, 'Spinning floor'); }
-                    }
-                    break;
-                }
-                case 'flood':
-                    if (Math.abs(dx) < t.s && Math.abs(dy) < t.s) {
-                        if (!t.st && now > (t.ready || 0)) { t.st = 1; t.t = now; Sound.tone(90, 2, 'sine', 0.08 * Sound.volAt(t.x, t.y), 60); }
-                        if (t.lvl > 0.4) { slow = Math.min(slow, 0.5); if (t.lvl > 0.8 && now - (f.drownAt || 0) > 1000) { f.drownAt = now; damage(f, 9, null, 'Drowned'); } }
-                    }
-                    break;
-                case 'snake':
-                    if (Math.hypot(dx, dy) < 80 && now - t.bite > 1100) { t.bite = now; damage(f, 10, null, 'Snake'); f.poisonUntil = now + 3000; f.poisonBy = null; Sound.tone(1800, 0.15, 'sawtooth', 0.04 * Sound.volAt(t.x, t.y), 2400); }
-                    break;
+        if (f.robot) {
+            // (the force field over the glade's gates keeps robots out)
+            if (G.mode !== 'demo' && f.x > g.x0 - f.r && f.x < g.x1 + f.r && f.y > g.y0 - f.r && f.y < g.y1 + f.r) {
+                const dx = f.x - c, dy = f.y - c;
+                if (Math.abs(dx) > Math.abs(dy)) f.x = dx > 0 ? g.x1 + f.r + 2 : g.x0 - f.r - 2; else f.y = dy > 0 ? g.y1 + f.r + 2 : g.y0 - f.r - 2;
+                f.vx *= -0.3; f.vy *= -0.3;
+                if (Math.random() < dt * 20 && inView(f.x, f.y, 60)) G.particles.push({ type: 'glow', x: f.x + rand(-15, 15), y: f.y + rand(-15, 15), vx: rand(-60, 60), vy: rand(-60, 60), life: 0.3, max: 0.3, size: rand(3, 5), color: '#5effc0' });
+            }
+            continue;
+        }
+        if (f.team !== 0) continue;
+        // In the safe zone you heal up; in the hangar you restock rounds, arrows and bandages
+        if (labSafe(f)) f.hp = Math.min(f.maxHp, f.hp + 10 * dt);
+        if (inHangar(f) && now >= (f.restockAt || 0)) {
+            f.restockAt = now + 400;
+            for (const k of LAB.gear) if (!f.inv.includes(k)) { const e = f.inv.indexOf(null); if (e >= 0) applyLoot(f, k, -1); }
+            let got = false;
+            if ((f.ammo['Assault Rifle'] || 0) < LAB.rifle) { f.ammo['Assault Rifle'] = Math.min(LAB.rifle, (f.ammo['Assault Rifle'] || 0) + 15); got = true; }
+            if ((f.ammo.Bow || 0) < LAB.arrows) { f.ammo.Bow = Math.min(LAB.arrows, (f.ammo.Bow || 0) + 2); got = true; }
+            if (f.items.bandage < 3) { f.items.bandage++; got = true; }
+            if (got && f.isPlayer && now - (f.restockMsg || 0) > 2500) { f.restockMsg = now; addFloat(f.x, f.y - 34, 'RESTOCKED', '#5effc0'); }
+        }
+        // Found the way out
+        if (!L.exitFound && Math.hypot(f.x - ex.x, f.y - ex.y) < 520) {
+            L.exitFound = true; L.mapDirty = true;
+            if (G.mode === 'playing') { showBanner('THE WAY OUT IS FOUND!', false, `${f.isPlayer ? 'You' : f.name} found it. It's marked on your map. Get there!`); Sound.tone(660, 0.5, 'triangle', 0.1, 990); }
+        }
+        // Through the gap in the outer wall: out of the maze
+        const [ci, cj] = labCell(f.x, f.y), d = ex.side === 0 ? f.y : ex.side === 1 ? Lw.W - f.x : ex.side === 2 ? Lw.W - f.y : f.x;
+        if (ci === ex.i && cj === ex.j && d < 90) {
+            if (f.isPlayer || G.mode === 'demo') { if (G.mode === 'demo') { labSpawn(f); continue; } }
+            else { f.escaped = true; f.dead = true; G.alive--; L.out++; if (G.mode === 'playing') addKillfeedText(`${f.name} got out of the maze!`); continue; }
+            if (G.mode === 'playing' && !G.result) {
+                G.result = { won: true, place: 1, title: 'ESCAPED!', sub: `You got out of the maze${L.out ? ` with ${L.out} teammate${L.out === 1 ? '' : 's'}` : ''} in ${fmtTime(now / 1000)}, and wrecked ${L.kills} robots` };
+                G.overAt = now + 2600;
+                startVictory(G.result.sub);
+                f.dead = true; f.escaped = true;
             }
         }
-        if (I.carrier === f) slow *= TEMPLE.carrySlow;
-        f.slowK = slow;
     }
-    // Rolling boulders
-    for (const b of T2.boulders) {
-        const step = 430 * dt;
-        b.x += b.ux * step; b.y += b.uy * step; b.left -= step; b.spin += step / b.r;
-        G.fgrid.query(b.x, b.y, b.r + 30, f => {
-            if (f.dead || b.hit.has(f)) return;
-            const along = (f.x - b.x) * b.ux + (f.y - b.y) * b.uy, side = Math.abs((f.x - b.x) * -b.uy + (f.y - b.y) * b.ux);
-            if (b.log ? (Math.abs(along) > 22 + f.r || side > b.w + f.r) : Math.hypot(f.x - b.x, f.y - b.y) > b.r + f.r) return;
-            b.hit.add(f); damage(f, 70, b.by && b.by !== f ? b.by : null, 'Boulder');
-            if (!f.dead) { f.kx += -b.uy * 700 * (Math.random() < 0.5 ? 1 : -1); f.ky += b.ux * 700 * (Math.random() < 0.5 ? 1 : -1); }
-        });
-        if (b.left <= 0 && inView(b.x, b.y, 100)) { burst(b.x, b.y, 24, '#8f8678', 240); G.shake = Math.max(G.shake, 4); }
-    }
-    T2.boulders = T2.boulders.filter(b => b.left > 0);
-    // The idol: picked up by walking over it, back on the altar if nobody touches it for a while
-    if (I.carrier) { if (I.carrier.dead) I.carrier = null; else { I.x = I.carrier.x; I.y = I.carrier.y; } }
-    if (!I.carrier) {
-        if (!I.home && now - I.dropAt > TEMPLE.idolHome) { I.x = Wt.altar.x; I.y = Wt.altar.y; I.home = true; if (G.mode === 'playing') showBanner('THE IDOL IS BACK ON THE ALTAR', false); }
-        let who = null;
-        G.fgrid.query(I.x, I.y, 50, f => { if (!who && !f.dead && Math.hypot(f.x - I.x, f.y - I.y) < f.r + 22 && G.time > (f.protectUntil || 0) - 1500) who = f; });
-        if (who) {
-            I.carrier = who; I.home = false;
-            if (G.mode === 'playing') { showBanner(who.team === p.team ? 'YOUR TEAM HAS THE IDOL!' : 'THEY HAVE THE IDOL!', who.team !== p.team, who === p ? 'Get it back to your camp!' : who.team === p.team ? `${who.name} has it. Cover them!` : `Stop ${who.name} before they get home!`); Sound.tone(880, 0.3, 'triangle', 0.08, 1320); }
-        }
-    }
-    if (I.carrier && inCamp(I.carrier, I.carrier.team)) {
-        const t = I.carrier.team;
-        T2.score[t]++; I.carrier = null; I.x = Wt.altar.x; I.y = Wt.altar.y; I.home = true;
-        if (G.mode === 'playing') { showBanner(t === p.team ? 'TREASURE SECURED!' : 'THEY GOT THE IDOL HOME', t !== p.team, `${T2.score[0]} – ${T2.score[1]}. The idol is back on the altar.`); Sound.tone(t === p.team ? 990 : 200, 0.6, 'square', 0.1, t === p.team ? 1480 : 120); }
-    }
-    if (G.mode === 'demo') { if (T2.score[0] + T2.score[1] >= 3) T2.score = [0, 0]; return; }
     if (G.mode !== 'playing' || G.result || !p) return;
-    let won = null, title, sub;
-    const winner = T2.score[0] >= TEMPLE.wins ? 0 : T2.score[1] >= TEMPLE.wins ? 1 : null;
-    if (winner !== null) { won = p.team === winner; title = won ? 'THE TREASURE IS YOURS!' : 'THEY TOOK THE TREASURE'; sub = `${T2.score[0]} – ${T2.score[1]}`; }
-    else if (now >= T2.endAt) {
-        if (I.carrier && !T2.overtime) { T2.overtime = true; showBanner('OVERTIME!', true, 'The idol is being carried: the game goes on until it gets home or is dropped'); }
-        else if (!I.carrier) { const d = T2.score[0] - T2.score[1]; won = d === 0 ? null : (d > 0) === (p.team === 0); title = d === 0 ? 'DRAW' : won ? 'TIME! YOU WIN' : 'TIME! THEY WIN'; sub = `${T2.score[0]} – ${T2.score[1]}`; if (d === 0) { G.result = { won: false, place: 2, title, sub }; G.overAt = now + 2600; return; } }
+    if (now >= L.endAt) {
+        G.result = { won: false, place: 2, title: 'TRAPPED', sub: `Time ran out. ${L.out} of your team got out, and you wrecked ${L.kills} robots.` };
+        G.overAt = now + 2600; G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death();
     }
-    if (won === null) return;
-    G.result = { won, place: won ? 1 : 2, title, sub };
-    G.overAt = now + 2600;
-    if (won) startVictory(sub); else { G.timeScale = 0.3; canvas.classList.add('dead'); Sound.death(); }
 }
-// Falling into a pit: it hurts, and you climb out at the edge
-function templeFall(f, x, y, R) {
-    if (G.time - (f.fallAt || 0) < 1200) return;
-    f.fallAt = G.time;
-    const a = Math.atan2(f.y - y, f.x - x) || rand(0, TAU);
-    f.x = x + Math.cos(a) * R; f.y = y + Math.sin(a) * R; f.vx = f.vy = 0;
-    f.stunUntil = G.time + 700;
-    damage(f, 28, null, 'Pit');
-    if (f.isPlayer) { G.shake = Math.max(G.shake, 6); G.flash = 0.25; G.flashColor = '20,14,8'; }
-    if (inView(x, y, 100)) burst(x, y, 14, '#5a4a32', 180, 'smoke');
+function addKillfeedText(text) { if (typeof showBanner === 'function') addFloat(G.player ? G.player.x : 0, G.player ? G.player.y - 60 : 0, text, '#5effc0'); }
+// Robots: hunt down anyone they can sense (they hear you through the walls), otherwise wander the corridors
+function robotThink(b) {
+    b.nextThink = G.time + rand(260, 420);
+    let best = null, bd = LAB.sense;
+    for (const f of G.fighters) if (!f.dead && f.team === 0 && !labSafe(f)) { const d = Math.hypot(f.x - b.x, f.y - b.y); if (d < bd) { bd = d; best = f; } }
+    if (best) {
+        const los = bd < 950 && lineOfSight(b, best);
+        b.hasLOS = los;
+        if (los) {
+            b.lastSeen = G.time; b.lastSpot = { x: best.x, y: best.y };
+            // (a robot that spots you calls the others round about)
+            if (G.time > (b.callAt || 0)) { b.callAt = G.time + 4000; for (const o of G.fighters) if (o.robot && !o.dead && o !== b && o.mode !== 'fight' && Math.hypot(o.x - b.x, o.y - b.y) < 1100) { o.mode = 'hunt'; o.goal = best; o.target = best; o.nextThink = G.time + 1500; } }
+            if (b.target !== best || b.mode !== 'fight') { b.engageAt = G.time + rand(150, 400); b.strafe = Math.random() < 0.5 ? 1 : -1; }
+            b.mode = 'fight'; b.target = best;
+            return;
+        }
+        b.mode = 'hunt'; b.goal = best; b.target = best;
+        return;
+    }
+    b.target = null;
+    if (b.mode !== 'zone' || !b.goal || Math.hypot(b.goal.x - b.x, b.goal.y - b.y) < 120 || Math.random() < 0.02) {
+        const { n, cs } = G.world.lab, mid = (n - 1) / 2, [i, j] = labCell(b.x, b.y);
+        let ti = i, tj = j;
+        for (let t = 0; t < 10; t++) { ti = clamp(i + randInt(-5, 5), 0, n - 1); tj = clamp(j + randInt(-5, 5), 0, n - 1); if (Math.max(Math.abs(ti - mid), Math.abs(tj - mid)) > LAB.glade) break; }
+        b.mode = 'zone'; b.goal = { x: (ti + 0.5) * cs, y: (tj + 0.5) * cs };
+    }
 }
-// Bots: grab the idol, bring it home, chase whoever has it, cover a teammate who has it
-function templeBotPlan(b) {
-    const T2 = G.temple, I = T2.idol;
-    // (sometimes a bot spots a cracked wall it's next to and opens it, or takes a tunnel that helps)
-    if (Math.random() < 0.04) { const s = nearSecret(b, 40); if (s) openSecret(s); }
-    if (Math.random() < 0.05) { const sw = nearSwitch(b); if (sw && !sw.wall.open) openSecret(sw.wall); }
-    // Walled in with no way through: feel along the walls for a secret (it takes a while)
-    if (b.mzKey && b.mzNext === null && Math.random() < 0.06) {
-        let best = null, bd = 600;
-        for (const o of G.world.temple.secrets) { if (o.open) continue; const d = Math.hypot(o.x - b.x, o.y - b.y); if (d < bd) { bd = d; best = o; } }
-        if (best) openSecret(best);
-    }
-    if (I.carrier === b) { const c = templeCamp(b.team); b.mode = 'zone'; b.goal = { x: c.x, y: c.y }; templeBotTunnel(b, c); return true; }
-    if (b.inv.filter(Boolean).length < 3) {
-        const l = nearestLoot(b.x, b.y, 350, q => WEAPONS[q.key] && !b.inv.includes(q.key) && !claimedByOther(q, b));
-        if (l) { b.mode = 'loot'; b.goal = l; l.claim = b; return true; }
-    }
-    if (I.carrier && I.carrier.team !== b.team) { b.mode = 'zone'; b.goal = { x: I.carrier.x, y: I.carrier.y }; return true; }
-    if (I.carrier && I.carrier.team === b.team) {
-        if (b.escortOff === undefined) b.escortOff = { a: rand(0, TAU), r: rand(60, 140) };
-        b.mode = 'zone'; b.goal = { x: I.carrier.x + Math.cos(b.escortOff.a) * b.escortOff.r, y: I.carrier.y + Math.sin(b.escortOff.a) * b.escortOff.r };
+// Teammates: half stick close to you, half go exploring for the way out; everyone heads for it once it's found
+function labBotPlan(b) {
+    if (b.team !== 0 || b.robot) return false;
+    const L = G.lab, Lw = G.world.lab, M = G.world.maze, p = G.player, { n, cs } = Lw, c = Lw.W / 2;
+    if (L.exitFound && !(b.escort && p && !p.dead && G.mode === 'playing')) { b.mode = 'zone'; b.goal = { x: Lw.exit.gx, y: Lw.exit.gy }; return true; }
+    // Hurt with nothing to patch up with: back to the safe zone
+    if (b.hp < 35 && !b.items.bandage) { b.mode = 'zone'; b.goal = { x: c + rand(-150, 150), y: Lw.hangar.y0 + 150 }; return true; }
+    if (b.escort && p && !p.dead && G.mode === 'playing') {
+        if (!b.escortOff) b.escortOff = { a: rand(0, TAU), r: rand(70, 150) };
+        if (Math.hypot(p.x - b.x, p.y - b.y) > 170) { b.mode = 'zone'; b.goal = { x: p.x + Math.cos(b.escortOff.a) * b.escortOff.r, y: p.y + Math.sin(b.escortOff.a) * b.escortOff.r }; }
+        else b.mode = 'rest';
         return true;
     }
-    b.mode = 'zone'; b.goal = { x: I.x, y: I.y }; templeBotTunnel(b, I);
+    const ex = b.explore;
+    if (!ex || M.seen[ex.c] || Math.hypot(ex.x - b.x, ex.y - b.y) < 150 || G.time > ex.until) {
+        let best = null, bs = Infinity;
+        for (let t = 0; t < 40; t++) {
+            const i = randInt(0, n - 1), j = randInt(0, n - 1), cc = i + j * n;
+            if (M.seen[cc]) continue;
+            const x = (i + 0.5) * cs, y = (j + 0.5) * cs, s = Math.hypot(x - b.x, y - b.y) - Math.hypot(x - c, y - c) * 0.6 + rand(0, 900);
+            if (s < bs) { bs = s; best = { c: cc, x, y, until: G.time + 45000 }; }
+        }
+        b.explore = best || { c: 0, x: rand(cs, Lw.W - cs), y: rand(cs, Lw.W - cs), until: G.time + 40000 };
+    }
+    b.mode = 'zone'; b.goal = { x: b.explore.x, y: b.explore.y };
     return true;
 }
-function templeBotTunnel(b, goal) {
-    const ps = nearPassage(b);
-    if (ps && Math.hypot(ps.to.x - goal.x, ps.to.y - goal.y) < Math.hypot(b.x - goal.x, b.y - goal.y) - 700 && G.time - (b.tunnelAt || 0) > 8000) { b.tunnelAt = G.time; templeUse(b); }
-}
-// Finding the way through the maze: by its cells, through whatever secret walls are open right now
-function templeRoute(b, gx, gy) {
-    const Wt = G.world.temple, { ox, oy, cs, n } = Wt;
-    const inT = (x, y) => x > ox && x < ox + n * cs && y > oy && y < oy + n * cs;
-    const meIn = inT(b.x, b.y), goalIn = inT(gx, gy);
-    if (!meIn && !goalIn) return null;
-    // Outside, heading in: to the best entrance first
-    if (!meIn) {
-        let best = null, bd = Infinity;
-        for (const e of Wt.ents) { const d = Math.hypot(e.x - b.x, e.y - b.y) + Math.hypot(e.ix - gx, e.iy - gy) * 0.8; if (d < bd) { bd = d; best = e; } }
-        // (once at the doorway, or already closer to the inside than the doorway is, step on in)
-        const toIn = Math.hypot(best.ix - b.x, best.iy - b.y), span = Math.hypot(best.ix - best.x, best.iy - best.y);
-        return Math.hypot(best.x - b.x, best.y - b.y) < 70 || toIn < span ? { x: best.ix, y: best.iy } : { x: best.x, y: best.y };
-    }
-    // Inside, heading out: to the best entrance from in here
-    let tx = gx, ty = gy, exit = null;
-    if (!goalIn) {
-        let bd = Infinity;
-        for (const e of Wt.ents) { const d = Math.hypot(e.x - gx, e.y - gy); if (d < bd) { bd = d; exit = e; } }
-        tx = exit.ix; ty = exit.iy;
-    }
-    const ci = clamp(Math.floor((b.x - ox) / cs), 0, n - 1), cj = clamp(Math.floor((b.y - oy) / cs), 0, n - 1);
-    const ti = clamp(Math.floor((tx - ox) / cs), 0, n - 1), tj = clamp(Math.floor((ty - oy) / cs), 0, n - 1);
-    if (ci === ti && cj === tj) return exit ? { x: exit.x, y: exit.y } : { x: gx, y: gy };
-    const keyv = ci + cj * n + (ti + tj * n) * 1000;
-    if (b.mzKey !== keyv) {
-        b.mzKey = keyv;
-        const prev = new Int16Array(n * n).fill(-1), q = [ti + tj * n];
-        prev[ti + tj * n] = ti + tj * n;
-        while (q.length) {
-            const c = q.shift(), i = c % n, j = (c - i) / n;
-            if (c === ci + cj * n) break;
-            const nb = [];
-            if (i < n - 1 && !Wt.east[i][j]) nb.push(c + 1);
-            if (i > 0 && !Wt.east[i - 1][j]) nb.push(c - 1);
-            if (j < n - 1 && !Wt.south[i][j]) nb.push(c + n);
-            if (j > 0 && !Wt.south[i][j - 1]) nb.push(c - n);
-            for (const d of nb) if (prev[d] < 0) { prev[d] = c; q.push(d); }
-        }
-        const nx = prev[ci + cj * n];
-        b.mzNext = nx < 0 ? null : { x: ox + ((nx % n) + 0.5) * cs, y: oy + (Math.floor(nx / n) + 0.5) * cs };
-        b.mzHere = { x: ox + (ci + 0.5) * cs, y: oy + (cj + 0.5) * cs };
-    }
-    const nx2 = b.mzNext, here = b.mzHere;
-    if (!nx2) return { x: gx, y: gy };
-    // (line up with the doorway first, so nobody snags on the end of a wall cutting the corner)
-    const ax = nx2.x - here.x, ay = nx2.y - here.y, al = Math.hypot(ax, ay) || 1;
-    const off = Math.abs((b.x - here.x) * ay - (b.y - here.y) * ax) / al;
-    return off > cs * 0.2 ? here : nx2;
-}
-// A carved symbol: spiral, eye, sun, snake, triangle, hand or moon
-function drawGlyph(x, y, kind, rot, s, col) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
-    ctx.strokeStyle = col; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+// Drawing: the stone floor, the glade with its grass and hangar, and the giant iron walls with their long shadows
+function drawLabGround(L, T, R, B) {
+    const Lw = G.world.lab, W = Lw.W, g = Lw.glade, now = performance.now() / 1000;
+    ctx.fillStyle = '#2e3229'; ctx.fillRect(L, T, R - L, B - T);
+    ctx.fillStyle = '#3d4236'; ctx.fillRect(Math.max(0, L), Math.max(0, T), Math.min(W, R) - Math.max(0, L), Math.min(W, B) - Math.max(0, T));
+    ctx.globalAlpha = 0.35;
+    G.world.decorGrid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2, d => { const s = 128 * d.s; ctx.drawImage(SPR.patches[d.spr], d.x - s, d.y - s, s * 2, s * 2); });
+    ctx.globalAlpha = 1;
+    // big worn flagstones
+    ctx.strokeStyle = 'rgba(20,22,18,0.35)'; ctx.lineWidth = 2;
+    const S2 = 100, x0 = Math.max(0, Math.floor(L / S2) * S2), y0 = Math.max(0, Math.floor(T / S2) * S2);
     ctx.beginPath();
-    switch (kind) {
-        case 0: for (let t = 0; t < 12; t++) { const a = t * 0.6, r = t * s / 12; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } break;
-        case 1: ctx.ellipse(0, 0, s, s * 0.5, 0, 0, TAU); ctx.moveTo(s * 0.3, 0); ctx.arc(0, 0, s * 0.3, 0, TAU); break;
-        case 2: ctx.arc(0, 0, s * 0.45, 0, TAU); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.moveTo(Math.cos(a) * s * 0.6, Math.sin(a) * s * 0.6); ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); } break;
-        case 3: ctx.moveTo(-s, 0); for (let k = 0; k <= 8; k++) ctx.lineTo(-s + k * s / 4, Math.sin(k * 1.4) * s * 0.4); break;
-        case 4: ctx.moveTo(0, -s); ctx.lineTo(s * 0.9, s * 0.7); ctx.lineTo(-s * 0.9, s * 0.7); ctx.closePath(); ctx.moveTo(0, -s * 0.2); ctx.arc(0, 0, s * 0.2, -Math.PI / 2, Math.PI * 1.5); break;
-        case 5: ctx.moveTo(-s * 0.5, s); ctx.lineTo(-s * 0.5, -s * 0.2); for (let k = 0; k < 4; k++) { ctx.moveTo(-s * 0.5 + k * s * 0.33, -s * 0.2); ctx.lineTo(-s * 0.5 + k * s * 0.33, -s); } ctx.moveTo(-s * 0.5, s); ctx.lineTo(s * 0.5, s); ctx.lineTo(s * 0.5, -s * 0.2); break;
-        default: ctx.arc(0, 0, s * 0.8, 0.6, TAU - 0.6); ctx.arc(s * 0.35, 0, s * 0.55, TAU - 0.9, 0.9, true); break;
+    for (let x = x0; x < Math.min(R, W); x += S2) { ctx.moveTo(x, Math.max(0, T)); ctx.lineTo(x, Math.min(B, W)); }
+    for (let y = y0; y < Math.min(B, W); y += S2) { const off = (Math.floor(y / S2) % 2) * 50; ctx.moveTo(Math.max(0, L), y); ctx.lineTo(Math.min(R, W), y); void off; }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(30,40,40,0.45)';
+    for (const q of Lw.puddles) if (inView(q.x, q.y, 100)) { ctx.beginPath(); ctx.ellipse(q.x, q.y, q.rx, q.ry, q.a, 0, TAU); ctx.fill(); }
+    // the glade: grass, with the safe zone painted round it
+    ctx.fillStyle = SPR.grass; ctx.fillRect(g.x0, g.y0, g.x1 - g.x0, g.y1 - g.y0);
+    ctx.fillStyle = 'rgba(61,214,140,0.08)'; ctx.fillRect(g.x0, g.y0, g.x1 - g.x0, g.y1 - g.y0);
+    ctx.strokeStyle = 'rgba(94,255,192,0.45)'; ctx.lineWidth = 8; ctx.setLineDash([30, 20]); ctx.strokeRect(g.x0 + 60, g.y0 + 60, g.x1 - g.x0 - 120, g.y1 - g.y0 - 120); ctx.setLineDash([]);
+    const c = W / 2;
+    ctx.font = '900 46px "Black Ops One", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(94,255,192,0.28)'; ctx.fillText('SAFE ZONE', c, g.y1 - 120);
+    // the hangar's concrete floor and weapon racks
+    const h = Lw.hangar;
+    ctx.fillStyle = '#5d6460'; ctx.fillRect(h.x0, h.y0, h.x1 - h.x0, h.y1 - h.y0 + 60);
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2; for (let x = h.x0 + 60; x < h.x1; x += 60) { ctx.beginPath(); ctx.moveTo(x, h.y0); ctx.lineTo(x, h.y1 + 60); ctx.stroke(); }
+    ctx.fillStyle = '#ffd166'; for (let x = h.x0 + 20; x < h.x1 - 20; x += 50) { ctx.save(); ctx.translate(x, h.y1 + 56); ctx.fillRect(0, 0, 25, 8); ctx.restore(); }
+    for (let k = 0; k < 4; k++) {
+        const rx = h.x0 + 80 + k * 166, ry = h.y0 + 60, key = LAB.gear[k];
+        ctx.fillStyle = '#3a2a1a'; ctx.fillRect(rx - 55, ry - 18, 110, 36);
+        ctx.fillStyle = '#5a4128'; ctx.fillRect(rx - 52, ry - 15, 104, 30);
+        const spr = SPR.loot && SPR.loot[key];
+        if (spr) { ctx.save(); ctx.translate(rx, ry); ctx.drawImage(spr, -spr.width / 2 * 0.7, -spr.height / 2 * 0.7, spr.width * 0.7, spr.height * 0.7); ctx.restore(); }
+        ctx.font = '700 15px Rajdhani, sans-serif'; ctx.fillStyle = 'rgba(255,247,236,0.8)'; ctx.fillText(key === 'Assault Rifle' ? 'RIFLES' : key.toUpperCase() + 'S', rx, ry + 32);
     }
-    ctx.stroke(); ctx.restore();
+    ctx.font = '900 34px "Black Ops One", sans-serif'; ctx.fillStyle = 'rgba(255,209,102,0.75)'; ctx.fillText('HANGAR', c, h.y1 - 50);
+    ctx.font = '600 16px Rajdhani, sans-serif'; ctx.fillStyle = 'rgba(255,247,236,0.6)'; ctx.fillText('Walk in to restock rounds, arrows and bandages', c, h.y1 - 18);
+    // light pouring in through the way out
+    const ex = Lw.exit;
+    if (inView(ex.gx, ex.gy, 500)) {
+        const gr = ctx.createRadialGradient(ex.gx, ex.gy, 10, ex.gx, ex.gy, 420);
+        gr.addColorStop(0, `rgba(255,236,170,${0.55 + Math.sin(now * 2) * 0.08})`); gr.addColorStop(1, 'rgba(255,236,170,0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(ex.gx, ex.gy, 420, 0, TAU); ctx.fill();
+    }
+    // floor vines
+    Lw.vineGrid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2, v => { if (v.floor && v.x > L - 140 && v.x < R + 140 && v.y > T - 140 && v.y < B + 140) drawVine(v); });
+    // the walls' long shadows (they're 100 metres tall)
+    ctx.fillStyle = 'rgba(8,10,8,0.42)';
+    G.world.grid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2 + 200, o => {
+        if (!o.lab || o.shadowStamp === G.time) return;
+        o.shadowStamp = G.time;
+        const sx = 70, sy = 95, x1 = o.x - o.hw, y1 = o.y - o.hh, x2 = o.x + o.hw, y2 = o.y + o.hh;
+        if (x2 + sx < L || x1 > R || y2 + sy < T || y1 > B) return;
+        ctx.beginPath(); ctx.moveTo(x2, y1); ctx.lineTo(x2 + sx, y1 + sy); ctx.lineTo(x2 + sx, y2 + sy); ctx.lineTo(x1 + sx, y2 + sy); ctx.lineTo(x1, y2); ctx.lineTo(x2, y2); ctx.closePath(); ctx.fill();
+    });
+}
+// The iron walls themselves: riveted plates streaked with rust, vines creeping along the tops and spilling down the sides
+function drawLabWalls(L, T, R, B) {
+    const walls = [];
+    G.world.grid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2 + 100, o => { if (o.lab && o.drawStamp !== G.time && o.x + o.hw > L && o.x - o.hw < R && o.y + o.hh > T && o.y - o.hh < B) { o.drawStamp = G.time; walls.push(o); } });
+    for (const o of walls) {
+        const x = o.x - o.hw, y = o.y - o.hh, w = o.hw * 2, h = o.hh * 2, long = w > h;
+        ctx.fillStyle = '#1e2124'; ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+        ctx.fillStyle = o.color; ctx.fillRect(x, y, w, h);
+        // plates and seams
+        const thick = long ? h : w, Lx = long ? w : h, P = 120;
+        ctx.strokeStyle = 'rgba(20,22,24,0.7)'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let t = P; t < Lx; t += P) { if (long) { ctx.moveTo(x + t, y); ctx.lineTo(x + t, y + h); } else { ctx.moveTo(x, y + t); ctx.lineTo(x + w, y + t); } }
+        if (long) { ctx.moveTo(x, o.y); ctx.lineTo(x + w, o.y); } else { ctx.moveTo(o.x, y); ctx.lineTo(o.x, y + h); }
+        ctx.stroke();
+        // rust streaks (always in the same places for each wall)
+        const rnd = seededRand(Math.floor(o.seed) + 1);
+        for (let k = 0; k < Lx / 90; k++) {
+            const t = rnd() * Lx, s = 10 + rnd() * 26;
+            ctx.fillStyle = `rgba(${120 + rnd() * 40},${60 + rnd() * 20},30,${0.25 + rnd() * 0.25})`;
+            if (long) ctx.fillRect(x + t, y + rnd() * h * 0.4, 2 + rnd() * 4, 6 + s * 0.04 * h); else ctx.fillRect(x + rnd() * w * 0.4, y + t, 6 + s * 0.04 * w, 2 + rnd() * 4);
+        }
+        // rivets along the edges
+        ctx.fillStyle = 'rgba(160,168,176,0.55)';
+        for (let t = 20; t < Lx - 10; t += 40) for (const e of [7, thick - 7]) { const rx = long ? x + t : x + e, ry = long ? y + e : y + t; ctx.beginPath(); ctx.arc(rx, ry, 2.4, 0, TAU); ctx.fill(); }
+        // the top catches the light
+        ctx.fillStyle = 'rgba(255,255,255,0.1)'; if (long) ctx.fillRect(x, y, w, 6); else ctx.fillRect(x, y, 6, h);
+        if (o.outer) { ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x + (long ? 0 : w * 0.3), y + (long ? h * 0.3 : 0), long ? w : w * 0.4, long ? h * 0.4 : h); }
+    }
+    G.world.lab.vineGrid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2, v => { if (!v.floor && v.x > L - 140 && v.x < R + 140 && v.y > T - 140 && v.y < B + 140) drawVine(v); });
+    // the force fields over the glade's gates, and the gap of daylight that's the way out
+    const now = performance.now() / 1000;
+    if (G.lab && G.mode !== 'demo') for (const gt of G.world.lab.gates) {
+        if (!inView(gt.x, gt.y, 200)) continue;
+        const half = LAB.cs / 2 - LAB.T / 2;
+        ctx.strokeStyle = `rgba(94,255,192,${0.5 + Math.sin(now * 5 + gt.x) * 0.2})`; ctx.lineWidth = 6;
+        ctx.beginPath(); if (gt.h) { ctx.moveTo(gt.x - half, gt.y); ctx.lineTo(gt.x + half, gt.y); } else { ctx.moveTo(gt.x, gt.y - half); ctx.lineTo(gt.x, gt.y + half); } ctx.stroke();
+        ctx.fillStyle = 'rgba(94,255,192,0.12)'; if (gt.h) ctx.fillRect(gt.x - half, gt.y - 16, half * 2, 32); else ctx.fillRect(gt.x - 16, gt.y - half, 32, half * 2);
+    }
+    const ex = G.world.lab.exit;
+    if (inView(ex.gx, ex.gy, 300)) {
+        ctx.font = '900 30px "Black Ops One", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = `rgba(255,209,102,${0.7 + Math.sin(now * 3) * 0.25})`;
+        const ix = ex.side === 1 ? ex.gx - 170 : ex.side === 3 ? ex.gx + 170 : ex.gx, iy = ex.side === 0 ? ex.gy + 170 : ex.side === 2 ? ex.gy - 170 : ex.gy;
+        ctx.fillText('WAY OUT', ix, iy);
+    }
+}
+// A robot: a spidery Crawler, a Sentinel on treads with a laser, or a giant Brute with crushing fists
+function drawRobot(f) {
+    const k = f.robotKind, t = G.time / 1000, r = f.r, mv = Math.min(1, Math.hypot(f.vx, f.vy) / 120);
+    const hit = f.hitFlash > 0.3, metal = hit ? '#ffffff' : k === 'brute' ? '#6c737c' : '#8a929b', dark = '#2c3036', eye = '#ff3b30';
+    ctx.save(); ctx.translate(f.x, f.y);
+    if (!lowDetail) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(5, 8, r * 1.25, r * 1.05, 0, 0, TAU); ctx.fill(); }
+    ctx.rotate(f.angle);
+    const glowEye = (x, y, s) => { ctx.fillStyle = eye; ctx.shadowColor = eye; ctx.shadowBlur = lowDetail ? 0 : 8; ctx.beginPath(); ctx.arc(x, y, s, 0, TAU); ctx.fill(); ctx.shadowBlur = 0; };
+    if (k === 'crawler') {
+        ctx.strokeStyle = '#6a727b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+        for (const s of [-1, 1]) for (let i = 0; i < 3; i++) {
+            const ph = Math.sin(t * 16 + i * 2.1 + (s > 0 ? Math.PI : 0)) * 0.5 * mv, bx = (i - 1) * r * 0.55, kx = bx + (i - 1) * r * 0.35 + ph * r * 0.4;
+            ctx.beginPath(); ctx.moveTo(bx, s * r * 0.4); ctx.lineTo(kx, s * r * 1.15); ctx.lineTo(kx + (i - 1) * r * 0.3 + ph * r * 0.3, s * r * 1.55); ctx.stroke();
+        }
+        const pinch = Math.sin(f.punch * Math.PI) * 0.6;
+        ctx.strokeStyle = '#b8c0c8'; ctx.lineWidth = 3.5;
+        for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.6, s * r * 0.35); ctx.lineTo(r * 1.25 + pinch * 6, s * r * (0.45 - pinch * 0.3)); ctx.lineTo(r * 1.5 + pinch * 8, s * r * (0.1 - pinch * 0.05)); ctx.stroke(); }
+        ctx.fillStyle = metal; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.75, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(-r * 0.25, 0, r * 0.5, r * 0.4, 0, 0, TAU); ctx.fill();
+        glowEye(r * 0.55, -r * 0.22, 2.6); glowEye(r * 0.55, r * 0.22, 2.6);
+    } else if (k === 'sentinel') {
+        ctx.fillStyle = dark;
+        for (const s of [-1, 1]) { ctx.fillRect(-r * 0.9, s * r * 0.75 - r * 0.22, r * 1.8, r * 0.44); ctx.strokeStyle = 'rgba(150,150,150,0.4)'; ctx.lineWidth = 1.5; for (let q = 0; q < 6; q++) { const xx = -r * 0.9 + ((q * r * 0.3 + t * 60 * mv) % (r * 1.8)); ctx.beginPath(); ctx.moveTo(xx, s * r * 0.75 - r * 0.22); ctx.lineTo(xx, s * r * 0.75 + r * 0.22); ctx.stroke(); } }
+        ctx.fillStyle = metal; ctx.beginPath(); ctx.arc(0, 0, r * 0.72, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#3a4048'; ctx.fillRect(r * 0.3 - f.recoil * 5, -4, r * 1.1, 8);
+        ctx.fillStyle = '#ff6a5a'; ctx.fillRect(r * 1.3 - f.recoil * 5, -3, 4, 6);
+        ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(0, 0, r * 0.4, 0, TAU); ctx.fill();
+        glowEye(r * 0.22, 0, 4);
+    } else {
+        // Brute: a heavy chassis with two big arms ending in crushing fists
+        const sw = Math.sin(f.punch * Math.PI), step = Math.sin(t * 7) * 0.12 * mv;
+        ctx.fillStyle = dark;
+        for (const s of [-1, 1]) { ctx.fillRect(-r * 0.5 + s * step * r, s * r * 0.55 - r * 0.2, r * 0.9, r * 0.4); }
+        for (const s of [-1, 1]) {
+            const ext = sw * r * 0.6 * (s === (f.punchHand ? 1 : -1) ? 1 : 0.3);
+            ctx.fillStyle = '#4d535b'; ctx.fillRect(-r * 0.1, s * r * 0.95 - r * 0.18, r * 0.9 + ext, r * 0.36);
+            ctx.fillStyle = metal; ctx.beginPath(); ctx.arc(r * 0.85 + ext, s * r * 0.95, r * 0.34, 0, TAU); ctx.fill();
+            ctx.strokeStyle = dark; ctx.lineWidth = 2; ctx.stroke();
+        }
+        ctx.fillStyle = metal; ctx.fillRect(-r * 0.75, -r * 0.8, r * 1.4, r * 1.6);
+        ctx.strokeStyle = dark; ctx.lineWidth = 3; ctx.strokeRect(-r * 0.75, -r * 0.8, r * 1.4, r * 1.6);
+        ctx.fillStyle = 'rgba(255,170,60,0.85)'; ctx.beginPath(); ctx.arc(-r * 0.1, 0, r * 0.28 + Math.sin(t * 6) * 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = dark; ctx.fillRect(r * 0.35, -r * 0.4, r * 0.4, r * 0.8);
+        glowEye(r * 0.58, -r * 0.18, 3.5); glowEye(r * 0.58, r * 0.18, 3.5);
+    }
+    ctx.restore();
+    // a health bar once it's damaged
+    if (f.hp < f.maxHp) {
+        const w = Math.max(30, r * 2), y = f.y - r - 16;
+        ctx.fillStyle = 'rgba(10,8,16,0.7)'; ctx.fillRect(f.x - w / 2 - 1, y - 1, w + 2, 6);
+        ctx.fillStyle = '#ff6a3d'; ctx.fillRect(f.x - w / 2, y, w * Math.max(0, f.hp / f.maxHp), 4);
+    }
+}
+function drawLabOverlay() {
+    const L = G.lab, p = G.player;
+    if (!L || G.mode !== 'playing' || !p) return;
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (p.dead && !p.escaped) {
+        const q = L.queue.find(q => q.f === p);
+        ctx.fillStyle = 'rgba(10,6,20,0.45)'; ctx.fillRect(0, viewH * 0.36, viewW, viewH * 0.18);
+        ctx.font = '900 46px "Black Ops One", sans-serif'; ctx.fillStyle = '#ffd166';
+        ctx.fillText(`RESPAWNING IN ${q ? Math.max(1, Math.ceil((q.at - G.time) / 1000)) : ''}`, viewW / 2, viewH * 0.43);
+        ctx.font = '600 19px Rajdhani, sans-serif'; ctx.fillStyle = '#fff7ec'; ctx.fillText('Back at the hangar in the safe zone', viewW / 2, viewH * 0.5);
+    } else if (!p.dead && L.exitFound) {
+        // An arrow round the edge of the screen pointing at the way out
+        const ex = G.world.lab.exit, a = Math.atan2(ex.gy - p.y, ex.gx - p.x), d = Math.hypot(ex.gx - p.x, ex.gy - p.y);
+        if (d > 600) {
+            const R2 = Math.min(viewW, viewH) * 0.42, x = viewW / 2 + Math.cos(a) * R2, y = viewH / 2 + Math.sin(a) * R2;
+            ctx.translate(x, y); ctx.rotate(a);
+            ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-10, -12); ctx.lineTo(-4, 0); ctx.lineTo(-10, 12); ctx.closePath(); ctx.fill();
+            ctx.rotate(-a); ctx.font = '700 14px Rajdhani, sans-serif'; ctx.fillStyle = '#fff7ec'; ctx.fillText(`WAY OUT ${Math.round(d / 30)}m`, 0, 24);
+        }
+    }
+    ctx.restore();
+}
+function labStatus(p) {
+    const L = G.lab, left = fmtTime(Math.max(0, (L.endAt - G.time) / 1000));
+    return `${labSafe(p) ? 'Safe zone' : L.exitFound ? 'The way out is on your map!' : 'Find the way out'} · ${left}`;
 }
 // A vine: a wavy green stem with leaves
 function drawVine(v) {
@@ -5730,297 +5478,6 @@ function drawVine(v) {
     ctx.stroke();
     ctx.fillStyle = 'rgba(70,128,46,0.85)';
     for (let k = 1; k < pts.length; k += 2) { const [x, y] = pts[k], a = v.a + (k % 4 ? 1.2 : -1.2); ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * 5, y + Math.sin(a) * 5, 5, 2.6, a, 0, TAU); ctx.fill(); }
-}
-// Drawing: the jungle floor, the temple's stone floor, and every trap and secret
-function drawTempleGround(L, T, R, B) {
-    const Wt = G.world.temple, W = TEMPLE.W, now = performance.now() / 1000;
-    ctx.fillStyle = SPR.grass; ctx.fillRect(0, 0, W, W);
-    G.world.decorGrid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2, d => { const s = 128 * d.s; ctx.drawImage(SPR.patches[d.spr], d.x - s, d.y - s, s * 2, s * 2); });
-    ctx.fillStyle = 'rgba(10,40,10,0.28)'; ctx.fillRect(L, T, R - L, B - T);
-    // dirt paths
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (const [wd, col] of [[110, '#6e5536'], [90, '#86683f']]) { ctx.strokeStyle = col; ctx.lineWidth = wd; for (const pts of Wt.paths) { ctx.beginPath(); for (const p of pts) ctx.lineTo(p.x, p.y); ctx.stroke(); } }
-    // the temple floor: big sandstone slabs, gold in the altar chamber
-    const { ox, oy, size, cs } = Wt;
-    ctx.fillStyle = '#8f7b57'; ctx.fillRect(ox - 20, oy - 20, size + 40, size + 40);
-    ctx.fillStyle = '#9d8862'; ctx.fillRect(ox, oy, size, size);
-    ctx.strokeStyle = 'rgba(60,48,30,0.35)'; ctx.lineWidth = 2;
-    const x0 = Math.max(ox, Math.floor((L - ox) / 115) * 115 + ox), y0 = Math.max(oy, Math.floor((T - oy) / 115) * 115 + oy);
-    ctx.beginPath();
-    for (let x = x0; x < Math.min(R, ox + size); x += 115) { ctx.moveTo(x, Math.max(T, oy)); ctx.lineTo(x, Math.min(B, oy + size)); }
-    for (let y = y0; y < Math.min(B, oy + size); y += 115) { ctx.moveTo(Math.max(L, ox), y); ctx.lineTo(Math.min(R, ox + size), y); }
-    ctx.stroke();
-    const m = (Wt.n - 1) / 2, cx0 = ox + (m - 1) * cs, cy0 = oy + (m - 1) * cs;
-    ctx.fillStyle = 'rgba(220,180,80,0.25)'; ctx.fillRect(cx0, cy0, cs * 3, cs * 3);
-    ctx.strokeStyle = 'rgba(255,209,102,0.35)'; ctx.lineWidth = 6; ctx.strokeRect(cx0 + 30, cy0 + 30, cs * 3 - 60, cs * 3 - 60);
-    for (const g2 of Wt.glyphs) if (g2.x > L - 30 && g2.x < R + 30 && g2.y > T - 30 && g2.y < B + 30) drawGlyph(g2.x, g2.y, g2.glyph, g2.rot, g2.s, 'rgba(58,44,26,0.45)');
-    // switches look like every other symbol, until you're standing right by one
-    const pl = G.player;
-    for (const w of Wt.switches) if (inView(w.x, w.y, 40)) { const close = pl && Math.hypot(pl.x - w.x, pl.y - w.y) < 30 && !w.wall.open; drawGlyph(w.x, w.y, w.glyph, w.rot, 18, close ? `rgba(255,209,102,${0.6 + Math.sin(now * 6) * 0.3})` : 'rgba(58,44,26,0.5)'); }
-    for (const v of Wt.vines) if (v.x > ox && v.x < ox + size && v.y > oy && v.y < oy + size && v.x > L - 200 && v.x < R + 200 && v.y > T - 200 && v.y < B + 200 && v.thick < 0.9) drawVine(v);
-    // camps
-    for (const t of [0, 1]) {
-        const c = Wt.camps[t], col = t ? '255,75,75' : '61,139,255';
-        if (!inView(c.x, c.y, TEMPLE.safeR + 40)) continue;
-        ctx.fillStyle = `rgba(${col},0.14)`; ctx.beginPath(); ctx.arc(c.x, c.y, TEMPLE.safeR, 0, TAU); ctx.fill();
-        ctx.strokeStyle = `rgba(${col},${0.55 + Math.sin(now * 3) * 0.2})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(c.x, c.y, TEMPLE.safeR, 0, TAU); ctx.stroke();
-        ctx.fillStyle = '#5a3a1e'; ctx.fillRect(c.x - 3, c.y - 60, 6, 60);
-        ctx.fillStyle = t ? TEMPLE.red : TEMPLE.blue; ctx.beginPath(); ctx.moveTo(c.x + 3, c.y - 60); ctx.lineTo(c.x + 40, c.y - 48); ctx.lineTo(c.x + 3, c.y - 36); ctx.closePath(); ctx.fill();
-        ctx.font = '800 22px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = `rgba(${col},0.8)`; ctx.fillText(t ? 'RED CAMP' : 'BLUE CAMP', c.x, c.y + 40);
-    }
-    const nowMs = G.time, me = G.player;
-    // how well you can make a hidden thing out: nothing from afar, faintly as you get close
-    const seeK = (x, y, R) => me && !me.dead ? clamp(1 - Math.hypot(me.x - x, me.y - y) / R, 0, 1) : 0;
-    for (const t of Wt.traps) {
-        if (!inView(t.x, t.y, 200)) continue;
-        switch (t.kind) {
-            case 'spikes': {
-                const cyc = (nowMs + t.ph) % 3200, up = nowMs < t.forced || cyc > 2000, k = seeK(t.x, t.y, 150);
-                for (let a = -t.s + 14; a < t.s; a += 28) for (let b2 = -t.s + 14; b2 < t.s; b2 += 28) {
-                    if (up) { ctx.fillStyle = '#d8dde4'; ctx.beginPath(); ctx.moveTo(t.x + a, t.y + b2 - 9); ctx.lineTo(t.x + a + 6, t.y + b2 + 5); ctx.lineTo(t.x + a - 6, t.y + b2 + 5); ctx.closePath(); ctx.fill(); }
-                    else if (k > 0) { ctx.fillStyle = `rgba(40,34,26,${0.5 * k})`; ctx.beginPath(); ctx.arc(t.x + a, t.y + b2, 2.5, 0, TAU); ctx.fill(); }
-                }
-                break;
-            }
-            case 'pit':
-                if (t.state === 'open') { ctx.fillStyle = '#0d0a07'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2); ctx.fillStyle = 'rgba(60,45,25,0.8)'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, 8); }
-                else {
-                    const k = t.state === 'cracking' ? 1 : seeK(t.x, t.y, 110) * 0.35;
-                    if (k <= 0) break;
-                    ctx.strokeStyle = `rgba(30,20,10,${k * 0.9})`; ctx.lineWidth = t.state === 'cracking' ? 3 : 1.3;
-                    ctx.beginPath(); ctx.moveTo(t.x - t.s * 0.7, t.y - t.s * 0.2); ctx.lineTo(t.x - 6, t.y + 4); ctx.lineTo(t.x + t.s * 0.6, t.y - t.s * 0.5); ctx.moveTo(t.x - 6, t.y + 4); ctx.lineTo(t.x + 10, t.y + t.s * 0.6); ctx.moveTo(t.x - 6, t.y + 4); ctx.lineTo(t.x - t.s * 0.4, t.y + t.s * 0.7); ctx.stroke();
-                }
-                break;
-            case 'darts': {
-                // (just tiny holes in the wall, if you look closely)
-                const k = seeK(t.ex, t.ey, 130);
-                if (k > 0) { ctx.fillStyle = `rgba(30,24,16,${0.7 * k})`; for (let q = -2; q <= 2; q++) { ctx.beginPath(); ctx.arc(t.ex + -t.dy * q * 26, t.ey + t.dx * q * 26, 3, 0, TAU); ctx.fill(); } }
-                break;
-            }
-            case 'boulder': break;
-            case 'snakepit':
-                if (nowMs < t.open) {
-                    ctx.fillStyle = '#100c08'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2);
-                    ctx.strokeStyle = '#3f6a2a'; ctx.lineWidth = 5;
-                    for (let q = 0; q < 9; q++) { const sx = t.x + Math.sin(q * 7.3) * t.s * 0.7, sy = t.y + Math.cos(q * 3.1) * t.s * 0.7; ctx.beginPath(); for (let k = 0; k < 7; k++) ctx.lineTo(sx + k * 6 - 18, sy + Math.sin(now * 4 + q + k) * 6); ctx.stroke(); }
-                } else { const k = seeK(t.x, t.y, 120) * 0.3; if (k > 0) { ctx.strokeStyle = `rgba(40,30,18,${k})`; ctx.lineWidth = 1.2; ctx.strokeRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2); } }
-                break;
-            case 'spin': {
-                ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.rot);
-                ctx.fillStyle = 'rgba(70,58,40,0.35)'; ctx.beginPath(); ctx.arc(0, 0, t.r, 0, TAU); ctx.fill();
-                ctx.strokeStyle = 'rgba(50,40,26,0.55)'; ctx.lineWidth = 2;
-                for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(Math.cos(a + 0.6) * t.r * 0.5, Math.sin(a + 0.6) * t.r * 0.5, Math.cos(a) * t.r, Math.sin(a) * t.r); ctx.stroke(); }
-                ctx.restore();
-                ctx.fillStyle = '#9aa0a8'; for (let k = 0; k < 18; k++) { const a = k / 18 * TAU, x = t.x + Math.cos(a) * (t.r + 2), y = t.y + Math.sin(a) * (t.r + 2); ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 9, y + Math.sin(a) * 9); ctx.lineTo(x + Math.cos(a + 1.57) * 4, y + Math.sin(a + 1.57) * 4); ctx.lineTo(x - Math.cos(a + 1.57) * 4, y - Math.sin(a + 1.57) * 4); ctx.closePath(); ctx.fill(); }
-                break;
-            }
-            case 'flood':
-                drawGlyph(t.drain.x, t.drain.y, t.drain.glyph, t.drain.rot, 16, me && Math.hypot(me.x - t.drain.x, me.y - t.drain.y) < 34 && t.st ? 'rgba(126,200,255,0.9)' : 'rgba(58,44,26,0.5)');
-                if (t.lvl > 0) { ctx.fillStyle = `rgba(40,110,190,${0.55 * t.lvl})`; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2); ctx.strokeStyle = `rgba(200,235,255,${0.4 * t.lvl})`; ctx.lineWidth = 2; for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(t.x + Math.sin(now + k * 2) * 40, t.y + Math.cos(now * 0.7 + k) * 40, 10 + ((now * 20 + k * 15) % 30), 0, TAU); ctx.stroke(); } }
-                break;
-            case 'web': {
-                if (t.burnt) { ctx.fillStyle = 'rgba(30,20,10,0.35)'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r * 0.8, 0, TAU); ctx.fill(); break; }
-                ctx.strokeStyle = 'rgba(240,240,235,0.55)'; ctx.lineWidth = 1.5;
-                ctx.beginPath(); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.moveTo(t.x, t.y); ctx.lineTo(t.x + Math.cos(a) * t.r, t.y + Math.sin(a) * t.r); } ctx.stroke();
-                for (let rr = t.r * 0.25; rr < t.r; rr += t.r * 0.22) { ctx.beginPath(); for (let k = 0; k <= 8; k++) { const a = k / 8 * TAU; ctx.lineTo(t.x + Math.cos(a) * rr, t.y + Math.sin(a) * rr); } ctx.stroke(); }
-                ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(t.x + t.r * 0.3, t.y - t.r * 0.2, 7, 0, TAU); ctx.fill();
-                break;
-            }
-            case 'sand': {
-                const gr = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, t.r);
-                gr.addColorStop(0, 'rgba(120,96,58,0.55)'); gr.addColorStop(0.7, 'rgba(110,100,60,0.3)'); gr.addColorStop(1, 'rgba(110,100,60,0)');
-                ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU); ctx.fill();
-                ctx.strokeStyle = 'rgba(110,85,50,0.5)'; ctx.lineWidth = 2;
-                for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.arc(t.x, t.y, t.r * k / 4, now * k * 0.6, now * k * 0.6 + 4); ctx.stroke(); }
-                break;
-            }
-            case 'leafpit':
-                if (t.open) { ctx.fillStyle = '#0d0a07'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU); ctx.fill(); }
-                else { for (let k = 0; k < 9; k++) { const a = k * 2.4, d = (k % 3) * 12; ctx.fillStyle = k % 2 ? 'rgba(70,110,45,0.45)' : 'rgba(90,120,50,0.4)'; ctx.beginPath(); ctx.ellipse(t.x + Math.cos(a) * d, t.y + Math.sin(a) * d, 16, 8, a, 0, TAU); ctx.fill(); } }
-                break;
-            case 'snake': {
-                // (curled up in the undergrowth: you only see it close up)
-                const k = seeK(t.x, t.y, 170);
-                if (k <= 0) break;
-                ctx.globalAlpha = Math.min(1, k * 1.5);
-                ctx.strokeStyle = '#2f5420'; ctx.lineWidth = 6;
-                ctx.beginPath(); for (let k = 0; k < 14; k++) { const a = k * 0.55, r = 4 + k * 1.6; ctx.lineTo(t.x + Math.cos(a) * r, t.y + Math.sin(a) * r); } ctx.stroke();
-                ctx.fillStyle = '#244a18'; ctx.beginPath(); ctx.arc(t.x + Math.cos(now * 2) * 4, t.y + Math.sin(now * 2) * 4, 6, 0, TAU); ctx.fill();
-                ctx.globalAlpha = 1;
-                break;
-            }
-        }
-    }
-    // Hidden tunnels: inside the temple just another carved symbol; out in the jungle a mossy flat stone
-    for (const ps of Wt.passages) for (const h of [ps.a, ps.b]) {
-        if (!inView(h.x, h.y, 60)) continue;
-        const close = pl && Math.hypot(pl.x - h.x, pl.y - h.y) < 34;
-        const inT = h.x > ox && h.x < ox + size && h.y > oy && h.y < oy + size;
-        if (!inT) { ctx.fillStyle = '#6f6a58'; ctx.beginPath(); ctx.ellipse(h.x, h.y, 30, 24, 0.3, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(70,110,50,0.7)'; ctx.beginPath(); ctx.ellipse(h.x - 8, h.y - 4, 16, 10, 0.5, 0, TAU); ctx.fill(); }
-        drawGlyph(h.x, h.y, h.glyph || 0, h.rot || 0, 16, close ? `rgba(126,249,255,${0.5 + Math.sin(now * 5) * 0.3})` : inT ? 'rgba(58,44,26,0.5)' : 'rgba(50,46,36,0.5)');
-    }
-    // Buried chests: a faint X in the dirt
-    for (const c of Wt.chests) {
-        if (!c.full || !inView(c.x, c.y, 60)) continue;
-        ctx.strokeStyle = `rgba(110,70,30,${0.12 + seeK(c.x, c.y, 200) * 0.4})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(c.x - 16, c.y - 16); ctx.lineTo(c.x + 16, c.y + 16); ctx.moveTo(c.x + 16, c.y - 16); ctx.lineTo(c.x - 16, c.y + 16); ctx.stroke();
-    }
-    // The altar
-    const a = Wt.altar;
-    if (inView(a.x, a.y, 120)) { ctx.fillStyle = '#6e5a3a'; ctx.fillRect(a.x - 56, a.y - 56, 112, 112); ctx.fillStyle = '#8a7450'; ctx.fillRect(a.x - 44, a.y - 44, 88, 88); }
-}
-// Over the walls: cracks on the secret ones (easier to see close up), the swinging axes, boulders and the idol
-function drawTempleProps(now) {
-    const Wt = G.world.temple, T2 = G.temple, p = G.player;
-    for (const o of Wt.secrets) {
-        if (o.open || o.hiddenSecret || !inView(o.x, o.y, 160)) continue;
-        const dd = p ? Math.hypot(p.x - o.x, p.y - o.y) - Math.max(o.hw, o.hh) : 1e9, see = o.vines ? 22 : 55;
-        if (dd > see) continue;
-        const near = dd < see * 0.5;
-        ctx.strokeStyle = `rgba(40,28,14,${near ? 0.8 : 0.4})`; ctx.lineWidth = near ? 2.2 : 1.4;
-        const long = o.hw > o.hh, L2 = long ? o.hw : o.hh;
-        ctx.beginPath();
-        for (let k = -1; k <= 1; k++) {
-            const c = k * L2 * 0.5;
-            const x = long ? o.x + c : o.x, y = long ? o.y : o.y + c;
-            ctx.moveTo(x - 6, y - 10); ctx.lineTo(x + 3, y - 2); ctx.lineTo(x - 2, y + 4); ctx.lineTo(x + 6, y + 11);
-        }
-        ctx.stroke();
-    }
-    // Vines on the walls and through the jungle (over the walls, under the people)
-    const camL = G.cam.x - viewW / 2 / G.zoom - 200, camR = G.cam.x + viewW / 2 / G.zoom + 200, camT = G.cam.y - viewH / 2 / G.zoom - 200, camB = G.cam.y + viewH / 2 / G.zoom + 200;
-    for (const v of Wt.vines) if (v.thick >= 0.9 && v.x > camL && v.x < camR && v.y > camT && v.y < camB) drawVine(v);
-    // Walls about to move: dust trickling off them and a dark red edge
-    if (T2 && T2.next) for (const o of T2.next) {
-        if (!inView(o.x, o.y, 120)) continue;
-        if (o.up) { ctx.strokeStyle = `rgba(140,30,20,${0.5 + Math.sin(now * 12) * 0.3})`; ctx.lineWidth = 3; ctx.strokeRect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2); }
-        else { ctx.fillStyle = `rgba(140,30,20,${0.18 + Math.sin(now * 12) * 0.1})`; ctx.fillRect(o.x - o.hw, o.y - o.hh, o.hw * 2, o.hh * 2); }
-        if (Math.random() < 0.3) G.particles.push({ type: 'smoke', x: o.x + rand(-o.hw, o.hw), y: o.y + rand(-o.hh, o.hh), vx: 0, vy: 0, life: 0.6, max: 0.6, size: rand(4, 8), color: '190,170,130' });
-    }
-    for (const t of Wt.traps) {
-        if (t.kind !== 'axe' || !inView(t.x, t.y, 200)) continue;
-        const sw = Math.sin(G.time / 420 + t.ph), hx = t.x + t.ax * sw * t.len, hy = t.y + t.ay * sw * t.len;
-        // the chain from the ceiling beam, and the blade
-        const px = t.x, py = t.y;
-        ctx.strokeStyle = 'rgba(40,36,30,0.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(t.x - t.ay * t.len * 1.1, t.y - t.ax * t.len * 1.1); ctx.lineTo(t.x + t.ay * t.len * 1.1, t.y + t.ax * t.len * 1.1); ctx.stroke();
-        ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(hx, hy); ctx.stroke();
-        ctx.save(); ctx.translate(hx, hy); ctx.rotate(Math.atan2(t.ay, t.ax) + Math.PI / 2);
-        ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.moveTo(-26, -6); ctx.quadraticCurveTo(0, -30, 26, -6); ctx.lineTo(20, 8); ctx.lineTo(-20, 8); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#7a808a'; ctx.fillRect(-20, 4, 40, 6);
-        ctx.restore();
-    }
-    for (const t of Wt.traps) {
-        if (!inView(t.x, t.y, 260)) continue;
-        switch (t.kind) {
-            case 'blade': {
-                const w = TEMPLE.cs / 2 - TEMPLE.T / 2;
-                ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(Math.atan2(t.uy, t.ux));
-                ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-2, -w + 6, 10, w * 2);
-                ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.moveTo(-4, -w); ctx.lineTo(6 * t.dir, -w); ctx.lineTo(12 * t.dir, 0); ctx.lineTo(6 * t.dir, w); ctx.lineTo(-4, w); ctx.closePath(); ctx.fill();
-                ctx.fillStyle = '#7a808a'; ctx.fillRect(-6, -w, 4, w * 2);
-                ctx.restore();
-                break;
-            }
-            case 'crush':
-                if (t.p > 0) {
-                    const h = TEMPLE.cs / 2 - TEMPLE.T / 2, L2 = h * t.p;
-                    ctx.fillStyle = '#5f4e31'; ctx.strokeStyle = '#3a2e1c'; ctx.lineWidth = 3;
-                    if (t.vert) { ctx.fillRect(t.x - h, t.y - h, h * 2, L2); ctx.fillRect(t.x - h, t.y + h - L2, h * 2, L2); ctx.strokeRect(t.x - h, t.y - h, h * 2, L2); ctx.strokeRect(t.x - h, t.y + h - L2, h * 2, L2); }
-                    else { ctx.fillRect(t.x - h, t.y - h, L2, h * 2); ctx.fillRect(t.x + h - L2, t.y - h, L2, h * 2); ctx.strokeRect(t.x - h, t.y - h, L2, h * 2); ctx.strokeRect(t.x + h - L2, t.y - h, L2, h * 2); }
-                }
-                break;
-            case 'mace':
-                if (t.hx === undefined) break;
-                ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(t.hx, t.hy); ctx.stroke();
-                ctx.fillStyle = '#9aa0a8'; for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.beginPath(); ctx.moveTo(t.hx + Math.cos(a) * 22, t.hy + Math.sin(a) * 22); ctx.lineTo(t.hx + Math.cos(a + 0.4) * 12, t.hy + Math.sin(a + 0.4) * 12); ctx.lineTo(t.hx + Math.cos(a - 0.4) * 12, t.hy + Math.sin(a - 0.4) * 12); ctx.closePath(); ctx.fill(); }
-                ctx.fillStyle = '#4a4d55'; ctx.beginPath(); ctx.arc(t.hx, t.hy, 14, 0, TAU); ctx.fill();
-                break;
-            case 'fire': case 'archer': {
-                // a carved stone head (the fire statue's mouth glows when it's about to breathe)
-                ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.a);
-                ctx.fillStyle = '#8a7a5c'; ctx.beginPath(); ctx.arc(0, 0, 17, 0, TAU); ctx.fill();
-                ctx.fillStyle = '#5f523c'; ctx.fillRect(4, -8, 6, 4); ctx.fillRect(4, 4, 6, 4);
-                if (t.kind === 'fire') { ctx.fillStyle = G.time < t.active || G.time > t.ready - 400 && G.time < t.ready ? '#ffb347' : '#2a2118'; ctx.fillRect(11, -4, 6, 8); }
-                else { ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(16, 0, 12, -1.1, 1.1); ctx.stroke(); ctx.fillStyle = '#c9ced6'; ctx.fillRect(14, -1, 14, 2); }
-                ctx.restore();
-                break;
-            }
-            case 'scorpions':
-                for (const s2 of t.bugs) {
-                    if (s2.dead || !inView(s2.x, s2.y, 20)) continue;
-                    ctx.save(); ctx.translate(s2.x, s2.y); ctx.rotate(s2.a);
-                    ctx.strokeStyle = '#3a1e10'; ctx.lineWidth = 1.5;
-                    for (const sy of [-1, 1]) for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(-2 + k * 3, 0); ctx.lineTo(-4 + k * 3, sy * (7 + Math.sin(now * 20 + k) * 1.5)); ctx.stroke(); }
-                    ctx.fillStyle = '#5a2e18'; ctx.beginPath(); ctx.ellipse(0, 0, 7, 4, 0, 0, TAU); ctx.fill();
-                    ctx.strokeStyle = '#5a2e18'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-6, 0); ctx.quadraticCurveTo(-14, 0, -11, -7); ctx.stroke();
-                    ctx.fillStyle = '#5a2e18'; ctx.beginPath(); ctx.arc(8, -4, 2.5, 0, TAU); ctx.arc(8, 4, 2.5, 0, TAU); ctx.fill();
-                    ctx.restore();
-                }
-                break;
-        }
-    }
-    for (const b of T2 ? T2.boulders : []) {
-        if (!inView(b.x, b.y, 140)) continue;
-        if (b.log) {
-            // a spiked log rolling down the corridor
-            ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.uy, b.ux));
-            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(-14, -b.w + 10, 32, b.w * 2);
-            ctx.fillStyle = '#6a4424'; ctx.fillRect(-18, -b.w, 36, b.w * 2);
-            ctx.strokeStyle = '#4a2e18'; ctx.lineWidth = 3; for (let k = -b.w + 10; k < b.w; k += 16) { const o = Math.sin(b.spin + k) * 6; ctx.beginPath(); ctx.moveTo(-18, k + o); ctx.lineTo(18, k + o); ctx.stroke(); }
-            ctx.fillStyle = '#c9ced6'; for (let k = -b.w + 8; k < b.w; k += 20) { const o = (Math.sin(b.spin * 2 + k) > 0 ? 1 : -1); ctx.beginPath(); ctx.moveTo(o * 18, k - 5); ctx.lineTo(o * 30, k); ctx.lineTo(o * 18, k + 5); ctx.closePath(); ctx.fill(); }
-            ctx.restore();
-            continue;
-        }
-        ctx.save(); ctx.translate(b.x, b.y);
-        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(8, 12, b.r, b.r * 0.85, 0, 0, TAU); ctx.fill();
-        ctx.rotate(b.spin);
-        ctx.fillStyle = '#7d7468'; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#958b7d'; ctx.beginPath(); ctx.arc(-10, -10, b.r * 0.5, 0, TAU); ctx.fill();
-        ctx.strokeStyle = '#5a5248'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-b.r * 0.6, 0); ctx.lineTo(b.r * 0.5, b.r * 0.3); ctx.stroke();
-        ctx.restore();
-    }
-    if (!T2) return;
-    const I = T2.idol;
-    if (!I.carrier || inView(I.x, I.y, 80)) {
-        const x = I.x, y = I.y - (I.carrier ? 30 : 0), bob = Math.sin(now * 3) * 3;
-        ctx.save(); ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = `rgba(255,200,80,${0.25 + Math.sin(now * 4) * 0.1})`; ctx.beginPath(); ctx.arc(x, y + bob, 46, 0, TAU); ctx.fill();
-        ctx.restore();
-        ctx.save(); ctx.translate(x, y + bob);
-        ctx.fillStyle = '#b8860b'; ctx.beginPath(); ctx.moveTo(-14, 16); ctx.lineTo(14, 16); ctx.lineTo(10, -4); ctx.lineTo(-10, -4); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0, -10, 12, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#e0a82e'; ctx.fillRect(-12, -2, 24, 6);
-        ctx.fillStyle = '#3ecf6e'; ctx.beginPath(); ctx.arc(-4, -11, 2.5, 0, TAU); ctx.arc(4, -11, 2.5, 0, TAU); ctx.fill();
-        ctx.restore();
-    }
-}
-function drawTempleOverlay() {
-    const T2 = G.temple, p = G.player;
-    if (!T2 || G.mode !== 'playing' || !p) return;
-    const I = T2.idol;
-    // An arrow to the idol (or home, when you've got it)
-    const tgt = I.carrier === p ? templeCamp(p.team) : I, col = I.carrier === p ? (p.team ? TEMPLE.red : TEMPLE.blue) : '#ffd166';
-    const sx = (tgt.x - G.cam.x) * G.zoom + viewW / 2, sy = (tgt.y - G.cam.y) * G.zoom + viewH / 2;
-    if (!p.dead && (sx < 0 || sy < 0 || sx > viewW || sy > viewH)) {
-        const a = Math.atan2(sy - viewH / 2, sx - viewW / 2), R = Math.min(viewW, viewH) / 2 - 50, ax = viewW / 2 + Math.cos(a) * R, ay = viewH / 2 + Math.sin(a) * R;
-        ctx.save(); ctx.translate(ax, ay); ctx.rotate(a); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-10, -13); ctx.lineTo(-4, 0); ctx.lineTo(-10, 13); ctx.closePath(); ctx.fill(); ctx.restore();
-        ctx.font = '700 13px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff7ec';
-        ctx.fillText(`${I.carrier === p ? 'CAMP' : 'IDOL'} ${Math.round(Math.hypot(tgt.x - p.x, tgt.y - p.y) / 10)}m`, ax - Math.cos(a) * 30, ay - Math.sin(a) * 30);
-    }
-    if (p.dead) {
-        const q = T2.queue.find(q => q.f === p);
-        ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(10,6,20,0.45)'; ctx.fillRect(0, viewH * 0.36, viewW, viewH * 0.18);
-        ctx.font = '900 46px "Black Ops One", sans-serif'; ctx.fillStyle = '#ffd166';
-        ctx.fillText(`RESPAWNING IN ${q ? Math.max(1, Math.ceil((q.at - G.time) / 1000)) : ''}`, viewW / 2, viewH * 0.43);
-        ctx.font = '600 19px Rajdhani, sans-serif'; ctx.fillStyle = '#fff7ec';
-        ctx.fillText('You come back at your camp', viewW / 2, viewH * 0.5);
-        ctx.restore();
-    }
-}
-function templeStatus(p) {
-    const T2 = G.temple, I = T2.idol, left = fmtTime(Math.max(0, (T2.endAt - G.time) / 1000));
-    const where = I.carrier ? (I.carrier === p ? 'You have the idol! Get home' : I.carrier.team === p.team ? `${I.carrier.name} has the idol` : `${I.carrier.name} stole the idol`) : I.home ? 'The idol is on the altar' : 'The idol was dropped';
-    return `${where} · ${T2.overtime ? 'OVERTIME' : left}`;
 }
 
 // ---------- The Concrete Arena (a map for Mech Arena) ----------
@@ -8720,10 +8177,10 @@ function newDemo() {
         G.cam.x = CONFIG.WORLD_SIZE / 2; G.cam.y = CONFIG.WORLD_SIZE / 2;
         return;
     }
-    if (id === 'temple') {
-        newState('demo', { type: 'temple', count: TEMPLE.players, map: 'temple' });
+    if (id === 'labyrinth') {
+        newState('demo', { type: 'labyrinth', count: LAB.players, map: 'labyrinth' });
         G.alive = G.fighters.length;
-        G.cam.x = TEMPLE.W / 2; G.cam.y = TEMPLE.W / 2;
+        G.cam.x = LAB.n * LAB.cs / 2; G.cam.y = LAB.n * LAB.cs / 2;
         return;
     }
     newState('demo', { type: epic || zombies || id === 'survival' ? id : 'ffa', count: 0 });
@@ -9071,7 +8528,7 @@ function spawnAirdrop(kind = 'airdrop') {
 
 function updateAirdrops(dt) {
     // The only thing that falls from the sky now: a hyper drop early in the match, then very rarely after
-    if (G.ghostMode || G.temple || G.mech || G.duel || G.navy) return;
+    if (G.ghostMode || G.lab || G.mech || G.duel || G.navy) return;
     if (G.time >= G.nextHyper && G.zone.r > 400 && !G.early) {
         spawnAirdrop('hyper');
         G.nextHyper = G.time + rand(...(G.hightech ? HIGHTECH.drops : HYPER.every));
@@ -9355,16 +8812,6 @@ function tryAttack(f) {
 
     if (!(f.ammo[name] > 0)) {
         if (isHuman(f)) { Sound.empty(); f.lastShot = G.time; }
-        return;
-    }
-    // Trap Trigger: sets off every trap round where you're aiming
-    if (w.trigger) {
-        if (!G.temple) return;
-        f.lastShot = G.time;
-        const I = inputOf(f), tx = isHuman(f) && I ? I.world().x : f.x + Math.cos(f.angle) * 350, ty = isHuman(f) && I ? I.world().y : f.y + Math.sin(f.angle) * 350;
-        const d = Math.min(w.range, Math.hypot(tx - f.x, ty - f.y)), a = Math.atan2(ty - f.y, tx - f.x);
-        triggerTraps(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, 420, f);
-        Sound.tone(500, 0.15, 'square', 0.08 * Sound.volAt(f.x, f.y), 250);
         return;
     }
     // (a bot with the Energy Gun charges it up for a moment, then lets go)
@@ -9841,9 +9288,11 @@ function damage(t, amount, attacker, weapon) {
     if (G.duel && t.duel) { duelHit(t, attacker, weapon); return; }
     if (t.car && !t.car.dead) return;
     if (G.time < (t.protectUntil || 0)) return;  // just respawned
-    if (G.temple && inCamp(t, t.team)) return;  // (nobody can hurt you at your own camp)  // (nobody can hurt you in your own safe zone)
+    if (G.lab && labSafe(t)) return;  // (nobody can be hurt in the Maze's safe zone)
     if (t.downed) { t.downHp -= amount * (G.war && attacker && attacker !== t ? closeGameMul(attacker.team, t.team) : 1); t.hitFlash = 1; if (t.downHp <= 0) { t.downBy = attacker || t.downBy; t.downWeapon = weapon; finishDowned(t); } return; }
     let dmg = amount;
+    // (Maze robots are armored: bullets and arrows do less, blades do more)
+    if (t.robot && WEAPONS[weapon]) dmg *= WEAPONS[weapon].melee ? 1.3 : 0.7;
     if (G.war && attacker && attacker !== t) dmg *= closeGameMul(attacker.team, t.team);
     if (t.isPlayer && G.strikeCam) G.strikeCam = null;  // (watching a boss strike: getting hurt brings the camera back)
     // Escape: stray airstrikes, bombs and burning cars only half hurt the group
@@ -9921,7 +9370,7 @@ function killFighter(t, killer, weapon) {
 
     // (in the menu's background battle people fall as bodies; in a real game they're just gone, no effect)
     if (!t.escaped && !t.vaporized && G.mode === 'demo') addCorpse(t);
-    if (!G.temple && !G.mech) dropDeathWeapons(t);  // (Treasure Temple: guns come from the racks and chests)
+    if (!G.lab && !G.mech) dropDeathWeapons(t);  // (Maze: the team's gear comes from the hangar)
     if (G.mode === 'demo' && inView(t.x, t.y, 100)) {
         burst(t.x, t.y, 22, t.color, 260, 'blood');
         burst(t.x, t.y, 10, '#ff4f6d', 180, 'blood');
@@ -9932,7 +9381,7 @@ function killFighter(t, killer, weapon) {
     if (G.mode !== 'demo' && !t.vaporized && inView(t.x, t.y, 300)) goldSkull(t);
 
     if (G.war) { warDeath(t, killer, weapon); return; }
-    if (G.temple) { templeDeath(t, killer); return; }
+    if (G.lab) { labDeath(t, killer); return; }
     if (G.mech) { mechDeath(t, killer); return; }
     if (t.isPlayer && G.result) return;
     if (t.isPlayer) {
@@ -10436,6 +9885,7 @@ function marchTarget(b) {
 
 function botThink(b) {
     if (b.zombie) { zombieThink(b); return; }
+    if (G.lab && b.robot) { robotThink(b); return; }
     if (G.duel && b.duel) { duelThink(b); return; }
     if (G.ghostMode && b.ghost) { ghostBot(b); return; }
     if (G.mech && mechBotPlan(b)) { b.nextThink = G.time + 400; return; }
@@ -10547,7 +9997,7 @@ function botThink(b) {
         chooseBotWeapon(b, bestD);
         return;
     }
-    if (G.temple && templeBotPlan(b)) return;
+    if (G.lab && labBotPlan(b)) return;
     if (outside) {
         b.mode = 'zone';
         b.goal = goal;
@@ -10641,7 +10091,6 @@ function chooseBotWeapon(b, d) {
 // Next waypoint toward (gx, gy): bots use doorways to get into and out of buildings
 function routeTo(b, gx, gy) {
     if (G.world.maze) return mazeRoute(b, gx, gy);
-    if (G.world.temple) { const r = templeRoute(b, gx, gy); if (r) return r; }
     // Up on a deck: straight there if it's up here too, otherwise to the nearest stairs down
     if (b.up) return onDeck(b.up, { x: gx, y: gy }) ? deckWaypoint(b.up, b, { x: gx, y: gy }) : deckWaypoint(b.up, b, b.up.stairs.reduce((p, s) => (dist(b, s.t) < dist(b, p) ? s.t : p), b.up.stairs[0].t));
     // Following a planned route round the walls
@@ -10806,7 +10255,7 @@ function updateBot(b, dt) {
     if (G.time >= b.nextThink) botThink(b);
     checkProgress(b);
     if (G.duel && b.duel && duelBotMove(b, dt)) return;
-    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.slowK || 1) * (b.duelSneak ? 0.6 : 1) * (b.zombie ? ZOMBIE.speed : 1) * (b.ghost ? GHOST.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1), faceMove = true;
+    let dx = 0, dy = 0, speed = CONFIG.BOT_SPEED * (b.slowK || 1) * (b.duelSneak ? 0.6 : 1) * (b.zombie ? ZOMBIE.speed : 1) * (b.ghost ? GHOST.speed : 1) * (b.giant ? (b.rage ? BOSS.rageSpeed : BOSS.speed) : 1) * (b.robotSpd || 1), faceMove = true;
 
     switch (b.mode) {
         case 'fight': {
@@ -10816,10 +10265,7 @@ function updateBot(b, dt) {
             const ax = (t.x - b.x) / d, ay = (t.y - b.y) / d;
             const w = WEAPONS[held(b)];
             const pref = w.melee ? 0 : Math.min(w.range * 0.55, 380);
-            if (G.temple && G.temple.idol.carrier === b) {
-                // (carrying the idol: keep running for home, shooting on the way)
-                const c = templeCamp(b.team), wp = routeTo(b, c.x, c.y); dx = wp.x - b.x; dy = wp.y - b.y;
-            } else if (G.escape && b.lead && b.lead !== b && dist(b, b.lead) > 380) {
+            if (G.escape && b.lead && b.lead !== b && dist(b, b.lead) > 380) {
                 // The group shoots on the move: nobody gets left behind
                 const wp = routeTo(b, b.lead.x, b.lead.y);
                 dx = wp.x - b.x; dy = wp.y - b.y;
@@ -13746,8 +13192,14 @@ function mazeRoute(b, gx, gy) {
         }
         const nx = prev[ci + cj * n];
         b.mzNext = nx < 0 ? null : { x: ((nx % n) + 0.5) * cs, y: (Math.floor(nx / n) + 0.5) * cs };
+        b.mzHere = { x: (ci + 0.5) * cs, y: (cj + 0.5) * cs };
     }
-    return b.mzNext || { x: gx, y: gy };
+    const nx2 = b.mzNext, here = b.mzHere;
+    if (!nx2) return { x: gx, y: gy };
+    // (line up with the doorway first, so nobody snags on the end of a wall cutting the corner)
+    const ax = nx2.x - here.x, ay = nx2.y - here.y, al = Math.hypot(ax, ay) || 1;
+    const off = Math.abs((b.x - here.x) * ay - (b.y - here.y) * ax) / al;
+    return off > cs * 0.18 ? here : nx2;
 }
 
 // The extraction helicopter waiting at the end of the maze or on the summit
@@ -15820,7 +15272,7 @@ function update(dt) {
     if (G.war && G.time >= G.war.nextCenter) updateTeamCenters();
     if (G.noZone) updateOutbreak(dt);
     if (G.ghostMode) updateGhost(dt);
-    if (G.temple) updateTemple(dt);
+    if (G.lab) updateLab(dt);
     if (G.mech) updateMech(dt);
     if (G.duel) updateDuel(dt);
     if (G.survival && !G.frozen && !G.world.floor) updateAnimals(dt);
@@ -15979,7 +15431,7 @@ function render() {
     // Ground
     const W = CONFIG.WORLD_SIZE;
     if (G.navy) drawSea(L, T, R, B, now);
-    else if (G.world.temple) drawTempleGround(L, T, R, B);
+    else if (G.world.lab) drawLabGround(L, T, R, B);
     else if (G.world.concrete) drawConcreteGround(L, T, R, B);
     else if (G.world.floor) drawFloorBase(L, T, R, B);
     else if (G.world.city) drawCity(L, T, R, B);
@@ -16091,7 +15543,7 @@ function render() {
 
     if (G.navy) drawNavy(L, T, R, B, now);
     if (G.navy) drawNavyInterior(L, T, R, B, now);
-    if (G.world.temple) drawTempleProps(now);
+    if (G.world.lab) drawLabWalls(L, T, R, B);
     if (G.mech) drawMechArena(now);
     // Fighters
     const visible = [];
@@ -16197,7 +15649,7 @@ function render() {
         const a = Math.min(1, G.hurt * 0.8 + low);
         if (a > 0.01) { ctx.globalAlpha = a; ctx.drawImage(hurtVignette, 0, 0, viewW, viewH); ctx.globalAlpha = 1; }
     }
-    if (G.temple) drawTempleOverlay();
+    if (G.lab) drawLabOverlay();
     if (G.mech) drawMechOverlay();
     if (G.whiteout > 0.01) { ctx.fillStyle = `rgba(255,255,255,${Math.min(1, G.whiteout * 1.6)})`; ctx.fillRect(0, 0, viewW, viewH); }
     if (G.flash > 0.01) {
@@ -16430,7 +15882,7 @@ function drawRoads() {
 }
 
 function drawBox(o) {
-    if (o.baked || o.drivecar) return;  // painted into the floor / drawn as a car  // already painted into the floor's canvas
+    if (o.baked || o.drivecar || o.lab) return;  // painted into the floor / drawn as a car  // already painted into the floor's canvas
     if (o.rubble) { drawRubble(o); return; }
     if (o.hedgehog) { drawHedgehog(o); return; }
     if (o.gate) return;  // drawn with its base
@@ -17241,6 +16693,7 @@ function playerGlow(x, y, r) {
 
 function drawFighter(f) {
     if (f.duelOut) return;
+    if (f.robot) { drawRobot(f); return; }
     if (f.downed) { drawDowned(f); return; }
     // (the boss is drawn as a normal fighter blown up to giant size, gun and all)
     const gk = f.giant ? f.r / CONFIG.RADIUS : 1, r = f.giant ? CONFIG.RADIUS : f.r;
@@ -17886,9 +17339,9 @@ function updateHUD() {
     } else if (G.mech) {
         const sc = G.mech.score, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
         setHTML(hud.teamScore, 'teams', chip(sc[0], MECH.blue, `Blue kills (first to ${MECH.win})`, p.team === 0) + '<em>vs</em>' + chip(sc[1], MECH.red, 'Red kills', p.team === 1));
-    } else if (G.temple) {
-        const sc = G.temple.score, chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
-        setHTML(hud.teamScore, 'teams', chip(sc[0], TEMPLE.blue, `Blue (first to ${TEMPLE.wins})`, p.team === 0) + '<em>vs</em>' + chip(sc[1], TEMPLE.red, 'Red', p.team === 1));
+    } else if (G.lab) {
+        const chip = (n, color, label) => `<div class="ts"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
+        setHTML(hud.teamScore, 'teams', chip(G.lab.out, LAB.team, 'Teammates out') + '<em>·</em>' + chip(G.lab.kills, '#ff6a3d', 'Robots wrecked'));
     } else if (G.noZone) {
         const { a, b } = G.sides;
         const chip = (n, color, label, mine) => `<div class="ts${mine ? ' mine' : ''}${n === 0 ? ' out' : ''}"><i style="background:${color}"></i><b>${n}</b><span>${label}</span></div>`;
@@ -17902,7 +17355,7 @@ function updateHUD() {
 
     let zt;
     if (G.navy) zt = navyStatus(p);
-    else if (G.temple) zt = templeStatus(p);
+    else if (G.lab) zt = labStatus(p);
     else if (G.mech) zt = mechStatus(p);
     else if (G.duel) { const D = G.duel, rt = Math.max(0, (D.roundStart + DUEL.shrinkAt - G.time) / 1000); zt = `Round ${D.round} · You ${D.score[0]} - ${D.score[1]} Sniper · ${rt > 0 ? `circle closes in ${fmtTime(rt)}` : 'circle closing!'}${p.duelSneak ? ' · quiet' : ''}`; }
     else if (G.zombies) zt = p.zombie ? 'Hunt the survivors' : 'Survive the horde';
@@ -18131,6 +17584,7 @@ function drawMinimap() {
         g.fillStyle = TEAMS[p.team].color;
         for (const f of G.fighters) if (f.team === p.team && !f.isPlayer) g.fillRect(f.x * k - 1.5, f.y * k - 1.5, 3, 3);
     }
+    if (G.lab) { g.fillStyle = LAB.team; for (const f of G.fighters) if (f.team === 0 && !f.isPlayer && !f.dead) g.fillRect(f.x * k - 1.5, f.y * k - 1.5, 3, 3); }
     // Zombies: you can see the horde coming (or your fellow zombies)
     if (G.zombies) {
         g.fillStyle = ZOMBIE.color;
@@ -18211,7 +17665,7 @@ const MODES = [
     { id: 'survival', name: 'SURVIVAL', desc: 'Hunt deer, rabbits and boars to stay fed, and hunt everyone else too. Day turns to night, and wolves come out in the dark. Last one alive wins.' },
     { id: 'boss', name: 'BOSS FIGHT', desc: 'Everyone teams up against one giant boss with a minigun, rockets and a huge stomp. At half health he calls in soldiers to help him.' },
     { id: 'mech', name: 'MECH ARENA', desc: 'Five against five in giant walking mechs: a fast Striker with jump jets, a Brawler with twin miniguns or a slow Titan with rockets. Lose your mech and you eject: repair it, steal an empty one, or grab one at your hangar.' },
-    { id: 'temple', name: 'TREASURE TEMPLE', desc: 'Two teams race through a jungle and into a giant temple maze full of traps and secret passages, to grab the golden idol and carry it home.' },
+    { id: 'labyrinth', name: 'MAZE', desc: 'Your team starts in the safe zone in the middle of a giant maze of 100-metre iron walls covered in vines. Robots hunt you through the corridors. Fight back with rifles, spears, bows and swords and find the way out.' },
     { id: 'ghost', name: 'GHOST', desc: 'Pitch dark. One invisible ghost hunts the hunters. It only shows when it shoots, but it leaves glowing footprints. Play as a hunter or the ghost.' },
     { id: 'duel', name: 'SNIPER DUEL', desc: 'You against one enemy sniper. One hit kills, first to 3 rounds. Listen for footsteps, watch for the glint of a scope, and never stay where you just fired from.' },
     { id: 'navy', name: 'BATTLESHIPS', desc: 'Two fleets at sea. Giant ships with turning cannons, deck guns, torpedoes and helicopters, up to 100 people on each. Take the wheel, man the guns, fly, or board the enemy and capture their ship.' }
@@ -18235,10 +17689,9 @@ function setMenuMode(i, dir) {
     $('mode-desc').textContent = m.desc;
     $('settings-navy').classList.toggle('hidden', m.id !== 'navy');
     $('solo-friends').classList.toggle('hidden', !soloMap(m.id));
-    $('settings-ffa').classList.toggle('hidden', m.id === 'mech' || m.id === 'temple' || m.id === 'navy' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
+    $('settings-ffa').classList.toggle('hidden', m.id === 'mech' || m.id === 'labyrinth' || m.id === 'navy' || m.id === 'duel' || m.id === 'war' || m.id === 'hightech' || m.id === 'zombies' || m.id === 'revolution');
     $('settings-zombies').classList.toggle('hidden', m.id !== 'zombies');
     $('settings-ghost').classList.toggle('hidden', m.id !== 'ghost');
-    $('settings-temple').classList.toggle('hidden', m.id !== 'temple');
     $('settings-mech').classList.toggle('hidden', m.id !== 'mech');
     document.querySelector('#settings-ffa .cpu-row span').textContent = m.id === 'boss' ? 'Teammates' : m.id === 'ghost' ? `Other players (up to ${GHOST.maxPlayers - 1})` : 'Opponents';
     $('settings-war').classList.toggle('hidden', m.id !== 'war' && m.id !== 'hightech' && m.id !== 'revolution');
@@ -18276,6 +17729,24 @@ for (const btn of document.querySelectorAll('#team-count button')) {
 }
 
 // Little animated "photo" of each mode, drawn with the game's own sprites
+// The Maze card: iron walls with vines, the team in a corridor and robots closing in
+function drawLabPreview(g, Wd, Ht, now) {
+    let seed = 5; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    g.fillStyle = '#3d4236'; g.fillRect(0, 0, Wd, Ht);
+    const cs = 90, T = 26, walls = [];
+    for (let i = 0; i <= Wd / cs + 1; i++) for (let j = 0; j <= Ht / cs + 1; j++) {
+        if (rnd() < 0.5) walls.push([i * cs - T / 2, j * cs - T / 2, cs + T, T]);
+        if (rnd() < 0.5) walls.push([i * cs - T / 2, j * cs - T / 2, T, cs + T]);
+    }
+    g.fillStyle = 'rgba(8,10,8,0.42)'; for (const [x, y, w, h] of walls) g.fillRect(x + 18, y + 24, w, h);
+    for (const [x, y, w, h] of walls) { g.fillStyle = '#1e2124'; g.fillRect(x - 2, y - 2, w + 4, h + 4); g.fillStyle = '#50565b'; g.fillRect(x, y, w, h); }
+    g.strokeStyle = 'rgba(60,110,40,0.9)'; g.lineWidth = 2.5; g.lineCap = 'round';
+    for (const [x, y, w, h] of walls) for (let k = 0; k < 2; k++) { const sx = x + rnd() * w, sy = y + rnd() * h, a = rnd() * TAU; g.beginPath(); g.moveTo(sx, sy); for (let t = 1; t <= 5; t++) g.lineTo(sx + Math.cos(a) * t * 7 + Math.sin(t * 2) * 4, sy + Math.sin(a) * t * 7 + Math.cos(t * 2) * 4); g.stroke(); }
+    const dot = (x, y, r, col, eye) => { g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.arc(x + 3, y + 4, r, 0, TAU); g.fill(); g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); if (eye) { g.fillStyle = '#ff3b30'; g.shadowColor = '#ff3b30'; g.shadowBlur = 8; g.beginPath(); g.arc(x + r * 0.45, y - r * 0.25, 2.5, 0, TAU); g.arc(x + r * 0.45, y + r * 0.25, 2.5, 0, TAU); g.fill(); g.shadowBlur = 0; } };
+    const t = now / 1000;
+    for (let k = 0; k < 4; k++) dot(Wd * 0.3 + k * 22 + Math.sin(t * 2 + k) * 3, Ht * 0.48 + (k % 2) * 20, 11, '#3dd68c');
+    for (let k = 0; k < 3; k++) dot(Wd * 0.72 + k * 26 - (t * 20 % 40), Ht * 0.5 + Math.sin(t * 3 + k) * 14, k === 1 ? 17 : 10, '#8a929b', true);
+}
 function drawModePreview(now) {
     const c = $('mode-preview'), g = c.getContext('2d');
     const Wd = c.width, Ht = c.height;
@@ -18284,6 +17755,7 @@ function drawModePreview(now) {
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     if (id === 'zombies') { drawZombiePreview(g, Wd, Ht, now); return; }
     if (id === 'navy') { drawNavyPreview(g, Wd, Ht, now); return; }
+    if (id === 'labyrinth') { drawLabPreview(g, Wd, Ht, now); return; }
     g.save();
     g.fillStyle = SPR.grass;
     g.fillRect(0, 0, Wd, Ht);
@@ -18558,7 +18030,7 @@ function drawWarfarePreview(cv, type) {
     g.restore();
 }
 $('again-btn').addEventListener('click', () => startGame(lastMap));
-$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'temple' || id === 'mech' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
+$('mapsel-back').addEventListener('click', () => { const id = MODES[menuMode].id; screens.mapsel.classList.add('hidden'); (id === 'ghost' || id === 'labyrinth' || id === 'mech' || id === 'duel' ? screens.menu : screens.typesel).classList.remove('hidden'); });
 for (const card of document.querySelectorAll('#mapsel .map-card')) {
     drawMapPreview(card.querySelector('canvas'), card.dataset.map);
     card.addEventListener('click', () => openBriefing(card.dataset.map));
@@ -18574,12 +18046,12 @@ const BRIEF = {
     boss: [['🎯', '<b>Your whole team against one giant boss.</b> He sprays a minigun and fires rockets, and stomps anyone who gets too close.'], ['🪖', 'At half health he calls in soldiers and gets faster. Everyone starts armed, with ammo and medkits around the arena.']]
 };
 BRIEF.mech = [['🤖', '<b>5 against 5, all in giant mechs.</b> Striker: fast, with jump jets (hold <b>Shift</b>). Brawler: twin miniguns. Titan: slow and tough, with a heavy gun and rockets. First team to 30 kills wins.'], ['🔧', 'When your mech is destroyed you eject on foot. Stand next to a damaged mech of yours to repair it, press <b>F</b> to climb into any empty mech (even the enemy\'s), or get a fresh one at your hangar.']];
-BRIEF.temple = [['🗿', '<b>5 against 5.</b> Grab the golden idol from the middle of the temple maze and carry it back to your camp. First to bring it home 3 times wins.'], ['⚠️', 'The jungle and the maze are full of traps, and the maze walls move. Press <b>F</b> at a cracked wall, a carved hatch or a dug-up X to find secrets and shortcuts.']];
+BRIEF.labyrinth = [['🧱', '<b>Find the way out of a giant maze.</b> Your team starts in the safe zone in the middle. Robots can\'t get in there, and the hangar restocks your rifle rounds, arrows and bandages.'], ['🤖', 'Robots hunt you through the corridors: fast Crawlers, laser Sentinels and huge Brutes, more and more as time goes on. Fight back with your rifle, bow, spear and sword. Where your team has been shows on the map, and so does the way out once someone finds it. Get out within 15 minutes.']];
 BRIEF.ghost = [['👻', '<b>One invisible ghost hunts the hunters.</b> It only shows for a moment when it shoots or gets hit, but it leaves glowing footprints.'], ['🔦', 'Pitch dark: every hunter has a flashlight and a gun. Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Sink or capture every enemy ship.</b> Take the wheel, man the cannons and deck guns, fly a helicopter or launch a submarine from the decks below.'], ['🪵', 'When hulls touch, planks go across so you can board: take an enemy\'s wheel and the ship is yours. In the water you slowly drown, so swim to a hull.']];
 BRIEF.duel = [['🎯', '<b>You against one sniper: first to win 3 rounds.</b> One hit kills, for both of you. Use the scope to see far.'], ['👣', 'Footsteps carry and a scope glints when it\'s aimed at you. Move after every shot. After 1:30 the circle starts closing.']];
 const BRIEF_WAR = { normal: 'Normal guns', heavy: 'Heavy guns', early: 'Swords & bows', hightech: 'High tech' };
-const BRIEF_MAP = { temple: 'Jungle Temple', concrete: 'Concrete Arena', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
+const BRIEF_MAP = { labyrinth: 'Iron Maze', concrete: 'Concrete Arena', sea: 'Open Sea', ordinary: 'Ordinary', city: 'City', rusty: 'Rusty', maze: 'Maze', mountain: 'Mountains', wasteland: 'Wasteland', cavern: 'Cavern', haunted: 'Haunted House' };
 // Pressing Play: first what this mode is about. After the warfare type and the map are picked: the controls, then go.
 const CONTROLS_KEYS = [['⌨️', '<b>W A S D</b> move · <b>mouse</b> aim · <b>click</b> shoot · <b>1–5</b> or <b>scroll</b> switch guns · <b>right click</b> scope'], ['🎒', '<b>F</b> pick up, swap a gun, use, or get in a vehicle · <b>Q</b> bandage · <b>E</b> medkit · <b>T</b> grenade · <b>Esc</b> pause']];
 const CONTROLS_TOUCH = [['🕹️', '<b>Left stick</b> move · <b>right stick</b> aim, push it past the middle to shoot · tap a slot to switch guns'], ['🎒', 'The <b>button at the bottom</b> picks up, uses or gets in a vehicle · tap the bandage, medkit or grenade to use them']];
@@ -18605,17 +18077,17 @@ function openDescription() {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'desc';
     screens.menu.classList.add('hidden');
-    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'temple' ? `You: ${templeSidePick === 'red' ? 'Red' : 'Blue'} team` : m.id === 'mech' ? `You: ${mechSidePick === 'red' ? 'Red' : 'Blue'} · ${VTYPES[MECH.classes[mechClassPick]].name}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
+    showBrief(m.name, [m.id === 'ghost' ? `You: ${ghostRolePick === 'ghost' ? 'Ghost' : 'Hunter'}` : m.id === 'mech' ? `You: ${mechSidePick === 'red' ? 'Red' : 'Blue'} · ${VTYPES[MECH.classes[mechClassPick]].name}` : m.id === 'navy' ? `You: ${{ captain: 'Pilot at the wheel', gunner: 'Gunner', pilot: 'Helicopter pilot', marine: 'Marine' }[navyRolePick]}` : ''], BRIEF[m.id] || BRIEF.ffa, 'BACK', 'NEXT');
 }
 function openBriefing(map) {
     const m = MODES[menuMode];
     BRIEF_STAGE.stage = 'controls'; BRIEF_STAGE.map = map;
     screens.mapsel.classList.add('hidden');
-    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'temple' || m.id === 'mech' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
+    showBrief('CONTROLS', [m.name, m.id === 'duel' || m.id === 'navy' || m.id === 'ghost' || m.id === 'labyrinth' || m.id === 'mech' ? '' : BRIEF_WAR[lastWarfare] || '', BRIEF_MAP[map] || map], controlsFor(m.id), 'BACK', 'START');
 }
 $('brief-go').addEventListener('click', () => {
     $('brief').classList.add('hidden');
-    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'temple' || id === 'mech' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
+    if (BRIEF_STAGE.stage === 'desc') { const id = MODES[menuMode].id; if (id === 'ghost' || id === 'labyrinth' || id === 'mech' || id === 'duel' || id === 'navy') openMapSelect(); else openTypeSelect(); }
     else { const map = BRIEF_STAGE.map; quickMatch(() => startGame(map)); }
 });
 $('brief-back').addEventListener('click', () => {
@@ -18623,7 +18095,7 @@ $('brief-back').addEventListener('click', () => {
     // (a mode with only one map never showed the map screen: back to whatever came before it)
     if (BRIEF_STAGE.stage === 'desc') screens.menu.classList.remove('hidden');
     else if (!soloMap(MODES[menuMode].id)) screens.mapsel.classList.remove('hidden');
-    else if (['ghost', 'temple', 'mech', 'navy'].includes(MODES[menuMode].id)) openDescription();
+    else if (['ghost', 'labyrinth', 'mech', 'navy'].includes(MODES[menuMode].id)) openDescription();
     else openTypeSelect();
 });
 
@@ -18631,14 +18103,14 @@ $('brief-back').addEventListener('click', () => {
 let lastMap = 'ordinary';
 function mapAllowed(id, m) {
     if (id === 'navy') return m === 'sea';
-    if (id === 'temple') return m === 'temple';
+    if (id === 'labyrinth') return m === 'labyrinth';
     if (id === 'mech') return m === 'concrete' || m === 'ordinary' || m === 'city' || m === 'rusty';
-    if (m === 'temple' || m === 'concrete') return false;
+    if (m === 'labyrinth' || m === 'concrete') return false;
     return !(m === 'sea' || ((id === 'survival' || id === 'revolution') && m === 'maze') || (m === 'wasteland' && id !== 'duel') || (id === 'duel' && m === 'maze') || ((m === 'cavern') !== (id === 'boss')) || ((m === 'haunted') !== (id === 'ghost')));
 }
 // The one map a mode can be played on, if there's only one: then there's nothing to choose
 function soloMap(id) {
-    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'temple', 'concrete'].filter(m => mapAllowed(id, m));
+    const all = ['ordinary', 'city', 'rusty', 'maze', 'haunted', 'cavern', 'wasteland', 'mountain', 'sea', 'labyrinth', 'concrete'].filter(m => mapAllowed(id, m));
     return all.length === 1 ? all[0] : null;
 }
 function openMapSelect() {
@@ -18774,7 +18246,7 @@ function drawMapPreview(cv, map) {
 $('resume-btn').addEventListener('click', () => setPaused(false));
 // After dying in a team mode: watch your team, or leave
 wireNukeMap();
-for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#temple-side', v => { templeSidePick = v; }], ['#mech-side', v => { mechSidePick = v; }], ['#mech-class', v => { mechClassPick = v; }]])
+for (const [sel, set] of [['#ghost-role', v => { ghostRolePick = v; }], ['#mech-side', v => { mechSidePick = v; }], ['#mech-class', v => { mechClassPick = v; }]])
     for (const b of document.querySelectorAll(sel + ' button')) b.addEventListener('click', () => {
         set(b.dataset.r);
         for (const o of document.querySelectorAll(sel + ' button')) o.classList.toggle('on', o === b);
@@ -18801,7 +18273,7 @@ function startGame(map = lastMap) {
     if (id === 'boss') map = 'cavern'; else if (map === 'cavern') map = 'ordinary';  // (the cavern is the boss's own)
     if (id === 'ghost') map = 'haunted'; else if (map === 'haunted') map = 'ordinary';  // (and the haunted house is the ghost's)
     if (id === 'navy') map = 'sea'; else if (map === 'sea') map = 'ordinary';
-    if (id === 'temple') map = 'temple'; else if (map === 'temple') map = 'ordinary';
+    if (id === 'labyrinth') map = 'labyrinth'; else if (map === 'labyrinth') map = 'ordinary';
     if (id === 'mech' && !mapAllowed('mech', map)) map = 'concrete';
     if (id !== 'mech' && map === 'concrete') map = 'ordinary';
     lastMap = map;
@@ -18809,12 +18281,12 @@ function startGame(map = lastMap) {
         : war ? { type: id, teams: id === 'revolution' ? 2 : warTeams, size: teamSize() }
         : id === 'duel' ? { type: id, count: 1 }
         : id === 'ghost' ? { type: id, count: Math.max(1, Math.min(GHOST.maxPlayers - 1, sliderToCount(+slider.value))), role: ghostRolePick }
-        : id === 'temple' ? { type: id, count: TEMPLE.players - 1, side: templeSidePick }
+        : id === 'labyrinth' ? { type: id, count: LAB.players - 1 }
         : id === 'mech' ? { type: id, count: MECH.players - 1, side: mechSidePick, mechClass: mechClassPick }
         : id === 'zombies' ? { type: id, count: survivorCount() - 1, zombies: zombieCount() }
         : { type: id, count: sliderToCount(+slider.value) };
     setup.map = map;
-    setup.warfare = id === 'ghost' || id === 'temple' || id === 'mech' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
+    setup.warfare = id === 'ghost' || id === 'labyrinth' || id === 'mech' || id === 'duel' || id === 'navy' ? 'normal' : lastWarfare;
     setup.ai = aiLevel;
     newState('playing', setup);
     // Every game starts with a countdown while everyone gets ready (Survival and Sniper Duel have their own)
@@ -18829,11 +18301,11 @@ function startGame(map = lastMap) {
     document.body.classList.add('playing');
     canvas.classList.remove('dead');
     mouse.down = false;
-    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.temple && !G.mech);
+    hud.teamScore.classList.toggle('hidden', !war && !G.noZone && !G.navy && !G.lab && !G.mech);
     hud.cells.cure.classList.toggle('hidden', !G.zombies);
     hud.cells.meat.classList.toggle('hidden', !G.survival);
     // Early Warfare: nothing to throw, so no grenade panel
-    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.temple || !!G.mech);
+    $('grenade-panel').classList.toggle('hidden', !!G.early || !!G.duel || !!G.lab || !!G.mech);
     hud.hungerBar.classList.toggle('hidden', !G.survival);
     hud.thirstBar.classList.toggle('hidden', !G.survival);
     hud.energyBar.classList.toggle('hidden', !G.survival);
@@ -18843,7 +18315,7 @@ function startGame(map = lastMap) {
     else if (G.navy) showBanner('BATTLESHIPS', true, G.navy.huge ? 'One huge ship each. Sink or capture theirs!' : G.navy.mini ? `${G.navy.n} mini ship${G.navy.n === 1 ? '' : 's'} a side. Sink or capture every enemy ship!` : `${G.navy.n} battleship${G.navy.n === 1 ? '' : 's'} a side, with destroyers and gunboats. Sink or capture every enemy ship!`);
     else if (G.duel) { /* (each round announces itself) */ }
     else if (G.mech) showBanner('MECH ARENA', true, `You're in a ${VTYPES[G.player.car ? G.player.car.type : 'mech'].name}. ${MECH.win} kills wins!`);
-    else if (G.temple) showBanner('TREASURE TEMPLE', true, 'Grab the golden idol from the middle of the temple and carry it back to your camp!');
+    else if (G.lab) showBanner('MAZE', true, 'Find the way out! Robots are hunting you. The safe zone and hangar are your base.');
     else if (G.ghostMode) showBanner('GHOST', true, G.player.ghost ? `You're the ghost. Nobody can see you unless you shoot. ${G.alive - 1} hunters to haunt.` : `A ghost is out there with ${G.alive - 1} of you. It only shows when it shoots. Follow the glowing footprints!`);
     else if (G.revolution) showBanner(`REVOLUTION: ${revoName(0).toUpperCase()} VS ${revoName(1).toUpperCase()}`, true, `${G.war.size} a side. No respawns: when you die, you stay dead. Arm up from the chests in your armory!`);
     else if (G.early && war) showBanner(`EARLY WARFARE: ${G.war.teams} TEAMS OF ${G.war.size}`, true, 'Swords, spears, bows and crossbows only. Arm up from the supply crates!');
@@ -19670,7 +19142,6 @@ function touchFrame() {
         if (NET.viewing) return 'USE';
         const p = G && G.player;
         if (!p || G.mode !== 'playing' || p.dead || p.zombie) return '';
-        if (G.temple) { const t = templeUseLabel(p); if (t) return t; }
         if (p.car) return `GET OUT`;
         if (G.navy && navyLabel(p)) return navyLabel(p).toUpperCase();
         if (G.revolution && nearOwnPad(p)) return 'BOSS STRIKE';
