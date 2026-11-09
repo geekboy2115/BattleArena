@@ -70,9 +70,10 @@ const WEAPONS = {
     'Torch': { damage: 14, range: 64, rate: 450, speed: 0, spread: 0, mag: 0, rarity: 'rare', len: 26, w: 6, sound: 'light', shake: 0.5, melee: true, torch: true, burn: 3500 },
     'Blunderbuss': { damage: 9, count: 8, range: 520, rate: 1100, speed: 1000, spread: 0.36, mag: 999, rarity: 'epic', len: 32, w: 10, sound: 'heavy', shake: 7 },
     // Maze robots' weapons
-    'Robot Claw': { damage: 20, range: 62, rate: 450, melee: true, rarity: 'common' },
-    'Robot Laser': { damage: 12, range: 760, rate: 380, speed: 1100, spread: 0.07, mag: 999, rarity: 'common', len: 20, w: 6, sound: 'light', shake: 0.4 },
-    'Robot Crusher': { damage: 45, range: 92, rate: 1300, melee: true, rarity: 'common', knock: 650 },
+    'Robot Claw': { damage: 32, range: 105, rate: 650, melee: true, rarity: 'common', knock: 350 },
+    'Robot Laser': { damage: 13, range: 820, rate: 200, speed: 1150, spread: 0.08, mag: 999, rarity: 'common', len: 20, w: 6, sound: 'light', shake: 0.4 },
+    'Robot Cannon': { damage: 34, range: 950, rate: 2400, speed: 720, spread: 0.03, mag: 999, rarity: 'common', len: 30, w: 14, sound: 'heavy', shake: 6, rocket: true },
+    'Robot Crusher': { damage: 70, range: 140, rate: 1400, melee: true, rarity: 'common', knock: 900 },
     'Shock Pistol': { damage: 24, range: 1050, rate: 260, speed: 1500, spread: 0.02, mag: 15, rarity: 'hyper', len: 18, w: 8, sound: 'light', shake: 1.6, hyper: true, chain: 2, spark: true },  // its bolts arc on to 2 more enemies
     'Tesla Cannon': { damage: 32, range: 900, rate: 420, speed: 1300, spread: 0.02, mag: 12, rarity: 'hyper', len: 34, w: 13, sound: 'heavy', shake: 4, hyper: true, chain: 3 },  // arcs to 3 more enemies
     'Laser Beam': { damage: 7, range: 950, rate: 50, speed: 0, spread: 0, mag: 120, rarity: 'hyper', len: 36, w: 9, sound: 'mid', shake: 0.3, hyper: true, beam: true },  // hold it on them
@@ -4971,11 +4972,13 @@ function drawCharges() {
 // find the way out of the maze before time runs out. Robots can't get into the safe zone (a force field covers its gates).
 const LAB = {
     n: 37, cs: 300, T: 80, players: 8, time: 900000, respawn: 8000, protect: 3000, glade: 2,
-    robots: 32, robotsMax: 76, sense: 1300, rifle: 150, arrows: 16, team: '#3dd68c',
+    robots: 12, robotsMax: 26, sense: 1300, rifle: 200, arrows: 20, team: '#3d8bff', teamCols: ['#3d8bff', '#4fa3ff', '#2f7bf0', '#5a9cff'],
+    day: 150000, night: 90000, shiftTime: 4000, movers: 80,
+    // giant war machines: it takes a few of you together to bring one down
     kinds: {
-        crawler: { name: 'Crawler', hp: 110, r: 18, spd: 1.3, gun: 'Robot Claw', w: 2.5 },
-        sentinel: { name: 'Sentinel', hp: 200, r: 24, spd: 0.85, gun: 'Robot Laser', w: 3 },
-        brute: { name: 'Brute', hp: 600, r: 36, spd: 0.75, gun: 'Robot Crusher', w: 1.2 }
+        crawler: { name: 'Stalker', hp: 1500, r: 46, spd: 1.05, gun: 'Robot Claw', w: 3 },
+        sentinel: { name: 'Sentinel', hp: 2000, r: 52, spd: 0.7, gun: 'Robot Laser', w: 2 },
+        brute: { name: 'Colossus', hp: 3800, r: 70, spd: 0.6, gun: 'Robot Crusher', w: 1 }
     },
     gear: ['Assault Rifle', 'Bow', 'Spear', 'Sword']
 };
@@ -5015,14 +5018,39 @@ function generateLabyrinth() {
     // Iron walls, joined into long runs (each runs a little long to close the corners)
     const iron = () => pick(['#4f5459', '#4a4f55', '#555a5e', '#4c5352']);
     const seg = (x0, y0, x1, y1, outer) => addBox({ type: 'wall', mazeWall: true, lab: true, outer: !!outer, x: (x0 + x1) / 2, y: (y0 + y1) / 2, hw: (x1 - x0) / 2, hh: (y1 - y0) / 2, color: iron(), seed: Math.random() * 1000 });
+    // Walls that shift at night: some stand now and will sink, some gaps will have a wall rise up in them
+    const movE = new Set(), movS = new Set(), movers = [];
+    const nearGlade = (i, j) => Math.abs(i - mid) <= gl + 1 && Math.abs(j - mid) <= gl + 1;
+    const cand = [];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        if (i < n - 1 && !nearGlade(i, j) && !nearGlade(i + 1, j)) cand.push([i, j, 'e']);
+        if (j < n - 1 && !nearGlade(i, j) && !nearGlade(i, j + 1)) cand.push([i, j, 's']);
+    }
+    let upN = 0, downN = 0;
+    for (const [i, j, d] of shuffle(cand)) {
+        const isWall = d === 'e' ? east[i][j] : south[i][j];
+        if (isWall ? upN >= LAB.movers / 2 : downN >= LAB.movers / 2) continue;
+        if (isWall) upN++; else downN++;
+        (d === 'e' ? movE : movS).add(i + ',' + j);
+        const o = d === 'e' ? { x: (i + 1) * cs, y: (j + 0.5) * cs, hw: T / 2, hh: cs / 2 + T / 2 } : { x: (i + 0.5) * cs, y: (j + 1) * cs, hw: cs / 2 + T / 2, hh: T / 2 };
+        Object.assign(o, { type: 'wall', mazeWall: isWall, lab: true, mover: true, up: isWall, cell: [i, j, d], color: iron(), seed: Math.random() * 1000, vines: [] });
+        const long = o.hw > o.hh;
+        for (let t = -cs / 2; t < cs / 2; t += 50) for (const sd of [-1, 1]) if (Math.random() < 0.65) {
+            const a = long ? (sd > 0 ? Math.PI / 2 : -Math.PI / 2) : (sd > 0 ? 0 : Math.PI);
+            o.vines.push({ x: long ? o.x + t : o.x + sd * (T / 2 - 10), y: long ? o.y + sd * (T / 2 - 10) : o.y + t, a: a + rand(-0.35, 0.35), len: rand(30, 110), seed: Math.random() * 100, thick: rand(0.8, 1.3) });
+        }
+        if (isWall) { obstacles.push(o); grid.insertBox(o); }
+        movers.push(o);
+        if (upN >= LAB.movers / 2 && downN >= LAB.movers / 2) break;
+    }
     const OT = T * 1.6;  // (the outer wall is even thicker)
     const run = (len, isWall, put) => { let s0 = -1; for (let t = 0; t <= len; t++) { const w = t < len && isWall(t); if (w && s0 < 0) s0 = t; if (!w && s0 >= 0) { put(s0, t - 1); s0 = -1; } } };
     run(n, t => !(side === 0 && t === ex.i), (a, b) => seg(a * cs - (a ? T / 2 : 0), 0, (b + 1) * cs + (b < n - 1 ? T / 2 : 0), OT / 2 + T / 2, true));
     run(n, t => !(side === 2 && t === ex.i), (a, b) => seg(a * cs - (a ? T / 2 : 0), W - OT / 2 - T / 2, (b + 1) * cs + (b < n - 1 ? T / 2 : 0), W, true));
     run(n, t => !(side === 3 && t === ex.j), (a, b) => seg(0, a * cs - (a ? T / 2 : 0), OT / 2 + T / 2, (b + 1) * cs + (b < n - 1 ? T / 2 : 0), true));
     run(n, t => !(side === 1 && t === ex.j), (a, b) => seg(W - OT / 2 - T / 2, a * cs - (a ? T / 2 : 0), W, (b + 1) * cs + (b < n - 1 ? T / 2 : 0), true));
-    for (let j = 0; j < n - 1; j++) run(n, i => south[i][j], (a, b) => seg(a * cs - T / 2, (j + 1) * cs - T / 2, (b + 1) * cs + T / 2, (j + 1) * cs + T / 2));
-    for (let i = 0; i < n - 1; i++) run(n, j => east[i][j], (a, b) => seg((i + 1) * cs - T / 2, a * cs - T / 2, (i + 1) * cs + T / 2, (b + 1) * cs + T / 2));
+    for (let j = 0; j < n - 1; j++) run(n, i => south[i][j] && !movS.has(i + ',' + j), (a, b) => seg(a * cs - T / 2, (j + 1) * cs - T / 2, (b + 1) * cs + T / 2, (j + 1) * cs + T / 2));
+    for (let i = 0; i < n - 1; i++) run(n, j => east[i][j] && !movE.has(i + ',' + j), (a, b) => seg((i + 1) * cs - T / 2, a * cs - T / 2, (i + 1) * cs + T / 2, (b + 1) * cs + T / 2));
     // The hangar on the north side of the glade: an open-fronted shed with weapon racks inside
     const c = W / 2, hangar = { x0: c - 330, x1: c + 330, y0: c - 640, y1: c - 330 };
     const hcol = '#3b5446';
@@ -5032,7 +5060,7 @@ function generateLabyrinth() {
     // Vines: hanging over the edges of every wall, creeping along the tops, and spreading over the floor
     const vineGrid = new Grid(256, 130);
     for (const o of obstacles) {
-        if (!o.lab) continue;
+        if (!o.lab || o.mover) continue;
         const long = o.hw > o.hh, L2 = (long ? o.hw : o.hh) * 2, step = 46;
         for (let t = -L2 / 2 + step / 2; t < L2 / 2; t += step * rand(0.6, 1.4)) {
             const px = long ? o.x + t : o.x, py = long ? o.y : o.y + t;
@@ -5056,7 +5084,7 @@ function generateLabyrinth() {
     const [mm] = makeCanvas(200, 200);
     return { obstacles, grid, decorGrid, buildings: [], biomes: [], roads: [], lootSpots: [], minimap: mm, city: null, stairs: [], floor: null, terrain: 'labyrinth',
         maze: { n, cs, east, south, seen: new Uint8Array(n * n) },
-        lab: { n, cs, W, exit, hangar, vineGrid, puddles, glade: { x0: (m - gl) * cs, x1: (m + gl + 1) * cs, y0: (m - gl) * cs, y1: (m + gl + 1) * cs }, gates: [
+        lab: { n, cs, W, exit, hangar, vineGrid, puddles, movers, glade: { x0: (m - gl) * cs, x1: (m + gl + 1) * cs, y0: (m - gl) * cs, y1: (m + gl + 1) * cs }, gates: [
             { x: c, y: (m - gl) * cs, h: true }, { x: c, y: (m + gl + 1) * cs, h: true }, { x: (m - gl) * cs, y: c, h: false }, { x: (m + gl + 1) * cs, y: c, h: false }] } };
 }
 const labGlade = () => G.world.lab.glade;
@@ -5069,11 +5097,11 @@ function labSafe(f) {
 const inHangar = f => { const h = G.world.lab.hangar; return f.x > h.x0 && f.x < h.x1 && f.y > h.y0 && f.y < h.y1 + 60; };
 function setupLab(setup) {
     const Lw = G.world.lab;
-    G.lab = { queue: [], endAt: LAB.time, nextRobot: 0, out: 0, kills: 0, exitFound: false, mapAt: 0, mapDirty: true, nextSee: 0 };
+    G.lab = { queue: [], endAt: LAB.time, nextRobot: 0, out: 0, kills: 0, exitFound: false, mapAt: 0, mapDirty: true, nextSee: 0, night: false, dark: 0, shift: null, shiftAt: Infinity, squad: null };
     let i = 0;
     for (const f of G.fighters) {
-        f.team = 0; f.color = f === G.player ? LAB.team : pick(['#3dd68c', '#5ee0b0', '#7be36a', '#46c9a0']); f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
-        f.escort = !isHuman(f) && i++ % 2 === 0;  // (half the team sticks with you, half goes exploring)
+        f.team = 0; f.color = f === G.player ? LAB.team : pick(LAB.teamCols); f.dark = shade(f.color, -0.45); f.light = shade(f.color, 0.35);
+        f.escort = !isHuman(f) && i++ % 2 === 0;  // (half the team sticks with you, half goes exploring together)
         labSpawn(f);
     }
     for (let k = 0; k < LAB.robots; k++) spawnRobot(true);
@@ -5113,17 +5141,9 @@ function spawnRobot(first) {
     const b = createFighter(s.x, s.y, { name: K.name, color: '#8a9099', team: 1 });
     Object.assign(b, { robot: true, robotKind: kind, robotSpd: K.spd, r: K.r, hp: K.hp, maxHp: K.hp, inv: [K.gun], maxSlots: 1, slot: 0, nextThink: G.time + rand(0, 600), alert: false });
     b.ammo[K.gun] = Infinity;
+    if (kind === 'brute') { b.inv.push('Robot Cannon'); b.maxSlots = 2; b.ammo['Robot Cannon'] = Infinity; }  // (a Colossus has a shoulder cannon for anyone who keeps their distance)
     G.fighters.push(b);
     G.alive++;
-    // (Crawlers come in packs)
-    if (kind === 'crawler') for (let q = randInt(1, 2); q > 0; q--) {
-        const x = s.x + rand(-50, 50), y = s.y + rand(-50, 50);
-        if (blockedAt(G.world.grid, x, y, 22)) continue;
-        const c2 = createFighter(x, y, { name: K.name, color: '#8a9099', team: 1 });
-        Object.assign(c2, { robot: true, robotKind: kind, robotSpd: K.spd, r: K.r, hp: K.hp, maxHp: K.hp, inv: [K.gun], maxSlots: 1, slot: 0, nextThink: G.time + rand(0, 600), alert: false });
-        c2.ammo[K.gun] = Infinity;
-        G.fighters.push(c2); G.alive++;
-    }
     return b;
 }
 function labDeath(t, killer) {
@@ -5180,6 +5200,18 @@ function updateLab(dt) {
         if (G.fighters.filter(f => f.robot && !f.dead).length < (G.mode === 'demo' ? 14 : cap)) spawnRobot(false);
     }
     if (now >= L.nextSee) { L.nextSee = now + 250; labSee(false); }
+    // Day and night: when night falls the walls start shifting (and again halfway through the night)
+    const cyc = LAB.day + LAB.night, ph = now % cyc, night = ph >= LAB.day;
+    if (night !== L.night) {
+        L.night = night;
+        if (night) { L.shiftAt = now; if (G.mode === 'playing') { showBanner('NIGHT FALLS', true, 'The walls are shifting! The robots can hear you from further away.'); Sound.tone(50, 3, 'sawtooth', 0.08, 30); } }
+        else if (G.mode === 'playing') showBanner('DAYBREAK', false, 'The walls are still... for now.');
+    }
+    if (night && !L.shift && now >= L.shiftAt) { labShiftStart(); L.shiftAt = now - ph + LAB.day + LAB.night / 2 > now ? now - ph + LAB.day + LAB.night / 2 : Infinity; }
+    if (L.shift) { if (G.mode === 'playing') G.shake = Math.max(G.shake, 2.2); if (now >= L.shift.at + LAB.shiftTime) labShiftEnd(); }
+    L.dark += ((night ? 1 : 0) - L.dark) * Math.min(1, dt * 0.5);
+    // (a Colossus shakes the ground as it stomps about)
+    if (p && !p.dead) for (const f of G.fighters) if (f.robotKind === 'brute' && !f.dead && Math.hypot(f.vx, f.vy) > 40) { const d = Math.hypot(f.x - p.x, f.y - p.y); if (d < 700) G.shake = Math.max(G.shake, 2.5 * (1 - d / 700)); }
     if (L.mapDirty && now - L.mapAt > 400) { L.mapDirty = false; L.mapAt = now; drawLabMap(); }
     const g = Lw.glade, ex = Lw.exit;
     for (const f of G.fighters) {
@@ -5234,10 +5266,11 @@ function addKillfeedText(text) { if (typeof showBanner === 'function') addFloat(
 // Robots: hunt down anyone they can sense (they hear you through the walls), otherwise wander the corridors
 function robotThink(b) {
     b.nextThink = G.time + rand(260, 420);
-    let best = null, bd = LAB.sense;
+    let best = null, bd = LAB.sense * (G.lab.night ? 1.45 : 1);
+    b.robotSpd = LAB.kinds[b.robotKind].spd * (G.lab.night ? 1.15 : 1);
     for (const f of G.fighters) if (!f.dead && f.team === 0 && !labSafe(f)) { const d = Math.hypot(f.x - b.x, f.y - b.y); if (d < bd) { bd = d; best = f; } }
     if (best) {
-        const los = bd < 950 && lineOfSight(b, best);
+        const los = bd < 1000 && lineOfSight(b, best);
         b.hasLOS = los;
         if (los) {
             b.lastSeen = G.time; b.lastSpot = { x: best.x, y: best.y };
@@ -5245,6 +5278,7 @@ function robotThink(b) {
             if (G.time > (b.callAt || 0)) { b.callAt = G.time + 4000; for (const o of G.fighters) if (o.robot && !o.dead && o !== b && o.mode !== 'fight' && Math.hypot(o.x - b.x, o.y - b.y) < 1100) { o.mode = 'hunt'; o.goal = best; o.target = best; o.nextThink = G.time + 1500; } }
             if (b.target !== best || b.mode !== 'fight') { b.engageAt = G.time + rand(150, 400); b.strafe = Math.random() < 0.5 ? 1 : -1; }
             b.mode = 'fight'; b.target = best;
+            if (b.robotKind === 'brute') switchSlot(b, bd > 230 ? 1 : 0, true);
             return;
         }
         b.mode = 'hunt'; b.goal = best; b.target = best;
@@ -5271,19 +5305,91 @@ function labBotPlan(b) {
         else b.mode = 'rest';
         return true;
     }
-    const ex = b.explore;
+    const ex = L.squad;
     if (!ex || M.seen[ex.c] || Math.hypot(ex.x - b.x, ex.y - b.y) < 150 || G.time > ex.until) {
         let best = null, bs = Infinity;
         for (let t = 0; t < 40; t++) {
             const i = randInt(0, n - 1), j = randInt(0, n - 1), cc = i + j * n;
             if (M.seen[cc]) continue;
-            const x = (i + 0.5) * cs, y = (j + 0.5) * cs, s = Math.hypot(x - b.x, y - b.y) - Math.hypot(x - c, y - c) * 0.6 + rand(0, 900);
+            const x = (i + 0.5) * cs, y = (j + 0.5) * cs, s = Math.hypot(x - b.x, y - b.y) - Math.hypot(x - c, y - c) * 0.6 + rand(0, 300);
             if (s < bs) { bs = s; best = { c: cc, x, y, until: G.time + 45000 }; }
         }
-        b.explore = best || { c: 0, x: rand(cs, Lw.W - cs), y: rand(cs, Lw.W - cs), until: G.time + 40000 };
+        L.squad = best || { c: 0, x: rand(cs, Lw.W - cs), y: rand(cs, Lw.W - cs), until: G.time + 40000 };
     }
-    b.mode = 'zone'; b.goal = { x: b.explore.x, y: b.explore.y };
+    // (stay together: anyone left behind catches up with the others first)
+    const mates = G.fighters.filter(f => !f.dead && f.team === 0 && !f.escort && !isHuman(f));
+    const cx = mates.reduce((a, f) => a + f.x, 0) / mates.length, cy = mates.reduce((a, f) => a + f.y, 0) / mates.length;
+    b.mode = 'zone'; b.goal = Math.hypot(cx - b.x, cy - b.y) > 450 ? { x: cx, y: cy } : { x: L.squad.x, y: L.squad.y };
     return true;
+}
+// Shifting walls: about half the moving walls change; every corner of the maze always stays reachable from the glade
+function labConnected() {
+    const M = G.world.maze, n = M.n, seen = new Uint8Array(n * n), m = (n - 1) / 2, q = [m + m * n];
+    seen[q[0]] = 1; let cnt = 1;
+    while (q.length) {
+        const c = q.pop(), i = c % n, j = (c - i) / n;
+        const nb = [];
+        if (i < n - 1 && !M.east[i][j]) nb.push(c + 1);
+        if (i > 0 && !M.east[i - 1][j]) nb.push(c - 1);
+        if (j < n - 1 && !M.south[i][j]) nb.push(c + n);
+        if (j > 0 && !M.south[i][j - 1]) nb.push(c - n);
+        for (const d of nb) if (!seen[d]) { seen[d] = 1; cnt++; q.push(d); }
+    }
+    return cnt === n * n;
+}
+function labSetEdge(o, up) { const M = G.world.maze, [i, j, d] = o.cell; if (d === 'e') M.east[i][j] = up; else M.south[i][j] = up; }
+function labShiftStart() {
+    const Lw = G.world.lab, downs = [], ups = [];
+    for (const o of shuffle(Lw.movers.slice())) if (Math.random() < 0.55) (o.up ? downs : ups).push(o);
+    for (const o of downs) labSetEdge(o, false);
+    const raised = [];
+    for (const o of ups) { labSetEdge(o, true); if (labConnected()) raised.push(o); else labSetEdge(o, false); }
+    G.lab.shift = { at: G.time, downs, raised };
+    for (const f of G.fighters) f.mzKey = null;
+}
+function labShiftEnd() {
+    const S = G.lab.shift, W = G.world;
+    G.lab.shift = null;
+    for (const o of S.downs) { o.up = false; o.mazeWall = false; W.grid.removeBox(o); const k = W.obstacles.indexOf(o); if (k >= 0) W.obstacles.splice(k, 1); }
+    for (const o of S.raised) {
+        o.up = true; o.mazeWall = true; W.grid.insertBox(o); W.obstacles.push(o);
+        // (anyone standing where it comes up gets shoved out to one side)
+        for (const f of G.fighters) {
+            if (f.dead || Math.abs(f.x - o.x) > o.hw + f.r || Math.abs(f.y - o.y) > o.hh + f.r) continue;
+            if (o.hw < o.hh) f.x = o.x + (f.x >= o.x ? 1 : -1) * (o.hw + f.r + 2); else f.y = o.y + (f.y >= o.y ? 1 : -1) * (o.hh + f.r + 2);
+        }
+    }
+    for (const f of G.fighters) f.mzKey = null;
+    G.lab.mapDirty = true;
+    if (G.mode === 'playing') { G.shake = Math.max(G.shake, 6); Sound.tone(40, 0.8, 'sawtooth', 0.12, 25); }
+}
+function drawMoverWall(o, k) {
+    // k: how far up it is (0 = sunk into the floor, 1 = full height)
+    if (k <= 0.01) return;
+    const long = o.hw > o.hh, w = o.hw * 2, h = o.hh * 2;
+    ctx.save(); ctx.globalAlpha = 0.35 + 0.65 * k;
+    ctx.fillStyle = `rgba(8,10,8,${0.42 * k})`; ctx.fillRect(o.x - o.hw + 70 * k, o.y - o.hh + 95 * k, w, h);
+    ctx.fillStyle = '#1e2124'; ctx.fillRect(o.x - o.hw - 3, o.y - o.hh - 3, w + 6, h + 6);
+    ctx.fillStyle = o.color; ctx.fillRect(o.x - o.hw, o.y - o.hh, w, h);
+    ctx.strokeStyle = 'rgba(20,22,24,0.7)'; ctx.lineWidth = 2; ctx.beginPath();
+    if (long) { ctx.moveTo(o.x - o.hw, o.y); ctx.lineTo(o.x + o.hw, o.y); } else { ctx.moveTo(o.x, o.y - o.hh); ctx.lineTo(o.x, o.y + o.hh); }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(160,168,176,0.55)';
+    for (let t = 20; t < (long ? w : h) - 10; t += 40) for (const e of [7, (long ? h : w) - 7]) { ctx.beginPath(); ctx.arc(long ? o.x - o.hw + t : o.x - o.hw + e, long ? o.y - o.hh + e : o.y - o.hh + t, 2.4, 0, TAU); ctx.fill(); }
+    if (k > 0.6) for (const v of o.vines) drawVine(v);
+    ctx.restore();
+}
+// Night: dark everywhere except round you
+function drawLabNight() {
+    const L = G.lab;
+    if (!L || L.dark < 0.02) return;
+    const R2 = Math.min(viewW, viewH) * 0.42, x = viewW / 2, y = viewH / 2;
+    const gr = ctx.createRadialGradient(x, y, R2 * 0.35, x, y, R2);
+    gr.addColorStop(0, 'rgba(4,6,20,0)'); gr.addColorStop(1, `rgba(4,6,20,${0.78 * L.dark})`);
+    ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, viewW, viewH);
+    ctx.fillStyle = `rgba(10,14,40,${0.22 * L.dark})`; ctx.fillRect(0, 0, viewW, viewH);
+    ctx.restore();
 }
 // Drawing: the stone floor, the glade with its grass and hangar, and the giant iron walls with their long shadows
 function drawLabGround(L, T, R, B) {
@@ -5335,7 +5441,7 @@ function drawLabGround(L, T, R, B) {
     // the walls' long shadows (they're 100 metres tall)
     ctx.fillStyle = 'rgba(8,10,8,0.42)';
     G.world.grid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2 + 200, o => {
-        if (!o.lab || o.shadowStamp === G.time) return;
+        if (!o.lab || o.mover || o.shadowStamp === G.time) return;
         o.shadowStamp = G.time;
         const sx = 70, sy = 95, x1 = o.x - o.hw, y1 = o.y - o.hh, x2 = o.x + o.hw, y2 = o.y + o.hh;
         if (x2 + sx < L || x1 > R || y2 + sy < T || y1 > B) return;
@@ -5345,7 +5451,7 @@ function drawLabGround(L, T, R, B) {
 // The iron walls themselves: riveted plates streaked with rust, vines creeping along the tops and spilling down the sides
 function drawLabWalls(L, T, R, B) {
     const walls = [];
-    G.world.grid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2 + 100, o => { if (o.lab && o.drawStamp !== G.time && o.x + o.hw > L && o.x - o.hw < R && o.y + o.hh > T && o.y - o.hh < B) { o.drawStamp = G.time; walls.push(o); } });
+    G.world.grid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2 + 100, o => { if (o.lab && !o.mover && o.drawStamp !== G.time && o.x + o.hw > L && o.x - o.hw < R && o.y + o.hh > T && o.y - o.hh < B) { o.drawStamp = G.time; walls.push(o); } });
     for (const o of walls) {
         const x = o.x - o.hw, y = o.y - o.hh, w = o.hw * 2, h = o.hh * 2, long = w > h;
         ctx.fillStyle = '#1e2124'; ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
@@ -5370,6 +5476,13 @@ function drawLabWalls(L, T, R, B) {
         // the top catches the light
         ctx.fillStyle = 'rgba(255,255,255,0.1)'; if (long) ctx.fillRect(x, y, w, 6); else ctx.fillRect(x, y, 6, h);
         if (o.outer) { ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x + (long ? 0 : w * 0.3), y + (long ? h * 0.3 : 0), long ? w : w * 0.4, long ? h * 0.4 : h); }
+    }
+    const S = G.lab && G.lab.shift, sk = S ? clamp((G.time - S.at) / LAB.shiftTime, 0, 1) : 0;
+    for (const o of G.world.lab.movers) {
+        if (o.x + o.hw < L - 100 || o.x - o.hw > R || o.y + o.hh < T - 100 || o.y - o.hh > B) continue;
+        const k = S && S.downs.includes(o) ? 1 - sk : S && S.raised.includes(o) ? sk : o.up ? 1 : 0;
+        if (S && k > 0 && k < 1) { const jx = rand(-2, 2), jy = rand(-2, 2); ctx.save(); ctx.translate(jx, jy); drawMoverWall(o, k); ctx.restore(); if (Math.random() < 0.3 && inView(o.x, o.y, 100)) burst(o.x + rand(-o.hw, o.hw), o.y + rand(-o.hh, o.hh), 2, '#8f8678', 120); }
+        else drawMoverWall(o, k);
     }
     G.world.lab.vineGrid.query((L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 2, v => { if (!v.floor && v.x > L - 140 && v.x < R + 140 && v.y > T - 140 && v.y < B + 140) drawVine(v); });
     // the force fields over the glade's gates, and the gap of daylight that's the way out
@@ -5398,25 +5511,25 @@ function drawRobot(f) {
     ctx.rotate(f.angle);
     const glowEye = (x, y, s) => { ctx.fillStyle = eye; ctx.shadowColor = eye; ctx.shadowBlur = lowDetail ? 0 : 8; ctx.beginPath(); ctx.arc(x, y, s, 0, TAU); ctx.fill(); ctx.shadowBlur = 0; };
     if (k === 'crawler') {
-        ctx.strokeStyle = '#6a727b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+        ctx.strokeStyle = '#6a727b'; ctx.lineWidth = r * 0.14; ctx.lineCap = 'round';
         for (const s of [-1, 1]) for (let i = 0; i < 3; i++) {
             const ph = Math.sin(t * 16 + i * 2.1 + (s > 0 ? Math.PI : 0)) * 0.5 * mv, bx = (i - 1) * r * 0.55, kx = bx + (i - 1) * r * 0.35 + ph * r * 0.4;
             ctx.beginPath(); ctx.moveTo(bx, s * r * 0.4); ctx.lineTo(kx, s * r * 1.15); ctx.lineTo(kx + (i - 1) * r * 0.3 + ph * r * 0.3, s * r * 1.55); ctx.stroke();
         }
         const pinch = Math.sin(f.punch * Math.PI) * 0.6;
-        ctx.strokeStyle = '#b8c0c8'; ctx.lineWidth = 3.5;
+        ctx.strokeStyle = '#b8c0c8'; ctx.lineWidth = r * 0.17;
         for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.6, s * r * 0.35); ctx.lineTo(r * 1.25 + pinch * 6, s * r * (0.45 - pinch * 0.3)); ctx.lineTo(r * 1.5 + pinch * 8, s * r * (0.1 - pinch * 0.05)); ctx.stroke(); }
         ctx.fillStyle = metal; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.75, 0, 0, TAU); ctx.fill();
         ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(-r * 0.25, 0, r * 0.5, r * 0.4, 0, 0, TAU); ctx.fill();
-        glowEye(r * 0.55, -r * 0.22, 2.6); glowEye(r * 0.55, r * 0.22, 2.6);
+        glowEye(r * 0.55, -r * 0.22, r * 0.12); glowEye(r * 0.55, r * 0.22, r * 0.12);
     } else if (k === 'sentinel') {
         ctx.fillStyle = dark;
-        for (const s of [-1, 1]) { ctx.fillRect(-r * 0.9, s * r * 0.75 - r * 0.22, r * 1.8, r * 0.44); ctx.strokeStyle = 'rgba(150,150,150,0.4)'; ctx.lineWidth = 1.5; for (let q = 0; q < 6; q++) { const xx = -r * 0.9 + ((q * r * 0.3 + t * 60 * mv) % (r * 1.8)); ctx.beginPath(); ctx.moveTo(xx, s * r * 0.75 - r * 0.22); ctx.lineTo(xx, s * r * 0.75 + r * 0.22); ctx.stroke(); } }
+        for (const s of [-1, 1]) { ctx.fillRect(-r * 0.9, s * r * 0.75 - r * 0.22, r * 1.8, r * 0.44); ctx.strokeStyle = 'rgba(150,150,150,0.4)'; ctx.lineWidth = r * 0.05; for (let q = 0; q < 6; q++) { const xx = -r * 0.9 + ((q * r * 0.3 + t * 60 * mv) % (r * 1.8)); ctx.beginPath(); ctx.moveTo(xx, s * r * 0.75 - r * 0.22); ctx.lineTo(xx, s * r * 0.75 + r * 0.22); ctx.stroke(); } }
         ctx.fillStyle = metal; ctx.beginPath(); ctx.arc(0, 0, r * 0.72, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#3a4048'; ctx.fillRect(r * 0.3 - f.recoil * 5, -4, r * 1.1, 8);
-        ctx.fillStyle = '#ff6a5a'; ctx.fillRect(r * 1.3 - f.recoil * 5, -3, 4, 6);
+        ctx.fillStyle = '#3a4048'; ctx.fillRect(r * 0.3 - f.recoil * 8, -r * 0.15, r * 1.1, r * 0.3);
+        ctx.fillStyle = '#ff6a5a'; ctx.fillRect(r * 1.3 - f.recoil * 8, -r * 0.11, r * 0.15, r * 0.22);
         ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(0, 0, r * 0.4, 0, TAU); ctx.fill();
-        glowEye(r * 0.22, 0, 4);
+        glowEye(r * 0.22, 0, r * 0.16);
     } else {
         // Brute: a heavy chassis with two big arms ending in crushing fists
         const sw = Math.sin(f.punch * Math.PI), step = Math.sin(t * 7) * 0.12 * mv;
@@ -5426,24 +5539,26 @@ function drawRobot(f) {
             const ext = sw * r * 0.6 * (s === (f.punchHand ? 1 : -1) ? 1 : 0.3);
             ctx.fillStyle = '#4d535b'; ctx.fillRect(-r * 0.1, s * r * 0.95 - r * 0.18, r * 0.9 + ext, r * 0.36);
             ctx.fillStyle = metal; ctx.beginPath(); ctx.arc(r * 0.85 + ext, s * r * 0.95, r * 0.34, 0, TAU); ctx.fill();
-            ctx.strokeStyle = dark; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = dark; ctx.lineWidth = r * 0.05; ctx.stroke();
         }
         ctx.fillStyle = metal; ctx.fillRect(-r * 0.75, -r * 0.8, r * 1.4, r * 1.6);
-        ctx.strokeStyle = dark; ctx.lineWidth = 3; ctx.strokeRect(-r * 0.75, -r * 0.8, r * 1.4, r * 1.6);
-        ctx.fillStyle = 'rgba(255,170,60,0.85)'; ctx.beginPath(); ctx.arc(-r * 0.1, 0, r * 0.28 + Math.sin(t * 6) * 2, 0, TAU); ctx.fill();
+        ctx.strokeStyle = dark; ctx.lineWidth = r * 0.06; ctx.strokeRect(-r * 0.75, -r * 0.8, r * 1.4, r * 1.6);
+        ctx.fillStyle = 'rgba(255,170,60,0.85)'; ctx.beginPath(); ctx.arc(-r * 0.1, 0, r * (0.28 + Math.sin(t * 6) * 0.03), 0, TAU); ctx.fill();
         ctx.fillStyle = dark; ctx.fillRect(r * 0.35, -r * 0.4, r * 0.4, r * 0.8);
-        glowEye(r * 0.58, -r * 0.18, 3.5); glowEye(r * 0.58, r * 0.18, 3.5);
+        glowEye(r * 0.58, -r * 0.18, r * 0.1); glowEye(r * 0.58, r * 0.18, r * 0.1);
     }
     ctx.restore();
     // a health bar once it's damaged
     if (f.hp < f.maxHp) {
-        const w = Math.max(30, r * 2), y = f.y - r - 16;
-        ctx.fillStyle = 'rgba(10,8,16,0.7)'; ctx.fillRect(f.x - w / 2 - 1, y - 1, w + 2, 6);
-        ctx.fillStyle = '#ff6a3d'; ctx.fillRect(f.x - w / 2, y, w * Math.max(0, f.hp / f.maxHp), 4);
+        const w = Math.max(30, r * 2), y = f.y - r - 18;
+        ctx.fillStyle = 'rgba(10,8,16,0.75)'; ctx.fillRect(f.x - w / 2 - 1, y - 1, w + 2, 9);
+        ctx.fillStyle = '#ff6a3d'; ctx.fillRect(f.x - w / 2, y, w * Math.max(0, f.hp / f.maxHp), 7);
+        ctx.font = '700 13px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,247,236,0.85)'; ctx.fillText(f.name.toUpperCase(), f.x, y - 8);
     }
 }
 function drawLabOverlay() {
     const L = G.lab, p = G.player;
+    drawLabNight();
     if (!L || G.mode !== 'playing' || !p) return;
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (p.dead && !p.escaped) {
@@ -5466,7 +5581,8 @@ function drawLabOverlay() {
 }
 function labStatus(p) {
     const L = G.lab, left = fmtTime(Math.max(0, (L.endAt - G.time) / 1000));
-    return `${labSafe(p) ? 'Safe zone' : L.exitFound ? 'The way out is on your map!' : 'Find the way out'} · ${left}`;
+    const cyc = LAB.day + LAB.night, ph = G.time % cyc, until = L.night ? cyc - ph : LAB.day - ph;
+    return `${L.night ? '🌙 Night' : '☀️ Day'} (${fmtTime(until / 1000)}) · ${labSafe(p) ? 'Safe zone' : L.exitFound ? 'Way out on your map!' : 'Find the way out'} · ${left}`;
 }
 // A vine: a wavy green stem with leaves
 function drawVine(v) {
@@ -18046,7 +18162,7 @@ const BRIEF = {
     boss: [['🎯', '<b>Your whole team against one giant boss.</b> He sprays a minigun and fires rockets, and stomps anyone who gets too close.'], ['🪖', 'At half health he calls in soldiers and gets faster. Everyone starts armed, with ammo and medkits around the arena.']]
 };
 BRIEF.mech = [['🤖', '<b>5 against 5, all in giant mechs.</b> Striker: fast, with jump jets (hold <b>Shift</b>). Brawler: twin miniguns. Titan: slow and tough, with a heavy gun and rockets. First team to 30 kills wins.'], ['🔧', 'When your mech is destroyed you eject on foot. Stand next to a damaged mech of yours to repair it, press <b>F</b> to climb into any empty mech (even the enemy\'s), or get a fresh one at your hangar.']];
-BRIEF.labyrinth = [['🧱', '<b>Find the way out of a giant maze.</b> Your team starts in the safe zone in the middle. Robots can\'t get in there, and the hangar restocks your rifle rounds, arrows and bandages.'], ['🤖', 'Robots hunt you through the corridors: fast Crawlers, laser Sentinels and huge Brutes, more and more as time goes on. Fight back with your rifle, bow, spear and sword. Where your team has been shows on the map, and so does the way out once someone finds it. Get out within 15 minutes.']];
+BRIEF.labyrinth = [['🧱', '<b>Find the way out of a giant maze.</b> Your team starts in the safe zone in the middle. Robots can\'t get in there, and the hangar restocks your rifle rounds, arrows and bandages.'], ['🤖', 'Giant robots hunt you through the corridors: Stalkers, laser Sentinels and huge Colossi. It takes a few of you together to bring one down. At night it goes dark and the walls shift. Fight back with your rifle, bow, spear and sword. Where your team has been shows on the map, and so does the way out once someone finds it. Get out within 15 minutes.']];
 BRIEF.ghost = [['👻', '<b>One invisible ghost hunts the hunters.</b> It only shows for a moment when it shoots or gets hit, but it leaves glowing footprints.'], ['🔦', 'Pitch dark: every hunter has a flashlight and a gun. Hunters win if the ghost goes down; the ghost wins if no hunter is left.']];
 BRIEF.navy = [['🚢', '<b>Sink or capture every enemy ship.</b> Take the wheel, man the cannons and deck guns, fly a helicopter or launch a submarine from the decks below.'], ['🪵', 'When hulls touch, planks go across so you can board: take an enemy\'s wheel and the ship is yours. In the water you slowly drown, so swim to a hull.']];
 BRIEF.duel = [['🎯', '<b>You against one sniper: first to win 3 rounds.</b> One hit kills, for both of you. Use the scope to see far.'], ['👣', 'Footsteps carry and a scope glints when it\'s aimed at you. Move after every shot. After 1:30 the circle starts closing.']];
