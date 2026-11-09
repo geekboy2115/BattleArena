@@ -4966,7 +4966,7 @@ function drawCharges() {
 // boulders, collapsing floors, swinging axes, dart walls, spider webs) and secrets (cracked walls that open, hidden
 // tunnels). The jungle round it has its own: quicksand, leaf-covered pits, snake nests, buried chests and tunnels in.
 const TEMPLE = {
-    W: 6400, n: 21, cs: 210, T: 32, players: 10, time: 600000, wins: 3, respawn: 5000, protect: 2500, safeR: 230, safeDmg: 30,
+    W: 9000, n: 31, cs: 210, T: 32, players: 10, time: 900000, wins: 3, respawn: 5000, protect: 2500, safeR: 230, safeDmg: 30,
     idolHome: 25000, carrySlow: 0.72, blue: '#3d8bff', red: '#ff4b4b', regenAfter: 5000, regen: 6,
     guns: ['Whip', 'Torch', 'Crossbow', 'Blunderbuss', 'Trap Trigger'], start: ['Machete', 'Blowgun']
 };
@@ -5019,19 +5019,19 @@ function generateTemple() {
     const inner = [...Object.values(walls.e), ...Object.values(walls.s)].filter(o => { const [i, j] = o.cell; return !inCenter(i, j) && !(o.cell[2] === 'e' ? inCenter(i + 1, j) : inCenter(i, j + 1)); });
     const pool = shuffle(inner);
     // Cracked walls (F opens them), some of them hidden behind vines
-    for (const o of pool.splice(0, 55)) { o.secret = true; o.open = false; o.vines = Math.random() < 0.5; secrets.push(o); }
+    for (const o of pool.splice(0, 110)) { o.secret = true; o.open = false; o.vines = Math.random() < 0.5; secrets.push(o); }
     // Hidden walls with no crack at all: only a symbol switch somewhere close by opens them
-    const switched = pool.splice(0, 16);
+    const switched = pool.splice(0, 28);
     for (const o of switched) { o.secret = true; o.hiddenSecret = true; o.open = false; o.vines = Math.random() < 0.4; secrets.push(o); }
     // Moving walls: some stand now and will slide away, others are gaps now that a wall will slide across
     const movers = [];
-    for (const o of pool.splice(0, 22)) { o.mover = true; o.up = true; movers.push(o); }
+    for (const o of pool.splice(0, 40)) { o.mover = true; o.up = true; movers.push(o); }
     const gaps = [];
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
         if (i < n - 1 && !east[i][j] && !inCenter(i, j) && !inCenter(i + 1, j) && j !== m) gaps.push([i, j, 'e']);
         if (j < n - 1 && !south[i][j] && !inCenter(i, j) && !inCenter(i, j + 1) && i !== m) gaps.push([i, j, 's']);
     }
-    for (const [i, j, d] of shuffle(gaps).slice(0, 24)) {
+    for (const [i, j, d] of shuffle(gaps).slice(0, 44)) {
         const o = d === 'e' ? { type: 'wall', x: ox + (i + 1) * cs, y: oy + (j + 0.5) * cs, hw: T / 2, hh: cs / 2 + T / 2 } : { type: 'wall', x: ox + (i + 0.5) * cs, y: oy + (j + 1) * cs, hw: cs / 2 + T / 2, hh: T / 2 };
         Object.assign(o, { color: stone(), temple: true, cell: [i, j, d], mover: true, up: false });
         movers.push(o);
@@ -5047,7 +5047,7 @@ function generateTemple() {
     const runs = [];
     for (let j = 0; j < n; j++) { let s0 = 0; for (let i = 1; i <= n; i++) { if (i === n || east[i - 1][j]) { if (i - s0 >= 4) runs.push({ h: true, a: s0, b: i - 1, k: j }); s0 = i; } } }
     for (let i = 0; i < n; i++) { let s0 = 0; for (let j = 1; j <= n; j++) { if (j === n || south[i][j - 1]) { if (j - s0 >= 4) runs.push({ h: false, a: s0, b: j - 1, k: i }); s0 = j; } } }
-    for (const r of shuffle(runs).slice(0, 10)) {
+    for (const r of shuffle(runs).slice(0, 16)) {
         const cells = []; for (let t = r.a; t <= r.b; t++) cells.push(r.h ? [t, r.k] : [r.k, t]);
         if (cells.some(([i, j]) => inCenter(i, j))) continue;
         const fwd = Math.random() < 0.5, A = cellC(...cells[fwd ? 0 : cells.length - 1]), B = cellC(...cells[fwd ? cells.length - 1 : 0]);
@@ -5056,27 +5056,27 @@ function generateTemple() {
         used.add(key(...cells[Math.floor(cells.length * 0.6)]));
     }
     const take = (k, fn) => { let c = 0; for (const [i, j] of freeCells()) { if (c >= k) break; if (fn(i, j)) { used.add(key(i, j)); c++; } } };
-    take(34, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'spikes', x: c.x, y: c.y, s: 70, ph: rand(0, 3000), forced: 0 }); return true; });
-    take(22, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'pit', x: c.x, y: c.y, s: 58, state: 'solid', t: 0 }); return true; });
-    take(16, (i, j) => {
+    take(60, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'spikes', x: c.x, y: c.y, s: 70, ph: rand(0, 3000), forced: 0 }); return true; });
+    take(34, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'pit', x: c.x, y: c.y, s: 58, state: 'solid', t: 0 }); return true; });
+    take(26, (i, j) => {
         const w = wallsOf(i, j), c = cellC(i, j);
         // a corridor running straight through: the axe swings across it
         if (w.n && w.s && !w.w && !w.e) { traps.push({ kind: 'axe', x: c.x, y: c.y, ax: 0, ay: 1, ph: rand(0, TAU), len: cs * 0.42 }); return true; }
         if (w.w && w.e && !w.n && !w.s) { traps.push({ kind: 'axe', x: c.x, y: c.y, ax: 1, ay: 0, ph: rand(0, TAU), len: cs * 0.42 }); return true; }
         return false;
     });
-    take(9, (i, j) => {
+    take(16, (i, j) => {
         const w = wallsOf(i, j), c = cellC(i, j);
         const side = w.n ? [0, -1] : w.s ? [0, 1] : w.w ? [-1, 0] : w.e ? [1, 0] : null;
         if (!side) return false;
         traps.push({ kind: 'darts', x: c.x, y: c.y, ex: c.x + side[0] * (cs / 2 - T / 2 - 4), ey: c.y + side[1] * (cs / 2 - T / 2 - 4), dx: -side[0], dy: -side[1], ready: 0 });
         return true;
     });
-    take(14, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'web', x: c.x + rand(-30, 30), y: c.y + rand(-30, 30), r: rand(80, 105), burnt: 0 }); return true; });
+    take(24, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'web', x: c.x + rand(-30, 30), y: c.y + rand(-30, 30), r: rand(80, 105), burnt: 0 }); return true; });
     // Hidden tunnels: a carved hatch you can drop into and come out of the other one
     const passages = [];
     const far = freeCells().filter(([i, j]) => Math.max(Math.abs(i - m), Math.abs(j - m)) >= 4);
-    for (let k = 0; k + 1 < far.length && passages.length < 6; k += 2) {
+    for (let k = 0; k + 1 < far.length && passages.length < 11; k += 2) {
         const a = far[k], b = far.slice(k + 1).find(q => Math.abs(q[0] - a[0]) + Math.abs(q[1] - a[1]) >= 9);
         if (!b) continue;
         used.add(key(...a)); used.add(key(...b));
@@ -5085,7 +5085,7 @@ function generateTemple() {
     }
     // Weapons waiting in dead ends
     const spots = [];
-    take(12, (i, j) => { const w = wallsOf(i, j); if (w.n + w.s + w.w + w.e < 3) return false; const c = cellC(i, j); spots.push({ x: c.x, y: c.y, key: null, every: 30000 }); return true; });
+    take(22, (i, j) => { const w = wallsOf(i, j); if (w.n + w.s + w.w + w.e < 3) return false; const c = cellC(i, j); spots.push({ x: c.x, y: c.y, key: null, every: 30000 }); return true; });
     // The jungle: camps on the west and east, dirt paths to the four entrances, and trees everywhere else
     const camps = [{ x: 480, y: W / 2 }, { x: W - 480, y: W / 2 }];
     const ents = [{ x: ox - 160, y: oy + size / 2, ix: ox + cs / 2, iy: oy + size / 2 }, { x: ox + size + 160, y: oy + size / 2, ix: ox + size - cs / 2, iy: oy + size / 2 }, { x: ox + size / 2, y: oy - 160, ix: ox + size / 2, iy: oy + cs / 2 }, { x: ox + size / 2, y: oy + size + 160, ix: ox + size / 2, iy: oy + size - cs / 2 }];
@@ -5108,20 +5108,20 @@ function generateTemple() {
     const nearCamp = (x, y, d) => camps.some(c => Math.hypot(c.x - x, c.y - y) < d);
     for (const [x, y, hw, hh] of [[W / 2, 20, W / 2, 20], [W / 2, W - 20, W / 2, 20], [20, W / 2, 20, W / 2], [W - 20, W / 2, 20, W / 2]]) addBox({ type: 'wall', x, y, hw, hh, color: '#2d4a22' });
     const jungleFree = (x, y, r) => x > 120 && y > 120 && x < W - 120 && y < W - 120 && !inTemple(x, y, 120) && !nearCamp(x, y, 330) && !nearPath(x, y, 70 + r * 0.5) && !blockedAt(grid, x, y, r);
-    for (let i = 0; i < 1500; i++) { const x = rand(100, W - 100), y = rand(100, W - 100), canopy = rand(110, 175); if (jungleFree(x, y, 40)) addCircle({ type: 'tree', x, y, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 }); }
-    for (let i = 0; i < 900; i++) { const x = rand(100, W - 100), y = rand(100, W - 100); if (jungleFree(x, y, 30)) addCircle({ type: 'bush', x, y, r: rand(30, 46), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999 }); }
+    for (let i = 0; i < 2600; i++) { const x = rand(100, W - 100), y = rand(100, W - 100), canopy = rand(110, 175); if (jungleFree(x, y, 40)) addCircle({ type: 'tree', x, y, r: canopy * 0.27, canopy, spr: randInt(0, 7), rot: rand(0, TAU), hp: TREE_HP, maxHp: TREE_HP, hitAt: -9999 }); }
+    for (let i = 0; i < 1500; i++) { const x = rand(100, W - 100), y = rand(100, W - 100); if (jungleFree(x, y, 30)) addCircle({ type: 'bush', x, y, r: rand(30, 46), spr: randInt(0, 3), rot: rand(0, TAU), hp: BUSH_HP, maxHp: BUSH_HP, hitAt: -9999 }); }
     for (let i = 0; i < 140; i++) { const x = rand(100, W - 100), y = rand(100, W - 100); if (jungleFree(x, y, 40)) addCircle({ type: 'rock', x, y, r: rand(24, 60), spr: randInt(0, 5), rot: rand(0, TAU) }); }
     // Broken statues and pillars round the temple
     for (let i = 0; i < 40; i++) { const a = rand(0, TAU), d = rand(size * 0.55, size * 0.75), x = W / 2 + Math.cos(a) * d, y = W / 2 + Math.sin(a) * d; if (!inTemple(x, y, 60) && !nearPath(x, y, 80) && !blockedAt(grid, x, y, 40)) addBox({ type: 'wall', x, y, hw: 22, hh: 22, color: '#8a7a5c', pillar: true }); }
-    for (let i = 0; i < 1100; i++) decor.push({ x: rand(0, W), y: rand(0, W), s: rand(0.5, 1.3), spr: randInt(0, Math.max(0, SPR.patches.length - 1)) });
+    for (let i = 0; i < 2000; i++) decor.push({ x: rand(0, W), y: rand(0, W), s: rand(0.5, 1.3), spr: randInt(0, Math.max(0, SPR.patches.length - 1)) });
     // Jungle traps and secrets: some right on the paths
     const jt = (x, y) => !inTemple(x, y, 160) && !nearCamp(x, y, 420) && !blockedAt(grid, x, y, 50);
     const onPath = () => { const pts = pick(paths), i = randInt(1, pts.length - 1), t = Math.random(); return { x: lerp(pts[i - 1].x, pts[i].x, t), y: lerp(pts[i - 1].y, pts[i].y, t) }; };
-    for (let i = 0; i < 60 && traps.filter(q => q.kind === 'sand').length < 9; i++) { const q = Math.random() < 0.4 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'sand', x: q.x, y: q.y, r: rand(80, 120) }); }
-    for (let i = 0; i < 80 && traps.filter(q => q.kind === 'leafpit').length < 14; i++) { const q = Math.random() < 0.5 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'leafpit', x: q.x, y: q.y, r: 44, open: 0 }); }
-    for (let i = 0; i < 60 && traps.filter(q => q.kind === 'snake').length < 10; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y)) traps.push({ kind: 'snake', x, y, bite: 0 }); }
+    for (let i = 0; i < 60 && traps.filter(q => q.kind === 'sand').length < 14; i++) { const q = Math.random() < 0.4 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'sand', x: q.x, y: q.y, r: rand(80, 120) }); }
+    for (let i = 0; i < 80 && traps.filter(q => q.kind === 'leafpit').length < 22; i++) { const q = Math.random() < 0.5 ? onPath() : { x: rand(300, W - 300), y: rand(300, W - 300) }; if (jt(q.x, q.y)) traps.push({ kind: 'leafpit', x: q.x, y: q.y, r: 44, open: 0 }); }
+    for (let i = 0; i < 60 && traps.filter(q => q.kind === 'snake').length < 16; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y)) traps.push({ kind: 'snake', x, y, bite: 0 }); }
     const chests = [];
-    for (let i = 0; i < 60 && chests.length < 12; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y) && !nearPath(x, y, 60)) chests.push({ x, y, full: true, at: 0, trapped: Math.random() < 0.4 }); }
+    for (let i = 0; i < 90 && chests.length < 18; i++) { const x = rand(300, W - 300), y = rand(300, W - 300); if (jt(x, y) && !nearPath(x, y, 60)) chests.push({ x, y, full: true, at: 0 }); }
     // Tunnels from the jungle straight into the maze, near the altar chamber
     const ringCells = freeCells().filter(([i, j]) => Math.max(Math.abs(i - m), Math.abs(j - m)) === 2 || Math.max(Math.abs(i - m), Math.abs(j - m)) === 3);
     for (let k = 0; k < 4 && k < ringCells.length; k++) {
@@ -5141,26 +5141,9 @@ function generateTemple() {
     });
     // Carved symbols all over the temple floor (the tunnels and switches hide among them)
     const glyphs = [];
-    for (let k = 0; k < 420; k++) glyphs.push({ x: ox + rand(30, size - 30), y: oy + rand(30, size - 30), glyph: randInt(0, 6), rot: rand(0, TAU), s: rand(14, 22) });
-    // Booby traps: some of the symbols puff out poison gas when stepped on
-    for (const g2 of shuffle(glyphs.slice()).slice(0, 18)) traps.push({ kind: 'gas', x: g2.x, y: g2.y, ready: 0, cloud: 0 });
-    // Tripwires across corridors (an explosion), loose floor slabs that set off jets of flame, and ceilings that drop rocks
-    take(16, (i, j) => {
-        const w = wallsOf(i, j), c = cellC(i, j), h = cs / 2 - T / 2;
-        if (w.n && w.s && !w.w && !w.e) { traps.push({ kind: 'wire', x: c.x, y: c.y, x1: c.x, y1: c.y - h, x2: c.x, y2: c.y + h, armed: true, at: 0 }); return true; }
-        if (w.w && w.e && !w.n && !w.s) { traps.push({ kind: 'wire', x: c.x, y: c.y, x1: c.x - h, y1: c.y, x2: c.x + h, y2: c.y, armed: true, at: 0 }); return true; }
-        return false;
-    });
-    take(14, (i, j) => {
-        const w = wallsOf(i, j), c = cellC(i, j);
-        const side = w.n ? [0, -1] : w.s ? [0, 1] : w.w ? [-1, 0] : w.e ? [1, 0] : null;
-        if (!side) return false;
-        traps.push({ kind: 'flame', x: c.x + rand(-40, 40), y: c.y + rand(-40, 40), ex: c.x + side[0] * (cs / 2 - T / 2), ey: c.y + side[1] * (cs / 2 - T / 2), dx: -side[0], dy: -side[1], ready: 0, active: 0 });
-        return true;
-    });
-    take(14, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'ceiling', x: c.x, y: c.y, ready: 0, fallAt: 0, rubble: 0 }); return true; });
+    for (let k = 0; k < 900; k++) glyphs.push({ x: ox + rand(30, size - 30), y: oy + rand(30, size - 30), glyph: randInt(0, 6), rot: rand(0, TAU), s: rand(14, 22) });
     // Some cracked walls hide a stairway down behind them: open the wall and a tunnel appears beside it
-    for (const o of shuffle(secrets.filter(q => !q.hiddenSecret)).slice(0, 16)) {
+    for (const o of shuffle(secrets.filter(q => !q.hiddenSecret)).slice(0, 28)) {
         const [i, j, d] = o.cell, near = d === 'e' ? cellC(Math.random() < 0.5 ? i : i + 1, j) : cellC(i, Math.random() < 0.5 ? j : j + 1);
         const fc = shuffle(freeCells().filter(([a, b]) => Math.abs(a - i) + Math.abs(b - j) > 7))[0];
         if (!fc) continue;
@@ -5175,11 +5158,11 @@ function generateTemple() {
         for (let k = 0; k < nV; k++) { const t = (k + 0.5) / nV - 0.5; vines.push({ x: long ? o.x + t * L2 : o.x + rand(-6, 6), y: long ? o.y + rand(-6, 6) : o.y + t * L2, a: long ? Math.PI / 2 + rand(-0.4, 0.4) : rand(-0.4, 0.4) + (Math.random() < 0.5 ? 0 : Math.PI), len: rand(40, o.vines ? 110 : 80), seed: Math.random() * 100, thick: o.vines ? 1 : 0.7 }); }
     }
     for (const o of secrets) if (o.vines) for (let k = 0; k < 5; k++) vines.push({ x: o.x + rand(-o.hw, o.hw), y: o.y + rand(-o.hh, o.hh), a: rand(0, TAU), len: rand(50, 90), seed: Math.random() * 100, thick: 1.2 });
-    for (let k = 0; k < 650; k++) vines.push({ x: ox + rand(0, size), y: oy + rand(0, size), a: rand(0, TAU), len: rand(60, 170), seed: Math.random() * 100, thick: 0.8 });
+    for (let k = 0; k < 1300; k++) vines.push({ x: ox + rand(0, size), y: oy + rand(0, size), a: rand(0, TAU), len: rand(60, 170), seed: Math.random() * 100, thick: 0.8 });
     // (vines creep over traps and hatches too, so they're even harder to spot)
     for (const t of traps) if (Math.random() < 0.55) for (let k = 0; k < 2; k++) vines.push({ x: t.x + rand(-50, 50), y: t.y + rand(-50, 50), a: rand(0, TAU), len: rand(60, 120), seed: Math.random() * 100, thick: 0.85 });
     for (const ps of passages) for (const h of [ps.a, ps.b]) if (Math.random() < 0.6) vines.push({ x: h.x + rand(-30, 30), y: h.y + rand(-30, 30), a: rand(0, TAU), len: rand(50, 90), seed: Math.random() * 100, thick: 0.85 });
-    for (let k = 0; k < 950; k++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (!inTemple(x, y, 40)) vines.push({ x, y, a: rand(0, TAU), len: rand(80, 200), seed: Math.random() * 100, thick: 1 }); }
+    for (let k = 0; k < 1500; k++) { const x = rand(150, W - 150), y = rand(150, W - 150); if (!inTemple(x, y, 40)) vines.push({ x, y, a: rand(0, TAU), len: rand(80, 200), seed: Math.random() * 100, thick: 1 }); }
     // The map picture
     const [mm, g] = makeCanvas(200, 200), k2 = 200 / W;
     g.fillStyle = '#2f5a28'; g.fillRect(0, 0, 200, 200);
@@ -5344,8 +5327,6 @@ function templeUse(f) {
     }
     if (c) {
         c.full = false; c.at = G.time + 60000;
-        if (c.trapped) { blast(c.x, c.y, null, 120, 50, 'Booby-trapped chest'); c.trapped = Math.random() < 0.4; return true; }
-        c.trapped = Math.random() < 0.4;
         spawnLoot(c.x + 20, c.y, pick(TEMPLE.guns)); spawnLoot(c.x - 20, c.y, pick(['medkit', 'bandage']));
         if (inView(c.x, c.y, 80)) burst(c.x, c.y, 18, '#ffd166', 220, 'glow');
         Sound.tone(700, 0.2, 'square', 0.07 * Sound.volAt(c.x, c.y), 1100);
@@ -5408,13 +5389,6 @@ function updateTemple(dt) {
         }
         if (t.kind === 'web' && t.burnt && now > t.burnt) t.burnt = 0;
         if (t.kind === 'leafpit' && t.open && now > t.open) t.open = 0;
-        if (t.kind === 'wire' && !t.armed && now > t.at) t.armed = true;
-        if (t.kind === 'ceiling' && t.fallAt && now >= t.fallAt) {
-            t.fallAt = 0; t.rubble = now + 9000;
-            G.fgrid.query(t.x, t.y, 100, f => { if (!f.dead && Math.hypot(f.x - t.x, f.y - t.y) < 80) { damage(f, 45, null, 'Falling rocks'); f.stunUntil = G.time + 600; } });
-            if (inView(t.x, t.y, 120)) { burst(t.x, t.y, 26, '#8f8678', 240); G.particles.push({ type: 'smoke', x: t.x, y: t.y, vx: 0, vy: 0, life: 1.2, max: 1.2, size: 50, color: '160,150,135' }); G.shake = Math.max(G.shake, 6); }
-            Sound.tone(70, 0.6, 'sawtooth', 0.12 * Sound.volAt(t.x, t.y), 40);
-        }
     }
     for (const f of G.fighters) {
         if (f.dead) continue;
@@ -5459,15 +5433,6 @@ function updateTemple(dt) {
                     break;
                 case 'sand': { const d = Math.hypot(dx, dy); if (d < t.r) { slow = Math.min(slow, 0.35); if (d < t.r * 0.5 && now - (f.sandAt || 0) > 1000) { f.sandAt = now; damage(f, 6, null, 'Quicksand'); } } break; }
                 case 'leafpit': if (!t.open && Math.hypot(dx, dy) < t.r) { t.open = now + 20000; templeFall(f, t.x, t.y, t.r + f.r + 8); } break;
-                case 'wire': {
-                    if (!t.armed) break;
-                    const lx = t.x2 - t.x1, ly = t.y2 - t.y1, L2 = lx * lx + ly * ly, u = clamp(((f.x - t.x1) * lx + (f.y - t.y1) * ly) / L2, 0, 1);
-                    if (Math.hypot(f.x - (t.x1 + lx * u), f.y - (t.y1 + ly * u)) < f.r * 0.7) { t.armed = false; t.at = now + 25000; blast(t.x, t.y, null, 120, 55, 'Tripwire'); }
-                    break;
-                }
-                case 'flame': if (Math.hypot(dx, dy) < 34 && now > t.ready) { t.ready = now + 9000; t.active = now + 1600; Sound.tone(120, 0.8, 'sawtooth', 0.09 * Sound.volAt(t.x, t.y), 300); } break;
-                case 'gas': if (Math.hypot(dx, dy) < 26 && now > t.ready) { t.ready = now + 16000; t.cloud = now + 6000; Sound.tone(300, 0.6, 'sine', 0.05 * Sound.volAt(t.x, t.y), 120); } break;
-                case 'ceiling': if (Math.hypot(dx, dy) < 55 && now > t.ready) { t.ready = now + 22000; t.fallAt = now + 750; Sound.tone(50, 0.7, 'sawtooth', 0.08 * Sound.volAt(t.x, t.y), 35); } break;
                 case 'snake':
                     if (Math.hypot(dx, dy) < 80 && now - t.bite > 1100) { t.bite = now; damage(f, 10, null, 'Snake'); f.poisonUntil = now + 3000; f.poisonBy = null; Sound.tone(1800, 0.15, 'sawtooth', 0.04 * Sound.volAt(t.x, t.y), 2400); }
                     break;
@@ -5475,20 +5440,6 @@ function updateTemple(dt) {
         }
         if (I.carrier === f) slow *= TEMPLE.carrySlow;
         f.slowK = slow;
-    }
-    for (const t of Wt.traps) {
-        if (t.kind === 'flame' && now < t.active) {
-            G.fgrid.query(t.ex + t.dx * 110, t.ey + t.dy * 110, 160, f => {
-                if (f.dead) return;
-                const along = (f.x - t.ex) * t.dx + (f.y - t.ey) * t.dy, side = Math.abs((f.x - t.ex) * -t.dy + (f.y - t.ey) * t.dx);
-                if (along > 0 && along < TEMPLE.cs && side < 40 && now - (f.flameAt || 0) > 400) { f.flameAt = now; damage(f, 10, null, 'Flame jet'); f.burnUntil = now + 2500; f.burnBy = null; }
-            });
-            if (inView(t.ex, t.ey, 220) && Math.random() < 0.9) for (let k = 0; k < 3; k++) { const d = rand(0, TEMPLE.cs); G.particles.push({ type: 'glow', x: t.ex + t.dx * d + rand(-14, 14), y: t.ey + t.dy * d + rand(-14, 14), vx: t.dx * 200, vy: t.dy * 200, life: 0.3, max: 0.3, size: rand(8, 14), color: k ? '#ff8a3d' : '#ffd166' }); }
-        }
-        if (t.kind === 'gas' && now < t.cloud) {
-            G.fgrid.query(t.x, t.y, 130, f => { if (!f.dead && Math.hypot(f.x - t.x, f.y - t.y) < 120) { f.poisonUntil = now + 2500; f.poisonBy = null; } });
-            if (inView(t.x, t.y, 160) && Math.random() < 0.5) G.particles.push({ type: 'smoke', x: t.x + rand(-80, 80), y: t.y + rand(-80, 80), vx: rand(-20, 20), vy: rand(-20, 20), life: 1.4, max: 1.4, size: rand(26, 44), color: '120,190,70' });
-        }
     }
     // Rolling boulders
     for (const b of T2.boulders) {
@@ -5717,23 +5668,6 @@ function drawTempleGround(L, T, R, B) {
                 break;
             }
             case 'boulder': break;
-            case 'wire': {
-                const k = t.armed ? seeK(t.x, t.y, 95) * 0.6 : 0;
-                if (k > 0) { ctx.strokeStyle = `rgba(220,215,200,${k})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(t.x1, t.y1); ctx.lineTo(t.x2, t.y2); ctx.stroke(); }
-                break;
-            }
-            case 'flame': {
-                const k = seeK(t.ex, t.ey, 110);
-                if (k > 0) { ctx.fillStyle = `rgba(20,14,8,${0.6 * k})`; ctx.beginPath(); ctx.arc(t.ex, t.ey, 7, 0, TAU); ctx.fill(); }
-                break;
-            }
-            case 'gas':
-                if (nowMs < t.cloud) { const a = clamp((t.cloud - nowMs) / 1500, 0, 1); ctx.fillStyle = `rgba(110,180,60,${0.28 * a})`; ctx.beginPath(); ctx.arc(t.x, t.y, 120, 0, TAU); ctx.fill(); }
-                break;
-            case 'ceiling':
-                if (t.fallAt) { const k = 1 - (t.fallAt - nowMs) / 750; ctx.fillStyle = `rgba(0,0,0,${0.15 + k * 0.35})`; ctx.beginPath(); ctx.arc(t.x, t.y, 40 + k * 40, 0, TAU); ctx.fill(); }
-                else if (nowMs < t.rubble) { ctx.fillStyle = 'rgba(120,110,95,0.8)'; for (let q = 0; q < 9; q++) { const a = q * 2.1, d = (q % 3) * 22; ctx.beginPath(); ctx.arc(t.x + Math.cos(a) * d, t.y + Math.sin(a) * d, 9 - (q % 3) * 2, 0, TAU); ctx.fill(); } }
-                break;
             case 'web': {
                 if (t.burnt) { ctx.fillStyle = 'rgba(30,20,10,0.35)'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r * 0.8, 0, TAU); ctx.fill(); break; }
                 ctx.strokeStyle = 'rgba(240,240,235,0.55)'; ctx.lineWidth = 1.5;
