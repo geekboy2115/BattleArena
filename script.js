@@ -5072,6 +5072,42 @@ function generateTemple() {
         traps.push({ kind: 'darts', x: c.x, y: c.y, ex: c.x + side[0] * (cs / 2 - T / 2 - 4), ey: c.y + side[1] * (cs / 2 - T / 2 - 4), dx: -side[0], dy: -side[1], ready: 0 });
         return true;
     });
+    // 1. Sliding blades: a wall-to-wall blade sweeps up and down a corridor
+    // 3. Rolling logs: a spiked log the width of the corridor, set off by a plate (like the boulders)
+    for (const r of shuffle(runs.filter(q => q.b - q.a >= 2)).slice(0, 22)) {
+        const cells = []; for (let t = r.a; t <= r.b; t++) cells.push(r.h ? [t, r.k] : [r.k, t]);
+        if (cells.some(([i, j]) => inCenter(i, j))) continue;
+        const A = cellC(...cells[0]), B = cellC(...cells[cells.length - 1]);
+        if (traps.filter(q => q.kind === 'blade').length < 12) { traps.push({ kind: 'blade', ax: A.x, ay: A.y, bx: B.x, by: B.y, x: A.x, y: A.y, ux: r.h ? 1 : 0, uy: r.h ? 0 : 1, per: 6000 + cells.length * 900, ph: rand(0, 10000) }); for (const c of cells) used.add(key(...c)); }
+        else { const fwd = Math.random() < 0.5, P = cellC(...cells[Math.floor(cells.length / 2)]); traps.push({ kind: 'boulder', log: true, x0: fwd ? A.x : B.x, y0: fwd ? A.y : B.y, x1: fwd ? B.x : A.x, y1: fwd ? B.y : A.y, x: P.x, y: P.y, ready: 0 }); used.add(key(...cells[Math.floor(cells.length / 2)])); }
+    }
+    // 2. Crushing walls: step into the room and its two side walls start closing in
+    take(10, (i, j) => { const w = wallsOf(i, j), c = cellC(i, j); if (w.n && w.s && !w.w && !w.e) { traps.push({ kind: 'crush', x: c.x, y: c.y, vert: true, st: 0, t: 0 }); return true; } if (w.w && w.e && !w.n && !w.s) { traps.push({ kind: 'crush', x: c.x, y: c.y, vert: false, st: 0, t: 0 }); return true; } return false; });
+    // 4. Swinging maces: a spiked ball on a chain whirling round a pillar
+    take(12, (i, j) => { const c = cellC(i, j); addBox({ type: 'wall', x: c.x, y: c.y, hw: 13, hh: 13, color: stone(), temple: true }); traps.push({ kind: 'mace', x: c.x, y: c.y, r: 74, ph: rand(0, TAU), sp: (Math.random() < 0.5 ? 1 : -1) * rand(2.2, 3) }); return true; });
+    // 5. Fire-breathing statues against a wall, and 6. arrow statues in a corner that turn to face you
+    take(10, (i, j) => {
+        const w = wallsOf(i, j), c = cellC(i, j), side = w.n ? [0, -1] : w.s ? [0, 1] : w.w ? [-1, 0] : w.e ? [1, 0] : null;
+        if (!side) return false;
+        const sx = c.x + side[0] * (cs / 2 - T / 2 - 22), sy = c.y + side[1] * (cs / 2 - T / 2 - 22);
+        addBox({ type: 'wall', x: sx, y: sy, hw: 20, hh: 20, color: '#7a6a4c', temple: true, statue: true });
+        traps.push({ kind: 'fire', x: sx, y: sy, a: Math.atan2(-side[1], -side[0]), ready: 0, active: 0 });
+        return true;
+    });
+    take(10, (i, j) => {
+        const c = cellC(i, j), qx = Math.random() < 0.5 ? -1 : 1, qy = Math.random() < 0.5 ? -1 : 1, sx = c.x + qx * (cs / 2 - T / 2 - 22), sy = c.y + qy * (cs / 2 - T / 2 - 22);
+        addBox({ type: 'wall', x: sx, y: sy, hw: 18, hh: 18, color: '#7a6a4c', temple: true, statue: true });
+        traps.push({ kind: 'archer', x: sx, y: sy, a: Math.atan2(-qy, -qx), ready: 0 });
+        return true;
+    });
+    // 7. Snake pits: the whole floor of a room drops away into a pit of snakes
+    take(7, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'snakepit', x: c.x, y: c.y, s: cs / 2 - T / 2 - 14, open: 0 }); return true; });
+    // 8. Scorpion nests: scorpions swarm out at anyone who comes close
+    take(8, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'scorpions', x: c.x, y: c.y, bugs: Array.from({ length: 4 }, () => ({ x: c.x + rand(-20, 20), y: c.y + rand(-20, 20), a: rand(0, TAU), sting: 0, dead: 0 })) }); return true; });
+    // 9. Spinning floors: a round floor that spins and flings you at the spiked rim
+    take(7, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'spin', x: c.x, y: c.y, r: cs / 2 - T / 2 - 6, rot: 0, sp: (Math.random() < 0.5 ? 1 : -1) * 2 }); return true; });
+    // 10. Flooding rooms: water pours in when you step inside; a symbol on the floor opens the drain
+    take(7, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'flood', x: c.x, y: c.y, s: cs / 2 - T / 2, lvl: 0, st: 0, t: 0, drain: { x: c.x + rand(-50, 50), y: c.y + rand(-50, 50), glyph: randInt(0, 6), rot: rand(0, TAU) } }); return true; });
     take(24, (i, j) => { const c = cellC(i, j); traps.push({ kind: 'web', x: c.x + rand(-30, 30), y: c.y + rand(-30, 30), r: rand(80, 105), burnt: 0 }); return true; });
     // Hidden tunnels: a carved hatch you can drop into and come out of the other one
     const passages = [];
@@ -5304,6 +5340,7 @@ function templeUse(f) {
     if (!G.temple || f.dead) return false;
     const s = nearSecret(f);
     if (s) { openSecret(s); return true; }
+    for (const t of G.world.temple.traps) if (t.kind === 'flood' && t.st && t.st < 3 && Math.hypot(f.x - t.drain.x, f.y - t.drain.y) < 34) { t.st = 3; t.t = G.time; if (f.isPlayer) addFloat(f.x, f.y - 34, 'THE WATER DRAINS AWAY', '#7ec8ff'); Sound.tone(200, 0.8, 'sine', 0.08, 80); return true; }
     const sw = nearSwitch(f);
     if (sw && !sw.wall.open) {
         openSecret(sw.wall);
@@ -5351,6 +5388,10 @@ function triggerTraps(x, y, R, by) {
         else if (t.kind === 'darts') fireDarts(t, by);
         else if (t.kind === 'spikes') t.forced = G.time + 1400;
         else if (t.kind === 'pit' && t.state === 'solid') { t.state = 'open'; t.t = G.time; }
+        else if (t.kind === 'crush' && !t.st) { t.st = 1; t.t = G.time; }
+        else if (t.kind === 'fire') { t.active = G.time + 1500; t.ready = G.time + 4000; }
+        else if (t.kind === 'flood' && !t.st) { t.st = 1; t.t = G.time; }
+        else if (t.kind === 'snakepit' && !t.open) t.open = G.time + 12000;
     }
     if (inView(x, y, R)) G.particles.push({ type: 'ring', x, y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: R, color: '#ffb347' });
 }
@@ -5358,7 +5399,7 @@ function fireBoulder(t, by) {
     if (G.time < t.ready) return;
     t.ready = G.time + 12000;
     const d = Math.hypot(t.x1 - t.x0, t.y1 - t.y0) || 1;
-    G.temple.boulders.push({ x: t.x0, y: t.y0, ux: (t.x1 - t.x0) / d, uy: (t.y1 - t.y0) / d, left: d + 60, r: 40, by: by || null, hit: new Set(), spin: 0 });
+    G.temple.boulders.push({ x: t.x0, y: t.y0, ux: (t.x1 - t.x0) / d, uy: (t.y1 - t.y0) / d, left: d + 60, r: 40, by: by || null, hit: new Set(), spin: 0, log: !!t.log, w: TEMPLE.cs / 2 - TEMPLE.T / 2 - 6 });
     Sound.tone(60, 1.2, 'sawtooth', 0.12 * Sound.volAt(t.x0, t.y0), 40);
 }
 function fireDarts(t, by) {
@@ -5389,6 +5430,56 @@ function updateTemple(dt) {
         }
         if (t.kind === 'web' && t.burnt && now > t.burnt) t.burnt = 0;
         if (t.kind === 'leafpit' && t.open && now > t.open) t.open = 0;
+    }
+    for (const t of Wt.traps) {
+        switch (t.kind) {
+            // (a blade rests a moment at each end of its corridor)
+            case 'blade': { const k = ((now + t.ph) % t.per) / t.per, tri = clamp((k < 0.5 ? k * 2 : 2 - k * 2) * 1.5 - 0.25, 0, 1), e = tri * tri * (3 - 2 * tri); t.x = lerp(t.ax, t.bx, e); t.y = lerp(t.ay, t.by, e); t.dir = k < 0.5 ? 1 : -1; break; }
+            case 'mace': t.hx = t.x + Math.cos(now / 1000 * t.sp + t.ph) * t.r; t.hy = t.y + Math.sin(now / 1000 * t.sp + t.ph) * t.r; break;
+            case 'crush': {
+                // closing over 3 seconds, a moment shut, then sliding back over 2
+                const el = now - t.t;
+                if (t.st === 1) { t.p = Math.min(1, el / 3000); if (el > 3000) { t.st = 2; t.t = now; G.fgrid.query(t.x, t.y, 140, f => { if (!f.dead && Math.abs(f.x - t.x) < TEMPLE.cs / 2 && Math.abs(f.y - t.y) < TEMPLE.cs / 2) damage(f, 70, null, 'Crushing walls'); }); if (inView(t.x, t.y, 150)) { G.shake = Math.max(G.shake, 6); burst(t.x, t.y, 20, '#8f8678', 220); } Sound.tone(60, 0.5, 'sawtooth', 0.12 * Sound.volAt(t.x, t.y), 40); } }
+                else if (t.st === 2) { t.p = 1; if (el > 600) { t.st = 3; t.t = now; } }
+                else if (t.st === 3) { t.p = Math.max(0, 1 - el / 2000); if (el > 2000) { t.st = 0; t.p = 0; t.ready = now + 4000; } }
+                else t.p = 0;
+                break;
+            }
+            case 'archer': {
+                if (now < t.ready) break;
+                let best = null, bd = 460;
+                G.fgrid.query(t.x, t.y, 460, f => { if (f.dead) return; const d = dist(f, t); if (d < bd && lineOfSight(t, f)) { bd = d; best = f; } });
+                if (!best) break;
+                t.a += angleDiff(t.a, Math.atan2(best.y - t.y, best.x - t.x)) * 0.35;
+                if (Math.abs(angleDiff(t.a, Math.atan2(best.y - t.y, best.x - t.x))) < 0.12) { t.ready = now + 1700; G.bullets.push({ x: t.x + Math.cos(t.a) * 26, y: t.y + Math.sin(t.a) * 26, vx: Math.cos(t.a) * 1000, vy: Math.sin(t.a) * 1000, dmg: 20, owner: null, left: 520, weapon: 'Arrow statue', dart: true }); Sound.tone(900, 0.06, 'square', 0.05 * Sound.volAt(t.x, t.y), 500); }
+                break;
+            }
+            case 'fire':
+                if (now < t.active) {
+                    G.fgrid.query(t.x + Math.cos(t.a) * 110, t.y + Math.sin(t.a) * 110, 140, f => { if (f.dead) return; const d = dist(f, t), da = Math.abs(angleDiff(t.a, Math.atan2(f.y - t.y, f.x - t.x))); if (d < 210 && da < 0.42 && now - (f.fireAt || 0) > 400) { f.fireAt = now; damage(f, 12, null, 'Fire statue'); f.burnUntil = now + 2500; f.burnBy = null; } });
+                    if (inView(t.x, t.y, 260)) for (let k = 0; k < 3; k++) { const a = t.a + rand(-0.35, 0.35), sp = rand(300, 480); G.particles.push({ type: 'glow', x: t.x + Math.cos(t.a) * 24, y: t.y + Math.sin(t.a) * 24, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.42, max: 0.42, size: rand(8, 15), color: k ? '#ff8a3d' : '#ffd166' }); }
+                }
+                break;
+            case 'spin': t.rot += t.sp * dt; break;
+            case 'scorpions':
+                for (const s2 of t.bugs) {
+                    if (s2.dead) { if (now > s2.dead) { s2.dead = 0; s2.x = t.x; s2.y = t.y; } continue; }
+                    let tgt = null, bd = 240;
+                    G.fgrid.query(t.x, t.y, 260, f => { if (f.dead) return; const d = Math.hypot(f.x - s2.x, f.y - s2.y); if (d < bd && Math.hypot(f.x - t.x, f.y - t.y) < 260) { bd = d; tgt = f; } });
+                    const gx = tgt ? tgt.x : t.x + Math.cos(s2.a) * 20, gy = tgt ? tgt.y : t.y + Math.sin(s2.a) * 20;
+                    const a = Math.atan2(gy - s2.y, gx - s2.x), sp = tgt ? 210 : 40;
+                    if (Math.hypot(gx - s2.x, gy - s2.y) > 8) { s2.x += Math.cos(a) * sp * dt; s2.y += Math.sin(a) * sp * dt; s2.a = a; }
+                    if (tgt && bd < tgt.r + 8 && now > s2.sting) { s2.sting = now + 900; damage(tgt, 8, null, 'Scorpion'); tgt.poisonUntil = now + 3000; tgt.poisonBy = null; }
+                }
+                break;
+            case 'flood': {
+                const el = now - t.t;
+                if (t.st === 1) { t.lvl = Math.min(1, el / 3000); if (el > 3000) { t.st = 2; t.t = now; } }
+                else if (t.st === 2) { t.lvl = 1; if (el > 10000) { t.st = 3; t.t = now; } }
+                else if (t.st === 3) { t.lvl = Math.max(0, 1 - el / 2500); if (el > 2500) { t.st = 0; t.lvl = 0; t.ready = now + 5000; } }
+                break;
+            }
+        }
     }
     for (const f of G.fighters) {
         if (f.dead) continue;
@@ -5433,6 +5524,41 @@ function updateTemple(dt) {
                     break;
                 case 'sand': { const d = Math.hypot(dx, dy); if (d < t.r) { slow = Math.min(slow, 0.35); if (d < t.r * 0.5 && now - (f.sandAt || 0) > 1000) { f.sandAt = now; damage(f, 6, null, 'Quicksand'); } } break; }
                 case 'leafpit': if (!t.open && Math.hypot(dx, dy) < t.r) { t.open = now + 20000; templeFall(f, t.x, t.y, t.r + f.r + 8); } break;
+                case 'blade':
+                    if (Math.abs((f.x - t.x) * t.ux + (f.y - t.y) * t.uy) < 10 + f.r && Math.abs((f.x - t.x) * -t.uy + (f.y - t.y) * t.ux) < TEMPLE.cs / 2 && now - (f.bladeAt || 0) > 900) { f.bladeAt = now; damage(f, 24, null, 'Sliding blade'); f.kx += t.ux * t.dir * 600; f.ky += t.uy * t.dir * 600; if (inView(f.x, f.y, 60)) burst(f.x, f.y, 10, '#a3121e', 200, 'blood'); }
+                    break;
+                case 'mace':
+                    if (t.hx !== undefined && Math.hypot(f.x - t.hx, f.y - t.hy) < f.r + 18 && now - (f.maceAt || 0) > 800) { f.maceAt = now; damage(f, 35, null, 'Swinging mace'); const a = Math.atan2(f.y - t.y, f.x - t.x); f.kx += Math.cos(a) * 650; f.ky += Math.sin(a) * 650; }
+                    break;
+                case 'crush': {
+                    const h = TEMPLE.cs / 2 - TEMPLE.T / 2, inside = Math.abs(dx) < h && Math.abs(dy) < h;
+                    if (inside && !t.st && now > (t.ready || 0)) { t.st = 1; t.t = now; Sound.tone(45, 3, 'sawtooth', 0.08 * Sound.volAt(t.x, t.y), 35); }
+                    // (the closing slabs push you toward the middle of the room)
+                    if (inside && t.p > 0) { const gap = h * (1 - t.p); if (t.vert) { if (Math.abs(dy) > gap) f.y = t.y + Math.sign(dy) * Math.max(0, gap); } else if (Math.abs(dx) > gap) f.x = t.x + Math.sign(dx) * Math.max(0, gap); }
+                    break;
+                }
+                case 'fire': { const d = Math.hypot(dx, dy), da = Math.abs(angleDiff(t.a, Math.atan2(dy, dx))); if (d < 200 && da < 0.4 && now > t.ready) { t.ready = now + 4200; t.active = now + 1500; Sound.tone(110, 1, 'sawtooth', 0.1 * Sound.volAt(t.x, t.y), 260); } break; }
+                case 'snakepit':
+                    if (Math.abs(dx) < t.s && Math.abs(dy) < t.s) {
+                        if (!t.open) { t.open = now + 12000; Sound.tone(150, 0.4, 'sawtooth', 0.08 * Sound.volAt(t.x, t.y), 60); }
+                        else if (now < t.open) { slow = Math.min(slow, 0.35); if (now - (f.pitBite || 0) > 700) { f.pitBite = now; damage(f, 6, null, 'Snake pit'); f.poisonUntil = now + 2500; f.poisonBy = null; } }
+                    }
+                    break;
+                case 'spin': {
+                    const d = Math.hypot(dx, dy);
+                    if (d < t.r) {
+                        const a = Math.atan2(dy, dx) + t.sp * dt, nd = Math.min(t.r, d + 70 * dt * (0.3 + d / t.r));
+                        f.x = t.x + Math.cos(a) * nd; f.y = t.y + Math.sin(a) * nd;
+                        if (nd > t.r * 0.82 && now - (f.spinAt || 0) > 600) { f.spinAt = now; damage(f, 10, null, 'Spinning floor'); }
+                    }
+                    break;
+                }
+                case 'flood':
+                    if (Math.abs(dx) < t.s && Math.abs(dy) < t.s) {
+                        if (!t.st && now > (t.ready || 0)) { t.st = 1; t.t = now; Sound.tone(90, 2, 'sine', 0.08 * Sound.volAt(t.x, t.y), 60); }
+                        if (t.lvl > 0.4) { slow = Math.min(slow, 0.5); if (t.lvl > 0.8 && now - (f.drownAt || 0) > 1000) { f.drownAt = now; damage(f, 9, null, 'Drowned'); } }
+                    }
+                    break;
                 case 'snake':
                     if (Math.hypot(dx, dy) < 80 && now - t.bite > 1100) { t.bite = now; damage(f, 10, null, 'Snake'); f.poisonUntil = now + 3000; f.poisonBy = null; Sound.tone(1800, 0.15, 'sawtooth', 0.04 * Sound.volAt(t.x, t.y), 2400); }
                     break;
@@ -5446,7 +5572,9 @@ function updateTemple(dt) {
         const step = 430 * dt;
         b.x += b.ux * step; b.y += b.uy * step; b.left -= step; b.spin += step / b.r;
         G.fgrid.query(b.x, b.y, b.r + 30, f => {
-            if (f.dead || b.hit.has(f) || Math.hypot(f.x - b.x, f.y - b.y) > b.r + f.r) return;
+            if (f.dead || b.hit.has(f)) return;
+            const along = (f.x - b.x) * b.ux + (f.y - b.y) * b.uy, side = Math.abs((f.x - b.x) * -b.uy + (f.y - b.y) * b.ux);
+            if (b.log ? (Math.abs(along) > 22 + f.r || side > b.w + f.r) : Math.hypot(f.x - b.x, f.y - b.y) > b.r + f.r) return;
             b.hit.add(f); damage(f, 70, b.by && b.by !== f ? b.by : null, 'Boulder');
             if (!f.dead) { f.kx += -b.uy * 700 * (Math.random() < 0.5 ? 1 : -1); f.ky += b.ux * 700 * (Math.random() < 0.5 ? 1 : -1); }
         });
@@ -5668,6 +5796,26 @@ function drawTempleGround(L, T, R, B) {
                 break;
             }
             case 'boulder': break;
+            case 'snakepit':
+                if (nowMs < t.open) {
+                    ctx.fillStyle = '#100c08'; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2);
+                    ctx.strokeStyle = '#3f6a2a'; ctx.lineWidth = 5;
+                    for (let q = 0; q < 9; q++) { const sx = t.x + Math.sin(q * 7.3) * t.s * 0.7, sy = t.y + Math.cos(q * 3.1) * t.s * 0.7; ctx.beginPath(); for (let k = 0; k < 7; k++) ctx.lineTo(sx + k * 6 - 18, sy + Math.sin(now * 4 + q + k) * 6); ctx.stroke(); }
+                } else { const k = seeK(t.x, t.y, 120) * 0.3; if (k > 0) { ctx.strokeStyle = `rgba(40,30,18,${k})`; ctx.lineWidth = 1.2; ctx.strokeRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2); } }
+                break;
+            case 'spin': {
+                ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.rot);
+                ctx.fillStyle = 'rgba(70,58,40,0.35)'; ctx.beginPath(); ctx.arc(0, 0, t.r, 0, TAU); ctx.fill();
+                ctx.strokeStyle = 'rgba(50,40,26,0.55)'; ctx.lineWidth = 2;
+                for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(Math.cos(a + 0.6) * t.r * 0.5, Math.sin(a + 0.6) * t.r * 0.5, Math.cos(a) * t.r, Math.sin(a) * t.r); ctx.stroke(); }
+                ctx.restore();
+                ctx.fillStyle = '#9aa0a8'; for (let k = 0; k < 18; k++) { const a = k / 18 * TAU, x = t.x + Math.cos(a) * (t.r + 2), y = t.y + Math.sin(a) * (t.r + 2); ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 9, y + Math.sin(a) * 9); ctx.lineTo(x + Math.cos(a + 1.57) * 4, y + Math.sin(a + 1.57) * 4); ctx.lineTo(x - Math.cos(a + 1.57) * 4, y - Math.sin(a + 1.57) * 4); ctx.closePath(); ctx.fill(); }
+                break;
+            }
+            case 'flood':
+                drawGlyph(t.drain.x, t.drain.y, t.drain.glyph, t.drain.rot, 16, me && Math.hypot(me.x - t.drain.x, me.y - t.drain.y) < 34 && t.st ? 'rgba(126,200,255,0.9)' : 'rgba(58,44,26,0.5)');
+                if (t.lvl > 0) { ctx.fillStyle = `rgba(40,110,190,${0.55 * t.lvl})`; ctx.fillRect(t.x - t.s, t.y - t.s, t.s * 2, t.s * 2); ctx.strokeStyle = `rgba(200,235,255,${0.4 * t.lvl})`; ctx.lineWidth = 2; for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(t.x + Math.sin(now + k * 2) * 40, t.y + Math.cos(now * 0.7 + k) * 40, 10 + ((now * 20 + k * 15) % 30), 0, TAU); ctx.stroke(); } }
+                break;
             case 'web': {
                 if (t.burnt) { ctx.fillStyle = 'rgba(30,20,10,0.35)'; ctx.beginPath(); ctx.arc(t.x, t.y, t.r * 0.8, 0, TAU); ctx.fill(); break; }
                 ctx.strokeStyle = 'rgba(240,240,235,0.55)'; ctx.lineWidth = 1.5;
@@ -5758,8 +5906,68 @@ function drawTempleProps(now) {
         ctx.fillStyle = '#7a808a'; ctx.fillRect(-20, 4, 40, 6);
         ctx.restore();
     }
+    for (const t of Wt.traps) {
+        if (!inView(t.x, t.y, 260)) continue;
+        switch (t.kind) {
+            case 'blade': {
+                const w = TEMPLE.cs / 2 - TEMPLE.T / 2;
+                ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(Math.atan2(t.uy, t.ux));
+                ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-2, -w + 6, 10, w * 2);
+                ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.moveTo(-4, -w); ctx.lineTo(6 * t.dir, -w); ctx.lineTo(12 * t.dir, 0); ctx.lineTo(6 * t.dir, w); ctx.lineTo(-4, w); ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#7a808a'; ctx.fillRect(-6, -w, 4, w * 2);
+                ctx.restore();
+                break;
+            }
+            case 'crush':
+                if (t.p > 0) {
+                    const h = TEMPLE.cs / 2 - TEMPLE.T / 2, L2 = h * t.p;
+                    ctx.fillStyle = '#5f4e31'; ctx.strokeStyle = '#3a2e1c'; ctx.lineWidth = 3;
+                    if (t.vert) { ctx.fillRect(t.x - h, t.y - h, h * 2, L2); ctx.fillRect(t.x - h, t.y + h - L2, h * 2, L2); ctx.strokeRect(t.x - h, t.y - h, h * 2, L2); ctx.strokeRect(t.x - h, t.y + h - L2, h * 2, L2); }
+                    else { ctx.fillRect(t.x - h, t.y - h, L2, h * 2); ctx.fillRect(t.x + h - L2, t.y - h, L2, h * 2); ctx.strokeRect(t.x - h, t.y - h, L2, h * 2); ctx.strokeRect(t.x + h - L2, t.y - h, L2, h * 2); }
+                }
+                break;
+            case 'mace':
+                if (t.hx === undefined) break;
+                ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(t.hx, t.hy); ctx.stroke();
+                ctx.fillStyle = '#9aa0a8'; for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.beginPath(); ctx.moveTo(t.hx + Math.cos(a) * 22, t.hy + Math.sin(a) * 22); ctx.lineTo(t.hx + Math.cos(a + 0.4) * 12, t.hy + Math.sin(a + 0.4) * 12); ctx.lineTo(t.hx + Math.cos(a - 0.4) * 12, t.hy + Math.sin(a - 0.4) * 12); ctx.closePath(); ctx.fill(); }
+                ctx.fillStyle = '#4a4d55'; ctx.beginPath(); ctx.arc(t.hx, t.hy, 14, 0, TAU); ctx.fill();
+                break;
+            case 'fire': case 'archer': {
+                // a carved stone head (the fire statue's mouth glows when it's about to breathe)
+                ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.a);
+                ctx.fillStyle = '#8a7a5c'; ctx.beginPath(); ctx.arc(0, 0, 17, 0, TAU); ctx.fill();
+                ctx.fillStyle = '#5f523c'; ctx.fillRect(4, -8, 6, 4); ctx.fillRect(4, 4, 6, 4);
+                if (t.kind === 'fire') { ctx.fillStyle = G.time < t.active || G.time > t.ready - 400 && G.time < t.ready ? '#ffb347' : '#2a2118'; ctx.fillRect(11, -4, 6, 8); }
+                else { ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(16, 0, 12, -1.1, 1.1); ctx.stroke(); ctx.fillStyle = '#c9ced6'; ctx.fillRect(14, -1, 14, 2); }
+                ctx.restore();
+                break;
+            }
+            case 'scorpions':
+                for (const s2 of t.bugs) {
+                    if (s2.dead || !inView(s2.x, s2.y, 20)) continue;
+                    ctx.save(); ctx.translate(s2.x, s2.y); ctx.rotate(s2.a);
+                    ctx.strokeStyle = '#3a1e10'; ctx.lineWidth = 1.5;
+                    for (const sy of [-1, 1]) for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(-2 + k * 3, 0); ctx.lineTo(-4 + k * 3, sy * (7 + Math.sin(now * 20 + k) * 1.5)); ctx.stroke(); }
+                    ctx.fillStyle = '#5a2e18'; ctx.beginPath(); ctx.ellipse(0, 0, 7, 4, 0, 0, TAU); ctx.fill();
+                    ctx.strokeStyle = '#5a2e18'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-6, 0); ctx.quadraticCurveTo(-14, 0, -11, -7); ctx.stroke();
+                    ctx.fillStyle = '#5a2e18'; ctx.beginPath(); ctx.arc(8, -4, 2.5, 0, TAU); ctx.arc(8, 4, 2.5, 0, TAU); ctx.fill();
+                    ctx.restore();
+                }
+                break;
+        }
+    }
     for (const b of T2 ? T2.boulders : []) {
-        if (!inView(b.x, b.y, 80)) continue;
+        if (!inView(b.x, b.y, 140)) continue;
+        if (b.log) {
+            // a spiked log rolling down the corridor
+            ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.uy, b.ux));
+            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(-14, -b.w + 10, 32, b.w * 2);
+            ctx.fillStyle = '#6a4424'; ctx.fillRect(-18, -b.w, 36, b.w * 2);
+            ctx.strokeStyle = '#4a2e18'; ctx.lineWidth = 3; for (let k = -b.w + 10; k < b.w; k += 16) { const o = Math.sin(b.spin + k) * 6; ctx.beginPath(); ctx.moveTo(-18, k + o); ctx.lineTo(18, k + o); ctx.stroke(); }
+            ctx.fillStyle = '#c9ced6'; for (let k = -b.w + 8; k < b.w; k += 20) { const o = (Math.sin(b.spin * 2 + k) > 0 ? 1 : -1); ctx.beginPath(); ctx.moveTo(o * 18, k - 5); ctx.lineTo(o * 30, k); ctx.lineTo(o * 18, k + 5); ctx.closePath(); ctx.fill(); }
+            ctx.restore();
+            continue;
+        }
         ctx.save(); ctx.translate(b.x, b.y);
         ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(8, 12, b.r, b.r * 0.85, 0, 0, TAU); ctx.fill();
         ctx.rotate(b.spin);
